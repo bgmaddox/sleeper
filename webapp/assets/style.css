@@ -1,0 +1,549 @@
+/* ── Legacy League · Design System ──────────────────────────────────────────
+   All colors derived from the gridiron_ink Plotly template so the UI chrome
+   disappears into the charts rather than fighting them.
+   ────────────────────────────────────────────────────────────────────────── */
+
+:root {
+  --bg-deep:      #0d1e2e;
+  --bg-panel:     #163146;
+  --bg-card:      #1a3a52;
+  --bg-input:     #0f2437;
+  --accent:       #FFC300;
+  --accent-glow:  rgba(255,195,0,0.25);
+  --accent2:      #54A2E5;
+  --text-main:    #BDE2FF;
+  --text-muted:   #6a9abf;
+  --border:       #2e526e;
+  --danger:       #F94144;
+  --font-main:    'Courier New', Courier, monospace;
+  --font-display: Rockwell, Georgia, serif;
+  --sidebar-w:    248px;
+  --topbar-h:     52px;
+  --radius:       10px;
+  --shadow-card:  0 4px 24px rgba(0,0,0,0.45);
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  background: var(--bg-deep);
+  color: var(--text-main);
+  font-family: var(--font-main);
+  overflow-x: hidden;
+}
+
+/* ── Keyframes ────────────────────────────────────────────────────────────── */
+
+@keyframes fade-up {
+  from { opacity: 0; transform: translateY(12px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+@keyframes pulse-glow {
+  0%, 100% { box-shadow: 0 0 0 0 var(--accent-glow); }
+  50%       { box-shadow: 0 0 18px 4px var(--accent-glow); }
+}
+
+/* ── Top bar ─────────────────────────────────────────────────────────────── */
+
+.topbar {
+  position: sticky;
+  top: 0;
+  z-index: 300;
+  height: var(--topbar-h);
+  background: linear-gradient(90deg, #0a1825 0%, #163146 55%, #1c3d55 100%);
+  border-bottom: 2px solid var(--accent);
+  padding: 0 24px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  box-shadow: 0 2px 20px rgba(0,0,0,0.5);
+}
+
+.topbar-logo {
+  width: 32px;
+  height: 32px;
+  object-fit: contain;
+  opacity: 0.9;
+}
+
+.topbar-title {
+  font-family: var(--font-display);
+  font-size: 1.25rem;
+  font-weight: bold;
+  color: var(--accent);
+  letter-spacing: 3px;
+  text-transform: uppercase;
+  text-shadow: 0 0 18px var(--accent-glow);
+  flex: 1;
+}
+
+.topbar-tagline {
+  font-size: 0.7rem;
+  color: var(--text-muted);
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+}
+
+/* ── Body layout ─────────────────────────────────────────────────────────── */
+
+.app-shell { min-height: 100vh; display: flex; flex-direction: column; }
+
+.body-row {
+  display: flex;
+  flex: 1;
+  min-height: calc(100vh - var(--topbar-h));
+}
+
+/* ── Sidebar ─────────────────────────────────────────────────────────────── */
+
+.sidebar {
+  width: var(--sidebar-w);
+  min-width: var(--sidebar-w);
+  background: var(--bg-panel);
+  border-right: 1px solid var(--border);
+  padding: 18px 14px 24px;
+  overflow-y: auto;
+  position: sticky;
+  top: var(--topbar-h);
+  height: calc(100vh - var(--topbar-h));
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.sidebar-header {
+  text-align: center;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 8px;
+}
+
+.sidebar-logo {
+  width: 62px;
+  height: 62px;
+  object-fit: contain;
+  display: block;
+  margin: 0 auto 8px;
+  opacity: 0.9;
+}
+
+.sidebar-title {
+  font-family: var(--font-display) !important;
+  font-size: 0.95rem !important;
+  color: var(--accent) !important;
+  letter-spacing: 1.5px;
+  text-align: center;
+  margin: 0 !important;
+}
+
+.sidebar-label {
+  display: block;
+  color: var(--text-muted);
+  font-size: 0.65rem;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  margin: 12px 0 5px;
+}
+
+.sidebar-divider {
+  border: none;
+  border-top: 1px solid var(--border);
+  margin: 10px 0;
+}
+
+/* ── Buttons ─────────────────────────────────────────────────────────────── */
+
+.btn {
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-family: var(--font-main);
+  font-size: 0.75rem;
+  letter-spacing: 0.5px;
+  padding: 5px 12px;
+  transition: all 0.15s;
+}
+.btn:hover { border-color: var(--accent2); color: var(--text-main); }
+
+.btn-group { display: flex; gap: 6px; margin-bottom: 6px; }
+
+.btn-refresh {
+  width: 100%;
+  background: transparent;
+  border: 1px solid var(--accent);
+  border-radius: 6px;
+  color: var(--accent);
+  cursor: pointer;
+  font-family: var(--font-main);
+  font-size: 0.8rem;
+  letter-spacing: 1px;
+  padding: 7px 12px;
+  margin-top: 12px;
+  transition: all 0.2s;
+  text-transform: uppercase;
+}
+.btn-refresh:hover {
+  background: var(--accent);
+  color: #0d1e2e;
+  box-shadow: 0 0 12px var(--accent-glow);
+}
+
+/* ── Dropdowns (react-select overrides) ──────────────────────────────────── */
+
+.dash-dropdown .Select-control,
+.dash-dropdown .Select-menu-outer {
+  background: var(--bg-input) !important;
+  border: 1px solid var(--border) !important;
+  color: var(--text-main) !important;
+  font-family: var(--font-main) !important;
+  font-size: 0.82rem !important;
+  border-radius: var(--radius) !important;
+}
+.dash-dropdown .Select-value-label,
+.dash-dropdown .Select-placeholder { color: var(--text-main) !important; }
+.dash-dropdown .Select-option { background: var(--bg-input) !important; color: var(--text-main) !important; }
+.dash-dropdown .Select-option:hover,
+.dash-dropdown .Select-option.is-focused { background: #1e4060 !important; }
+.dash-dropdown .Select-option.is-selected { background: #24516e !important; color: var(--accent) !important; }
+.dash-dropdown .Select-arrow { border-top-color: var(--text-muted) !important; }
+.dash-dropdown .Select-clear { color: var(--text-muted) !important; }
+
+/* ── Week slider ─────────────────────────────────────────────────────────── */
+
+.rc-slider-rail      { background: var(--border) !important; }
+.rc-slider-track     { background: var(--accent) !important; }
+.rc-slider-handle    { border-color: var(--accent) !important; background: var(--accent) !important; box-shadow: 0 0 8px var(--accent-glow) !important; }
+.rc-slider-mark-text { color: var(--text-muted) !important; font-size: 0.65rem !important; font-family: var(--font-main) !important; }
+.rc-slider-dot       { border-color: var(--border) !important; background: var(--bg-deep) !important; }
+.rc-slider-dot-active { border-color: var(--accent) !important; }
+
+/* Tooltip label */
+.rc-slider-tooltip-inner {
+  background: var(--bg-card) !important;
+  border: 1px solid var(--border) !important;
+  color: var(--accent) !important;
+  font-family: var(--font-main) !important;
+  font-size: 0.75rem !important;
+  padding: 2px 8px !important;
+}
+.rc-slider-tooltip-arrow { display: none !important; }
+
+/* ── Team checklist ──────────────────────────────────────────────────────── */
+
+.team-checklist label {
+  color: var(--text-main);
+  font-size: 0.8rem;
+  cursor: pointer;
+  display: block;
+  padding: 2px 0;
+}
+.team-checklist input[type="checkbox"] {
+  accent-color: var(--accent);
+  margin-right: 6px;
+}
+
+/* ── Refresh status ──────────────────────────────────────────────────────── */
+
+.refresh-status {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  text-align: center;
+  margin-top: 6px;
+  min-height: 1em;
+}
+
+/* ── Main content area ───────────────────────────────────────────────────── */
+
+.main-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  min-width: 0;
+}
+
+/* ── League Digest hero card ─────────────────────────────────────────────── */
+
+.digest-card {
+  background: linear-gradient(135deg, #1a3a52 0%, #163146 60%, #12293e 100%);
+  border-bottom: 1px solid var(--border);
+  padding: 14px 24px;
+  display: flex;
+  gap: 24px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.digest-label {
+  font-size: 0.6rem;
+  color: var(--text-muted);
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  margin-bottom: 3px;
+}
+
+.digest-value {
+  font-family: var(--font-display);
+  font-size: 1rem;
+  color: var(--text-main);
+  letter-spacing: 0.5px;
+}
+
+.digest-sub {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+}
+
+.digest-stat {
+  padding: 4px 20px 4px 0;
+  border-right: 1px solid var(--border);
+}
+.digest-stat:last-child { border-right: none; }
+
+.digest-week-badge {
+  font-family: var(--font-display);
+  font-size: 0.85rem;
+  color: var(--accent);
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  white-space: nowrap;
+  margin-right: 8px;
+}
+
+/* ── Tabs ────────────────────────────────────────────────────────────────── */
+
+.main-tabs {
+  background: var(--bg-panel) !important;
+  border-bottom: 2px solid var(--border) !important;
+  padding: 0 16px !important;
+  display: flex;
+}
+
+.tab {
+  background: transparent !important;
+  border: none !important;
+  border-bottom: 3px solid transparent !important;
+  color: var(--text-muted) !important;
+  font-family: var(--font-main) !important;
+  font-size: 0.82rem !important;
+  letter-spacing: 0.5px !important;
+  padding: 10px 20px !important;
+  transition: color 0.15s, border-color 0.15s !important;
+  white-space: nowrap;
+}
+
+.tab:hover {
+  color: var(--text-main) !important;
+  border-bottom-color: var(--border) !important;
+}
+
+.tab--selected, .tab-selected {
+  background: transparent !important;
+  border: none !important;
+  border-bottom: 3px solid var(--accent) !important;
+  color: var(--accent) !important;
+  font-weight: bold !important;
+}
+
+/* ── Tab content area ────────────────────────────────────────────────────── */
+
+.tab-content-area {
+  flex: 1;
+  padding: 16px;
+  overflow-y: auto;
+  background: var(--bg-deep);
+}
+
+/* ── Chart grid ──────────────────────────────────────────────────────────── */
+
+.charts-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  margin-bottom: 0;
+}
+
+.chart-col-full  { width: 100%; }
+.chart-col-half  { width: calc(50% - 8px); }
+
+@media (max-width: 900px) {
+  .chart-col-half { width: 100%; }
+}
+
+/* ── Chart cards ─────────────────────────────────────────────────────────── */
+
+.chart-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 14px 12px 8px;
+  box-shadow: var(--shadow-card);
+  display: flex;
+  flex-direction: column;
+  animation: fade-up 0.35s ease both;
+  transition: box-shadow 0.2s;
+}
+
+.chart-card:hover {
+  box-shadow: 0 6px 32px rgba(255,195,0,0.1);
+}
+
+.chart-title {
+  font-family: var(--font-display);
+  font-size: 1.1rem;
+  font-weight: bold;
+  color: var(--accent);
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  text-shadow: 0 0 10px var(--accent-glow);
+  padding: 0 6px 10px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 4px;
+}
+
+/* Plotly graph stretches to fill card */
+.chart-card .js-plotly-plot,
+.chart-card .plot-container,
+.chart-card .plot-container svg { width: 100% !important; }
+.chart-card .dash-graph { flex: 1; min-width: 0; }
+
+/* ── Loading overlay (dcc.Loading) ───────────────────────────────────────── */
+
+.loading-wrapper {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Style the built-in circle spinner to match our palette */
+._dash-loading-callback {
+  background: transparent !important;
+}
+
+/* ── H2H controls bar ────────────────────────────────────────────────────── */
+
+.h2h-controls {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 14px 20px;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+}
+
+.h2h-controls .dash-dropdown { min-width: 180px; flex: 1; }
+.h2h-vs { color: var(--accent); font-family: var(--font-display); font-size: 1.1rem; font-weight: bold; }
+
+/* ── H2H stat cards ──────────────────────────────────────────────────────── */
+
+.h2h-stats-row {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+}
+
+.h2h-stat-card {
+  flex: 1;
+  min-width: 140px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 16px 20px;
+  text-align: center;
+  animation: fade-up 0.3s ease both;
+}
+
+.h2h-stat-number {
+  font-family: var(--font-display);
+  font-size: 2rem;
+  color: var(--accent);
+  line-height: 1;
+}
+
+.h2h-stat-label {
+  font-size: 0.68rem;
+  color: var(--text-muted);
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  margin-top: 4px;
+}
+
+/* ── Loading message placeholder ─────────────────────────────────────────── */
+
+.loading-msg {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 300px;
+  font-size: 1rem;
+  color: var(--text-muted);
+  gap: 12px;
+}
+
+.loading-spinner {
+  width: 32px;
+  height: 32px;
+  border: 3px solid var(--border);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin 0.75s linear infinite;
+}
+
+/* ── Error/empty state ───────────────────────────────────────────────────── */
+
+.error-msg-card {
+  background: rgba(249,65,68,0.08);
+  border: 1px solid rgba(249,65,68,0.3);
+  border-radius: var(--radius);
+  color: #e87779;
+  font-size: 0.85rem;
+  padding: 12px 16px;
+  margin: 8px 0;
+}
+
+/* ── Scrollbars ──────────────────────────────────────────────────────────── */
+
+::-webkit-scrollbar         { width: 6px; height: 6px; }
+::-webkit-scrollbar-track   { background: var(--bg-deep); }
+::-webkit-scrollbar-thumb   { background: var(--border); border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background: var(--accent2); }
+
+/* ── Responsive ──────────────────────────────────────────────────────────── */
+
+@media (max-width: 768px) {
+  .sidebar {
+    position: fixed;
+    left: -100%;
+    transition: left 0.3s ease;
+    z-index: 200;
+    height: calc(100vh - var(--topbar-h));
+    box-shadow: 4px 0 24px rgba(0,0,0,0.6);
+  }
+  .sidebar.open { left: 0; }
+  .topbar-tagline { display: none; }
+  .digest-stat { border-right: none; border-bottom: 1px solid var(--border); width: 100%; }
+  .tab { font-size: 0.75rem !important; padding: 8px 12px !important; }
+  .tab-content-area { padding: 10px; }
+}
+
+/* ── Bootstrap row shim (Dash uses row/col classes) ─────────────────────── */
+/* We don't load Bootstrap but these classes still appear in dcc.Tabs output */
+.row   { display: flex; flex-wrap: wrap; }
+.g-3   { gap: 16px; }
+.g-3 > * { padding: 0; }
+.col-12 { width: 100%; }
+.col-xl-6 { width: calc(50% - 8px); }
+
+@media (max-width: 900px) { .col-xl-6 { width: 100%; } }

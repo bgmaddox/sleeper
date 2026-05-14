@@ -1,0 +1,32 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.venv/
+*.egg-info/
+
+# Cache
+.cache/
+*.pkl
+
+# Notebooks checkpoints
+.ipynb_checkpoints/
+
+# macOS
+.DS_Store
+
+# Data files (downloaded at runtime from nflverse)
+Data/
+
+# Media
+Photos&Videos/
+
+# Old package folder
+sleeper/
+
+# Secrets
+.env
+*.env
+
+# Render
+.render/
