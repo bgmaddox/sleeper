@@ -84,6 +84,8 @@ def load_data_for_year(year: int, max_week: int = 18, verbose: bool = True):
         # Restore global dicts so Season methods work
         core.AllMatchesDict[year].update(cached["matches_snap"])
         core.AllBreakoutDict[year].update(cached["breakout_snap"])
+        # Always refresh teamcolors so cached objects pick up current slot-based palette
+        cached["season"].SetTeamColors()
         return cached["league"], cached["season"], cached["weeks"]
 
     if verbose:

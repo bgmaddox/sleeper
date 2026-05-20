@@ -2,28 +2,52 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Keeping Docs Current
+
+After any edit to `webapp/app.py`:
+- If a function is added, removed, or moves more than ~20 lines, update the **SECTION MAP** in `app.py`'s docstring (top of file) with the correct line numbers.
+
+After any directory reorganization:
+- Update `.claude/structure.md` to reflect the new layout.
+
 ## Running the App
 
+**Legacy League webapp:**
 ```bash
-cd FirstPyProject
-../.venv/bin/python3 dashboard.py
-# Open http://localhost:8050
+# Kill any existing server first — port 8050 lingers even after background tasks "fail"
+lsof -ti :8050 | xargs kill -9 2>/dev/null; sleep 1
+cd webapp && source ../.venv/bin/activate && python app.py
+# Open http://localhost:8050  (password: legacy)
 ```
 
-Activate the venv first if running other scripts: `source .venv/bin/activate` (Python 3.11, venv at `Sleeper Project/.venv/`).
+Always kill before restarting. Confirm with `curl -s -o /dev/null -w "%{http_code}" http://localhost:8050/login` (expect 200).
 
-To bust stale cache for a week: call `data_loader.invalidate_week(year, week)` or delete `.cache/` files manually. To clear all cache: `data_loader.clear_cache()`.
+Run the server in the background so the session stays interactive. After code changes, kill and restart — there is no hot reload.
+
+Activate the venv if running other scripts: `source .venv/bin/activate` (Python 3.11, venv at `Sleeper Project/.venv/`).
+
+To bust stale cache for a week: call `data_loader.invalidate_week(year, week)` or delete `.cache/` files manually.
+
+## Project Layout
+
+```
+sleeper_core.py     — All data classes, API logic, 30+ chart methods
+data_loader.py      — Disk-cache layer (.cache/*.pkl) around sleeper_core
+webapp/             — The live Dash web app (active development)
+  app.py            — Flask/Dash server, all callbacks, tab layout
+  assets/
+    style.css       — CSS design system (gridiron_ink variables)
+    d3charts.js     — D3 clientside chart renderers
+    d3.min.js       — D3 v7 library
+Data/               — NFL player stats CSVs
+Photos&Videos/      — League logos and media assets
+Sleeper_v2.ipynb    — Authoritative notebook (source of sleeper_core.py methods)
+archive/            — Old planning docs, prototypes, superseded files
+```
+
+**Import path:** `webapp/app.py` adds the project root to `sys.path`, so it imports `sleeper_core` and `data_loader` directly from the root.
 
 ## Architecture
-
-All core code lives in `FirstPyProject/`:
-
-| File | Role |
-|------|------|
-| `dashboard.py` | Plotly Dash app — UI, callbacks, theming |
-| `sleeper_core.py` | All data classes, API logic, 30+ chart methods |
-| `data_loader.py` | Disk-cache layer (`.cache/*.pkl`) around sleeper_core |
-| `assets/style.css` | CSS variables and dark-theme component styles |
 
 **Data flow:**
 ```
@@ -37,50 +61,38 @@ Dash callback → data_loader.load_data_for_year(year)
 
 - **`League(year, league_id)`** — bootstraps settings, users, roster IDs, NFL schedule/stats
 - **`Week(league, week_num)`** — one week of matchups; builds matchup dataframes and per-player breakouts
-- **`Season(league, weeks_dict)`** — aggregates all weeks; 30+ chart methods (see below)
+- **`Season(league, weeks_dict)`** — aggregates all weeks; 30+ chart methods
 - **`AllTime()`** — concatenates seasons 2019–2025 for historical charts
 
 Global dicts populated as objects are built:
-- `AllMatchesDict[year][week]` — list of matchup dataframes
-- `AllBreakoutDict[year][week]` — list of player-level stat dataframes
-- `OptimalScoresByYear[year][week]` — best possible score per team (used for luck)
-
-**Chart methods** (all return `fig`, never call `fig.show()`):
-
-| Class | Key methods |
-|-------|------------|
-| `Week` | `WeeklyGraph()`, `PointsOverTheWeekend()`, `StatusGraph()`, `LuckChart()` |
-| `Season` | `SnakeGraph()`, `SeasonPointsForAgainst()`, `WeeklyWinsGraphBreakout()`, `ScoreFrequencyGraph()`, `BrawnyBench()`, `PositionStengthPolar()`, `PlayerPoints()`, `ViolinPlayer()`, `ScoreTrends()`, `TopPlayers()` |
-| `AllTime` | `HallofFame_Team/Player()`, `HallofShame_Team()`, `HighestScoringLosers()`, `SmallestMargins()`, `ForAgainstwithTeams()` |
+- `AllMatchesDict[year][week]` — matchup dataframes
+- `AllBreakoutDict[year][week]` — player-level stat dataframes
+- `OptimalScoresByYear[year][week]` — best possible lineup score per team
 
 ### Dashboard tabs
 
-1. **This Week** — weekly matchups, points timeline, power rankings, luck chart
-2. **Season** — win progression, points for/against, weekly wins, scoring frequency, bench strength, position radar
-3. **Players** — player points, violin distributions, score trends, top players
+1. **This Week** — weekly matchups, points timeline, power rankings, luck chart (YTD / This Week toggle)
+2. **Season** — win progression (wins / points toggle), points for/against (avg line toggle), scoring frequency (all/wins/losses toggle), bench strength (season / by-week toggle)
+3. **Players** — player points, violin distributions (starters / all rostered toggle), score trends, top players (QB/RB/WR/TE toggle)
 4. **All-Time** — hall of fame/shame, highest-scoring losses, closest margins, cumulative stats
-
-Sidebar controls: year dropdown, week slider (1–18), team checklist (with All/None buttons), theme selector (coastal/neon/autumn), refresh button.
+5. **Head-to-Head** — all-time matchup history between two selected teams
 
 ### Theming
 
-Custom Plotly template `gridiron_ink` defined in `sleeper_core.py`:
+Custom Plotly template `gridiron_ink` in `sleeper_core.py`:
 - Background: `#163146`, text: `#BDE2FF`, grid: `#3D5E78`, font: Courier New
-- Three colorways: `coastal_colorway`, `neon_future_colorway`, `autumn_forest_colorway`
-- Theme applied in dashboard via `_apply_theme(colorway)` callback
+- Colorway: `coastal_colorway` (default)
 
 ### Caching
 
-`data_loader.py` uses MD5-keyed pickle files in `.cache/`. Full season payload cached as `season_data_{year}_{max_week}`. Dashboard loads data in a background thread with a threading lock; `_data`, `_loading_years`, `_failed_years` track state.
+`data_loader.py` uses MD5-keyed pickle files in `.cache/`. Dashboard loads data in a background thread; `_data`, `_loading_years`, `_failed_years` track state.
 
 ### League configuration
 
-`sleeper_core.py` contains hardcoded metadata:
-- `leagueNumbers_Dict` — maps year → Sleeper league ID
-- `roster_ids` — maps year → {roster_num: username} for 2019–2025
+`sleeper_core.py` contains:
+- `leagueNumbers_Dict` — year → Sleeper league ID
+- `roster_ids` — year → {roster_num: username} for 2019–2025
 - `AVAILABLE_YEARS = [2019, 2020, 2021, 2022, 2023, 2024, 2025]`
-
-Sleeper API is public (no auth). Logo fetched from GitHub raw URL.
 
 ## Key Data Files
 
@@ -89,23 +101,4 @@ Sleeper API is public (no auth). Logo fetched from GitHub raw URL.
 | `Data/stats_player_week_2025.csv` | NFL weekly player stats (100+ cols incl. EPA) |
 | `Data/stats_player_regpost_2025.csv` | Regular season + postseason stats |
 
-`Sleeper_v2.ipynb` is the authoritative notebook for chart logic — the source from which `sleeper_core.py` chart methods were extracted. `Sleeper.ipynb` is the older version.
-
-`DraftVideoProject/Drafter.py` and `Drafter2.py` are standalone video-stitching utilities for draft announcement videos — unrelated to the dashboard.
-
-## Active Project: Legacy League Web App
-
-**Status:** In planning. See `PLAN.md` for the full plan.
-
-The next major initiative is building `webapp/` — a new hosted Dash app to replace the local `FirstPyProject/` dashboard. Key decisions already made:
-
-- **Framework:** Plotly Dash with 100% custom CSS (no Bootstrap). FirstPyProject used Bootstrap CYBORG with no custom CSS — that's why it didn't look right.
-- **Design:** All CSS variables derived from `gridiron_ink` (#163146 bg, #BDE2FF text, Courier New). UI chrome must feel like it belongs inside the charts.
-- **Hosting:** Render.com (new account needed). Free tier to start, $7/mo for always-on.
-- **Auth:** Single shared password via `LEAGUE_PASSWORD` env var + signed session cookie (`itsdangerous`). No database.
-- **Data updates:** Manual — owner runs `refresh.py` after each week.
-- **New features:** Head-to-Head tab, animated SnakeGraph (`animation_frame='week'`), WeeklyScoreRace bar chart race, mobile-responsive CSS.
-- **Reuse:** `sleeper_core.py` chart methods and `data_loader.py` are the core assets — `webapp/` imports from `FirstPyProject/`.
-- **Site name:** Legacy League
-
-**Do not modify** `FirstPyProject/dashboard.py` — it's the old attempt, left as reference only. Build everything new in `webapp/`.
+`Sleeper_v2.ipynb` is the authoritative notebook for chart logic.

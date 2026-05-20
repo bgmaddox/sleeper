@@ -23,14 +23,6 @@ pd.options.mode.copy_on_write = True
 _LOGO_URL = "https://raw.githubusercontent.com/bgmaddox/sleeper/master/LL%20logo.png"
 
 def apply_logo_to_fig(fig, xval=0.5, yval=-0.05):
-    fig.add_layout_image(dict(
-        source=_LOGO_URL,
-        xref="paper", yref="paper",
-        x=xval, y=yval,
-        sizex=0.1, sizey=0.1,
-        xanchor="center", yanchor="middle",
-        opacity=0.6,
-    ))
     return fig
 
 # ── NFL Player Data ──────────────────────────────────────────────────────────
@@ -71,6 +63,23 @@ coastal_colorway = [
     '#F0F0F0'  # Off-White/Silver
 ]
 
+# Extended palette for all-time charts — first 12 match coastal_colorway (one per 2019 charter
+# member), then unique colors for each player who joined later, plus extras for future expansion.
+alltime_colorway = coastal_colorway + [
+    '#FF1493', # Deep Pink       — jhuntmadd (joined 2020)
+    '#ADFF2F', # Chartreuse      — RReclam (joined 2020)
+    '#1E90FF', # Dodger Blue     — DirtyCommie (joined 2022)
+    '#FF4500', # Orange Red      — sgmaddox (joined 2022)
+    '#9932CC', # Dark Orchid     — Just_Here_For_The_Snacks (joined 2022)
+    '#00FA9A', # Spring Green    — InfiniteJesse (joined 2023)
+    '#E8A838', # Warm Amber      — cosmodromedary (joined 2025)
+    '#00CED1', # Dark Turquoise  — future slot
+    '#FF69B4', # Hot Pink        — future slot
+    '#7CFC00', # Lawn Green      — future slot
+    '#6495ED', # Cornflower Blue — future slot
+    '#FFD700', # Pure Gold       — future slot
+]
+
 neon_future_colorway = [
     '#F92672', # Electric Pink
     '#66D9EF', # Vibrant Cyan
@@ -107,12 +116,19 @@ gridiron_ink_template = go.layout.Template()
 # 3. Set the layout properties
 gridiron_ink_template.layout = go.Layout(
     # --- Main Colors ---
-    paper_bgcolor=ink_bg_color,
-    plot_bgcolor=ink_bg_color,
+    paper_bgcolor='rgba(0,0,0,0)',
+    plot_bgcolor='rgba(0,0,0,0)',
     barmode = 'group',
     # --- Fonts ---
+    font=dict(family=ink_font, color=ink_text_color),
     font_family=ink_font,
     font_color=ink_text_color,
+    # --- Hover labels ---
+    hoverlabel=dict(
+        bgcolor='#1a3a52',
+        bordercolor='#2e526e',
+        font=dict(family='Courier New', size=13, color='#BDE2FF'),
+    ),
     title_font_family='Rockwell',
     title_font_color= '#FFC300', #ink_text_color,
     legend_title_font_color=ink_text_color,
@@ -180,9 +196,10 @@ gridiron_ink_template.layout = go.Layout(
     
     # --- Legend ---
     legend=dict(
-        bgcolor='rgba(0,0,0,0)', # Transparent legend background
-        bordercolor=ink_grid_color,
+        bgcolor='rgba(26,58,82,0.85)',
+        bordercolor='#2e526e',
         borderwidth=1,
+        font=dict(family='Courier New', size=12, color='#BDE2FF'),
         orientation = 'h',
         yanchor="middle",
         y=1,
@@ -219,6 +236,22 @@ pio.templates['gridiron_ink'] = gridiron_ink_template
 # 5. Set it as the default theme for all future charts
 pio.templates.default = 'gridiron_ink'
 
+# ── Chart style constants ────────────────────────────────────────────────────
+# Change a value here to update every chart that references it at once.
+
+LABEL_COLOR  = '#FFC300'   # gold — accent annotations (VS. labels, corner labels, column headers)
+TEXT_COLOR   = '#BDE2FF'   # blue-white — facet/subplot titles, general annotation text
+
+LEGEND_STD = dict(         # standard horizontal-top layout for all charts with a visible legend
+    orientation='h', x=0.5, xanchor='center',
+    y=1.02, yanchor='bottom', font=dict(size=14), title=''
+)
+
+MARGIN_STD      = dict(t=130, b=100, l=80,  r=40)   # default single chart
+MARGIN_HBAR_MED = dict(t=130, b=100, l=180, r=40)   # horizontal bar, medium-length labels
+MARGIN_HBAR     = dict(t=130, b=100, l=200, r=40)   # horizontal bar, long labels
+# ─────────────────────────────────────────────────────────────────────────────
+
 # ── Roster IDs ───────────────────────────────────────────────────────────────
 roster_ids_2019 = {1: 'bgmaddox', 2: 'jlglover', 3: 'akbrown29', 4: 'RascalHazard',
  5: 'BMoreBallers88', 6: 'eegrady', 7: 'YouthPastor', 8: 'BillyRayGonnaGetcha',
@@ -243,6 +276,38 @@ roster_ids_2025 = {1: 'bgmaddox', 2: 'jlglover', 3: 'JTizzzzle', 4: 'RascalHazar
 roster_ids = {2019: roster_ids_2019, 2020: roster_ids_2020, 2021: roster_ids_2021,
               2022: roster_ids_2022, 2023: roster_ids_2023, 2024: roster_ids_2024,
               2025: roster_ids_2025}
+
+
+def get_slot_teamcolors(year, colorway=None):
+    """Return {team_name: color} keyed by roster slot order for a given year.
+
+    Colors follow the slot number (1-indexed), not alphabetical order.
+    When a player takes over a slot, they inherit that slot's color.
+    """
+    if colorway is None:
+        colorway = coastal_colorway
+    slots = roster_ids.get(year, {})
+    return {name: colorway[(slot - 1) % len(colorway)]
+            for slot, name in sorted(slots.items())}
+
+
+def get_alltime_teamcolors(colorway=None):
+    """Return {team_name: color} for every player across all years.
+
+    Colors are assigned by join order (first appearance across all years/slots),
+    so each player gets a permanently unique color regardless of which slot they occupy.
+    The first 12 entries of alltime_colorway match coastal_colorway, so 2019 charter
+    members' all-time colors align with their per-year slot colors.
+    """
+    if colorway is None:
+        colorway = alltime_colorway
+    seen = {}
+    for year in sorted(roster_ids.keys()):
+        for slot, name in sorted(roster_ids[year].items()):
+            if name not in seen:
+                seen[name] = colorway[len(seen) % len(colorway)]
+    return seen
+
 
 positions = {0: 'QB', 1: 'RB1', 2: 'RB2', 3: 'WR1', 4: 'WR2', 5: 'TE', 6: 'WRT', 7: 'K', 8: 'DEF'}
 position_list = list(positions.values())
@@ -447,10 +512,8 @@ class Week:
         self.json
     
     def SetTeamColors(self, color_dict:dict = None):
-        self.teamcolors = dict(zip(self.WeeklyNoMatches.sort_values('Team').reset_index().Team.unique(),coastal_colorway))
-        
-        
-        if color_dict != None:
+        self.teamcolors = get_slot_teamcolors(self.year)
+        if color_dict is not None:
             self.teamcolors = color_dict
     
     def UpdateColors(self ,fig):
@@ -830,25 +893,27 @@ class Week:
             title=None
         )
 
+        # NOTE: VS. y-positions below are hardcoded for exactly 6 matchups (12 teams).
+        # If the league size changes, these values need to be recalculated dynamically.
         fig1.add_annotation(
         text="VS.",
         xref="paper", yref="paper",
-        x=-.1, y=.93, # Position relative to figure (right side, middle)
+        x=-.025, y=.93, xanchor='center',
         showarrow=False,
         font=dict(
             size=15,
-            color="magenta",
+            color=LABEL_COLOR,
             weight ='bold'
         ))
 
         fig1.add_annotation(
         text="VS.",
         xref="paper", yref="paper",
-        x=-.1, y=.76, # Position relative to figure (right side, middle)
+        x=-.025, y=.76, xanchor='center',
         showarrow=False,
         font=dict(
             size=15,
-            color="magenta",
+            color=LABEL_COLOR,
             weight ='bold'
         )
         )
@@ -856,11 +921,11 @@ class Week:
         fig1.add_annotation(
         text="VS.",
         xref="paper", yref="paper",
-        x=-.1, y=.58, # Position relative to figure (right side, middle)
+        x=-.025, y=.58, xanchor='center',
         showarrow=False,
         font=dict(
             size=15,
-            color="magenta",
+            color=LABEL_COLOR,
             weight ='bold'
         )
         )
@@ -868,11 +933,11 @@ class Week:
         fig1.add_annotation(
         text="VS.",
         xref="paper", yref="paper",
-        x=-.1, y=.41, # Position relative to figure (right side, middle)
+        x=-.025, y=.41, xanchor='center',
         showarrow=False,
         font=dict(
             size=15,
-            color="magenta",
+            color=LABEL_COLOR,
             weight ='bold'
         )
         )
@@ -880,11 +945,11 @@ class Week:
         fig1.add_annotation(
         text="VS.",
         xref="paper", yref="paper",
-        x=-.1, y=.24, # Position relative to figure (right side, middle)
+        x=-.025, y=.21, xanchor='center',
         showarrow=False,
         font=dict(
             size=15,
-            color="magenta",
+            color=LABEL_COLOR,
             weight ='bold'
         )
         )
@@ -892,34 +957,38 @@ class Week:
         fig1.add_annotation(
         text="VS.",
         xref="paper", yref="paper",
-        x=-.1, y=.07, # Position relative to figure (right side, middle)
+        x=-.025, y=.04, xanchor='center',
         showarrow=False,
         font=dict(
             size=15,
-            color="magenta",
+            color=LABEL_COLOR,
             weight ='bold'
         )
         )
 
         
-        fig1.update_traces(marker_line_width=2,marker_line_color='black')
-        
+        fig1.update_traces(marker_line_width=2, marker_line_color='rgba(0,0,0,0.25)')
+
         fig1.update_traces(insidetextanchor= 'middle')
         fig1.update_layout(
             uniformtext_minsize=12,
             uniformtext_mode='hide'
             )
-        
+
+        fig1.update_traces(
+            hovertemplate="<b>%{y}</b><br>%{fullData.name}: <b>%{x:.2f} pts</b><extra></extra>"
+        )
+        fig1.update_layout(transition=dict(duration=500, easing='cubic-in-out'))
         fig1.update_layout(margin=dict(t=120, b=90, l=170, r=40))
-        
+
         apply_logo_to_fig(fig1,xval=.4,yval = -0.04)
         self.UpdateColors(fig1)
-        
+
         return fig1
         
    
     
-    def PointsOverTheWeekend(self, Alternate=None):    
+    def PointsOverTheWeekend(self, Alternate=None, animate=False):
         breakoutDF = self.Breakout
         week_num = self.week
 
@@ -998,9 +1067,61 @@ class Week:
         self.TimeAreaData = TimeAreaDFGraph
 
         figWeekLine.update_layout(margin=dict(t=120, b=90, l=50, r=50))
-        
+
+        figWeekLine.update_traces(
+            hovertemplate="<b>%{fullData.name}</b><br>%{x}<br>Pts: <b>%{y:.2f}</b><extra></extra>"
+        )
+
         apply_logo_to_fig(figWeekLine,xval=0,yval = 1.06)
-        
+
+        if animate:
+            # Sorted unique game times for progressive frame reveal
+            time_order = (
+                TimeAreaDFGraph[['gametime_gameday_format', 'gametime_gameday']]
+                .drop_duplicates('gametime_gameday_format')
+                .sort_values('gametime_gameday')['gametime_gameday_format']
+                .tolist()
+            )
+
+            frames = []
+            for i, t in enumerate(time_order):
+                current_times = set(time_order[:i + 1])
+                frame_df = TimeAreaDFGraph[TimeAreaDFGraph['gametime_gameday_format'].isin(current_times)]
+                frame_traces = []
+                for trace in figWeekLine.data:
+                    td = frame_df[frame_df['team'] == trace.name].sort_values('gametime_gameday')
+                    frame_traces.append(go.Scatter(
+                        x=td['gametime_gameday_format'].tolist(),
+                        y=td['ScoreTally'].tolist(),
+                    ))
+                frames.append(go.Frame(data=frame_traces, name=str(i)))
+
+            figWeekLine.frames = frames
+            figWeekLine.update_layout(
+                updatemenus=[dict(
+                    type='buttons',
+                    showactive=False,
+                    x=0.0, y=1.08, xanchor='left', yanchor='top',
+                    buttons=[
+                        dict(
+                            label='▶  Play',
+                            method='animate',
+                            args=[None, dict(frame=dict(duration=900, redraw=True),
+                                             fromcurrent=True, mode='immediate',
+                                             transition=dict(duration=300, easing='cubic-in-out'))],
+                        ),
+                        dict(
+                            label='⏸  Pause',
+                            method='animate',
+                            args=[[None], dict(frame=dict(duration=0, redraw=False), mode='immediate')],
+                        ),
+                    ],
+                    font=dict(color='#163146'),
+                    bgcolor='#FFC300',
+                    bordercolor='#FFC300',
+                )]
+            )
+
         return figWeekLine
         
     
@@ -1047,10 +1168,8 @@ class Season:
         print(f'Best set at {self.Best}')
 
     def SetTeamColors(self, color_dict:dict = None):
-        self.teamcolors = dict(zip(self.Matches.sort_values('Team').reset_index().Team.unique(),coastal_colorway))
-        
-        
-        if color_dict != None:
+        self.teamcolors = get_slot_teamcolors(self.year)
+        if color_dict is not None:
             self.teamcolors = color_dict
         
     def UpdateColors(self ,fig):
@@ -1236,7 +1355,7 @@ class Season:
         
     def ScoreTrends(self):
         ScoreTrends = round(self.Matches.groupby('Week')['Total'].agg(['min','mean','max']),2)
-        self.ScoreTrends = ScoreTrends
+        self._score_trends_df = ScoreTrends
         
         figTrends = px.line(ScoreTrends.reset_index(), x='Week', y = ['min','max','mean'], template = 'gridiron_ink',line_shape = 'spline', title = 'Scoring Trends', markers=True )
         figTrends.update_layout(
@@ -1248,33 +1367,25 @@ class Season:
         figTrends.update_layout(font_family="Courier New", title_font = dict(size=45))
         figTrends.update_yaxes(
                 tickfont=dict(
-                    family='Courier New',  # Font family
-                    size=15,         # Font size
-                    color='white'    # Font color
+                    family='Courier New',
+                    size=15,
                 ),
                 title = None,
-                
+
             )
         figTrends.update_xaxes(
                 tickfont=dict(
-                    family='Courier New',  # Font family
-                    size=15,         # Font size
-                    color='white'    # Font color
+                    family='Courier New',
+                    size=15,
                 ),
                 title = 'Week',
-                
+
             )
-        figTrends.update_layout(legend=dict(orientation="h",font=dict(size= 18)))
-        # Set legend location
-        figTrends.update_layout(
-            legend=dict(
-                x=0.45,  # x-coordinate of the legend (0 to 1, where 0 is left and 1 is right)
-                y=1.02,   # y-coordinate of the legend (0 to 1, where 0 is bottom and 1 is top)
-                xanchor="center",  # horizontal anchor point ('left', 'center', 'right')
-                yanchor="top",   # vertical anchor point ('top', 'middle', 'bottom')
-                title = None
-            )
+        figTrends.update_layout(legend=LEGEND_STD)
+        figTrends.update_traces(
+            hovertemplate="<b>%{fullData.name}</b><br>Week %{x}<br>Score: <b>%{y:.1f}</b><extra></extra>"
         )
+        figTrends.update_layout(transition=dict(duration=400, easing='cubic-in-out'))
         return figTrends
     
     def PowerRankings(self, week):
@@ -1359,16 +1470,9 @@ class Season:
         fig2.update_layout(width=None, height=800)
         # Adjust the thickness of the lines
         fig2.update_traces(line=dict(width=4))  # Set the line width (e.g., 3 pixels)
-        fig2.update_layout(legend=dict(
-            orientation="h",
-            yanchor="bottom",
-            y=1.02,
-            xanchor="right",
-            x=1,
-            title = ''
-        ))
+        fig2.update_layout(legend=LEGEND_STD)
 
-        
+
         # Customize the y-axis labels
         fig2.update_yaxes(
             tickfont=dict(
@@ -1424,15 +1528,21 @@ class Season:
                 showlegend=False
                 )    
         fig2.update_layout(margin=dict(l=80, r=80, t=120, b=80))  # Set left, right, top, bottom padding within the plot area
-                                
-        fig2.update_layout(xaxis=dict(range=[0, week + 1.5])) 
+
+        fig2.update_layout(xaxis=dict(range=[0, week + 1.5]))
         fig2.update_layout(title = dict(y=.93)
         )
-        
+
+        fig2.update_traces(
+            hovertemplate="<b>%{fullData.name}</b><br>Week %{x}<br>Wins: <b>%{y}</b><extra></extra>",
+            selector=dict(type='scatter', mode='lines'),
+        )
+        fig2.update_layout(transition=dict(duration=400, easing='cubic-in-out'))
+
         apply_logo_to_fig(fig2)
 
-        return fig2   
-    
+        return fig2
+
     def LuckChart(self, current_week):
         
         self.WeeklyWins(current_week)
@@ -1445,7 +1555,7 @@ class Season:
         minscore = df_week['Score YTD'].min()
         minopponent = df_week['Opp YTD'].min()
 
-        figScat = px.scatter(df_week, x="Opp YTD",y = 'Score YTD',size ="Total Wins", template = 'gridiron_ink', color = 'Team', text = 'Team',title=f'<b>Lucky Squares</b><br><sup>Week {current_week}</sup>')
+        figScat = px.scatter(df_week, x="Opp YTD",y = 'Score YTD',size ="Total Wins", template = 'gridiron_ink', color = 'Team', text = 'Team',title=f'<b>Lucky Squares</b><br><sup>Week {current_week}</sup>', color_discrete_map=self.teamcolors)
         figScat.update_layout(width=800, height=800)
 
 
@@ -1475,48 +1585,41 @@ class Season:
         figScat.add_annotation(x=0, y=0, text="Bad but Lucky", showarrow=False, xref="paper", yref="paper",font=dict(
                     family="Courier New, monospace",
                     size=20,
-                    color='#17becf' 
-                    ))
+                    color=LABEL_COLOR
+                    ), bgcolor='rgba(26,58,82,0.7)')
         figScat.add_annotation(x=1, y=0, text="Bad & Unlucky", showarrow=False, xref="paper", yref="paper",font=dict(
                     family="Courier New, monospace",
                     size=20,
-                    color='#17becf' 
-                    ))
+                    color=LABEL_COLOR
+                    ), bgcolor='rgba(26,58,82,0.7)')
         figScat.add_annotation(x=0, y=1, text="Good & Lucky", showarrow=False, xref="paper", yref="paper",font=dict(
                     family="Courier New, monospace",
                     size=20,
-                    color='#17becf' 
-                    ))
+                    color=LABEL_COLOR
+                    ), bgcolor='rgba(26,58,82,0.7)')
         figScat.add_annotation(x=1, y=1, text="Good & Tested", showarrow=False, xref="paper", yref="paper",font=dict(
                     family="Courier New, monospace",
                     size=20,
-                    color='#17becf' 
-                    ))
+                    color=LABEL_COLOR
+                    ), bgcolor='rgba(26,58,82,0.7)')
         figScat.update_layout(
-            xaxis_title="Points Against",  # Set x-axis title
-            yaxis_title="Points For",   # Set y-axis title
+            xaxis_title="Points Against",
+            yaxis_title="Points For",
             xaxis=dict(
-                title_font=dict(
-                    color ='red',
-                    shadow = False
-                )
+                title_font=dict(color='#F94144', shadow='none')
             ),
             yaxis=dict(
-                title_font=dict(
-                    color = 'green',
-                    shadow = False
-
-                )
+                title_font=dict(color='#90BE6D', shadow='none')
             )
         )
 
         figScat.update_yaxes(dtick=100,
                         tickfont=dict(
-                size=16,         # Font size
+                size=16, family='Courier New',
             ))
         figScat.update_xaxes(dtick=100,
                         tickfont=dict(
-                size=16,         # Font size
+                size=16, family='Courier New',
             ))
         figScat.add_annotation(
         text="O Size = Wins | --- = Avg",
@@ -1529,12 +1632,21 @@ class Season:
         )
         
         
-        figScat.update_layout(xaxis=dict(range=[minopponent - 30, topopponent + 40])) 
-        figScat.update_layout(yaxis=dict(range=[minscore - 25, topscore + 25])) 
+        figScat.update_layout(xaxis=dict(range=[minopponent - 30, topopponent + 40]))
+        figScat.update_layout(yaxis=dict(range=[minscore - 25, topscore + 25]))
 
-        figScat.update_layout(margin=dict(t=200, b=100, l=100, r=100))
+        figScat.update_layout(margin=dict(t=80, b=100, l=100, r=100))
 
         figScat.update_layout(title=dict(y=.9))
+        figScat.update_traces(
+            hovertemplate=(
+                "<b>%{text}</b><br>"
+                "Points For: <b>%{y:.1f}</b><br>"
+                "Points Against: <b>%{x:.1f}</b><br>"
+                "Wins: <b>%{marker.size}</b><extra></extra>"
+            )
+        )
+        figScat.update_layout(transition=dict(duration=600, easing='elastic-in-out'))
         apply_logo_to_fig(figScat)
         return figScat
 
@@ -1684,7 +1796,7 @@ class Season:
     def PlayerPoints(self, WeekNum):
         self.WeeklyWins()    
 
-        figScoreLine = px.line(self.ConcatinatedWeeks[self.ConcatinatedWeeks['Week'].isin(range(0, WeekNum+1))], x='Week',y='Total', template='gridiron_ink', facet_col='Team',markers=True,facet_col_wrap=4, color='Team', line_shape='spline')
+        figScoreLine = px.line(self.ConcatinatedWeeks[self.ConcatinatedWeeks['Week'].isin(range(0, WeekNum+1))], x='Week',y='Total', template='gridiron_ink', facet_col='Team',markers=True,facet_col_wrap=4, color='Team', line_shape='spline', color_discrete_map=self.teamcolors)
         figScoreLine.update_layout(xaxis_title="", yaxis_title="")
         figScoreLine.update_layout(width=None, height=1000, showlegend=False)
         figScoreLine.update_layout(title=dict(text=f"{self.year} Score Trends",y=.91))
@@ -1710,17 +1822,21 @@ class Season:
                                 )
         apply_logo_to_fig(figScoreLine,xval=0,yval=1.1)
 
+        for ann in figScoreLine.layout.annotations:
+            if ann.text in self.teamcolors:
+                ann.font.color = self.teamcolors[ann.text]
+
         return figScoreLine
     
     def WeeklyWinsGraphBreakout(self,week):
         self.WeeklyWins()
         df = self.ConcatinatedWeeks
 
-        fig2 = px.line(df,x='Week',y='Total Wins', color = 'Team',template='gridiron_ink',line_shape = 'spline', facet_col='Team',facet_col_wrap=3, title = '<b>Weekly Wins</b><br><sup>Breakout</sup>')
+        fig2 = px.line(df,x='Week',y='Total Wins', color = 'Team',template='gridiron_ink',line_shape = 'spline', facet_col='Team',facet_col_wrap=3, title = '<b>Weekly Wins</b><br><sup>Breakout</sup>', color_discrete_map=self.teamcolors)
         
         
-        fig2.update_yaxes(zerolinewidth = 1, ticklabelposition = 'inside',ticklabelstandoff=130, tickfont = dict(color ='#4A6B85', size = 12), dtick = 3,showticklabels=True,showgrid=True)
-        fig2.update_xaxes(zerolinewidth = 1,side = 'bottom', ticklabelposition = 'inside bottom', tickfont = dict(color ='#4A6B85', size =12), dtick = 3, showticklabels=True,showgrid=False)
+        fig2.update_yaxes(zerolinewidth = 1, ticklabelposition = 'inside',ticklabelstandoff=130, tickfont = dict(size = 12), dtick = 3,showticklabels=True,showgrid=True)
+        fig2.update_xaxes(zerolinewidth = 1,side = 'bottom', ticklabelposition = 'inside bottom', tickfont = dict(size =12), dtick = 3, showticklabels=True,showgrid=False)
         
 
         
@@ -1883,7 +1999,7 @@ class Season:
         figBar.update_xaxes(dtick=1)
         figBar.update_yaxes(dtick=200)
         figBar.update_traces(width=.96)
-        figBar.update_traces(marker_line_width=2,marker_line_color='black')
+        figBar.update_traces(marker_line_width=2,marker_line_color='rgba(0,0,0,0.25)')
 
         figBar.update_layout(
                                 margin=dict(t=120, b=100, l=60, r=100)  # Adjust these values as needed
@@ -1893,8 +2009,8 @@ class Season:
         return figBar
             
     def ScoreFrequencyGraph(self, WeekNum):
-        figScoring = px.histogram(self.Matches[self.Matches['Week'].isin(range(0,WeekNum+1))], x='Total', template='gridiron_ink',title = 'Scoring Frequency', marginal='rug', 
-                                  color = 'Team', labels = 'Team')
+        figScoring = px.histogram(self.Matches[self.Matches['Week'].isin(range(0,WeekNum+1))], x='Total', template='gridiron_ink',title = 'Scoring Frequency', marginal='rug',
+                                  color = 'Team', labels = 'Team', color_discrete_map=self.teamcolors)
         figScoring.update_layout(width=None, height=800)
         figScoring.update_yaxes(
                 tickfont=dict(
@@ -1911,23 +2027,15 @@ class Season:
                 dtick=10,
                 side = 'bottom'
             )
-        figScoring.update_layout(legend=dict(
-                orientation="v",
-                yanchor="top",
-                y=.8,
-                xanchor="right",
-                x=1.05,
-                title = '',
-                font = dict(size = 16),
-                bgcolor="#163146",
-                bordercolor="#3D5E78",
-                borderwidth=2
-            ))
-        figScoring.update_traces(marker_line_width=2,marker_line_color='black')
+        figScoring.update_layout(legend=LEGEND_STD)
+        figScoring.update_traces(marker_line_width=2, marker_line_color='rgba(0,0,0,0.25)')
         figScoring.update_layout(showlegend = True, title = dict(y=.93))
-        
+
+        figScoring.update_traces(
+            hovertemplate="Score range: <b>%{x}</b><br>Weeks in range: <b>%{y}</b><extra></extra>"
+        )
         figScoring.update_layout(
-                                margin=dict(t=80, b=100, l=75, r=75)  # Adjust these values as needed
+                                margin=dict(t=130, b=40, l=75, r=75)
                                 )
         apply_logo_to_fig(figScoring, yval=-0.09)
         return figScoring
@@ -1952,7 +2060,7 @@ class Season:
             )
         figPosTotals.update_layout(width=800, height=1200)
         figPosTotals.update_traces(textfont_size=16, textangle=0, cliponaxis=True, textposition = 'inside', textfont=dict(size=16))
-        figPosTotals.update_traces(marker_line_width=2,marker_line_color='black')
+        figPosTotals.update_traces(marker_line_width=2,marker_line_color='rgba(0,0,0,0.25)')
             
         figPosTotals.update_traces(insidetextanchor= 'middle')
         figPosTotals.update_layout(
@@ -2007,7 +2115,15 @@ class Season:
         else:
             df = self.Starters[self.Starters['week'].isin(WeekRange)]
             titleText = "<b>Positional Points Distribution</b><br><sup>Starting Players</sup>"
-        
+
+        if df.empty:
+            fig = go.Figure()
+            fig.update_layout(template='gridiron_ink',
+                              annotations=[dict(text='No data for this week range', x=0.5, y=0.5,
+                                                showarrow=False, font=dict(size=16, color='#BDE2FF'),
+                                                xref='paper', yref='paper')],
+                              xaxis_visible=False, yaxis_visible=False)
+            return fig
 
         figViolin = px.violin(df,x='points', y='position',facet_col='team',facet_col_wrap=3, color = 'position', template='gridiron_ink')
         figViolin.update_traces(orientation='h', side='positive', width=3, points=False, spanmode = 'hard')
@@ -2021,24 +2137,26 @@ class Season:
         figViolin.for_each_xaxis(lambda xaxis: xaxis.update(showticklabels=True))
         figViolin.update_yaxes(
                 tickfont=dict(
-                    size=20,         # Font size
+                    size=20,
                 ),
                 title=None
             )
         figViolin.update_xaxes(
                 tickfont=dict(
-                    size=13,         # Font size
+                    size=13,
                 ),
                 title=None,
                 side = 'bottom'
             )
         for annotation in figViolin.layout.annotations:
-                    title_text = annotation.text  # e.g., "Team A vs Team B"
-                    #teams = title_text.split(" vs ")  # Split into individual team names
-                    # Create a styled title with team names in respective colors
-                    annotation.text = f"<span style='color:{self.teamcolors[title_text]}'>{title_text}</span>"
-                    annotation.font.size = 25  # Optional: Adjust font size for clarity
+            title_text = annotation.text
+            color = self.teamcolors.get(title_text, '#BDE2FF')
+            annotation.text = f"<span style='color:{color}'>{title_text}</span>"
+            annotation.font.size = 25
 
+        figViolin.update_traces(
+            hovertemplate="<b>%{fullData.name}</b><br>Score: <b>%{x:.2f}</b><extra></extra>"
+        )
         figViolin.update_layout(
                                 margin=dict(t=140, b=100, l=40, r=40)  # Adjust these values as needed
                                 )
@@ -2075,7 +2193,7 @@ class Season:
                 title=None,
                 side = 'bottom'
             )
-        figViolin2.update_annotations(font_size=35, font = dict(color = '#C49FC1'))
+        figViolin2.update_annotations(font_size=35, font=dict(color=TEXT_COLOR))
         figViolin2.update_layout(
             title=dict(text=titleText)
         )
@@ -2094,16 +2212,7 @@ class Season:
         figLine = px.line(TopPlayers,x='week_x',y='Score YTD', color = 'player',line_shape = 'spline',template='gridiron_ink',
                           title=f'Top {position}s over {threshold}')
         figLine.update_layout(width=None, height=800, title = dict(y=.93), showlegend = True)
-        figLine.update_layout(
-            legend=dict(
-                title = '',
-                x=0.5,  # x-coordinate of the legend (0 to 1, where 0 is left and 1 is right)
-                y=1.24,   # y-coordinate of the legend (0 to 1, where 0 is bottom and 1 is top)
-                xanchor="center",  # horizontal anchor point ('left', 'center', 'right')
-                yanchor="top" ,   # vertical anchor point ('top', 'middle', 'bottom')
-                font = dict(size = 12)
-            )
-        )
+        figLine.update_layout(legend=LEGEND_STD)
         figLine.update_yaxes(
                 tickfont=dict(
                     size=20,         # Font size
@@ -2118,10 +2227,10 @@ class Season:
                 side = 'top'
             )
         figLine.update_layout(
-                                margin=dict(t=190, b=100, l=60, r=60)  # Adjust these values as needed
+                                margin=dict(t=150, b=100, l=60, r=60)
                                 )
         apply_logo_to_fig(figLine)
-        return figLine                    
+        return figLine
     
     def PositionStrengthCalculator(self):
         scaler = MinMaxScaler()
@@ -2137,7 +2246,105 @@ class Season:
         
         self.PosistionPivot_scaled = pd.DataFrame(PosistionPivot_scaled, columns = PivotPositions, index=PivotTeams)
         self.PosistionPivot_Standard_scaled = pd.DataFrame(PosistionPivot_Standard_scaled, columns = PivotPositions, index=PivotTeams)
-                 
+
+    def PositionStrengthHeatmap(self):
+        """Heatmap of positional z-scores — positions on x-axis, teams on y-axis sorted by overall strength."""
+        self.PositionStrengthCalculator()
+
+        df = self.PosistionPivot_Standard_scaled.copy()
+
+        # Raw avg pts per position per team (for annotation tooltip context)
+        raw = self.PosistionPolar.pivot(columns='position', index='team', values='points').reindex(df.index)
+
+        # Sort teams: best overall z-score sum at top
+        df['_total'] = df.sum(axis=1)
+        df = df.sort_values('_total', ascending=True)
+        df = df.drop(columns='_total')
+
+        # Position display order
+        pos_order = [c for c in ['QB', 'RB', 'WR', 'TE', 'K', 'DEF'] if c in df.columns]
+        df = df[pos_order]
+        raw = raw.reindex(index=df.index, columns=pos_order)
+
+        teams  = df.index.tolist()
+        n_teams = len(teams)
+        n_pos   = len(pos_order)
+
+        z_vals  = df.values.tolist()
+        raw_vals = raw.values
+
+        # Build annotation text: z-score + raw avg pts
+        text_matrix = []
+        for i, team in enumerate(teams):
+            row = []
+            for j, pos in enumerate(pos_order):
+                z   = df.iloc[i, j]
+                avg = raw_vals[i, j] if not np.isnan(raw_vals[i, j]) else 0
+                row.append(f'<b>{z:+.1f}σ</b><br>{avg:.1f} pts')
+            text_matrix.append(row)
+
+        team_colors = [self.teamcolors.get(t, '#BDE2FF') for t in teams]
+
+        fig = go.Figure(go.Heatmap(
+            z=z_vals,
+            x=pos_order,
+            y=teams,
+            text=text_matrix,
+            texttemplate='%{text}',
+            textfont=dict(size=11, family='Courier New'),
+            colorscale=[
+                [0.0,  '#F94144'],  # strong red — well below average
+                [0.35, '#C75B5E'],
+                [0.5,  '#3D5E78'],  # neutral — league average
+                [0.65, '#5B9E6D'],
+                [1.0,  '#90BE6D'],  # strong green — well above average
+            ],
+            zmid=0,
+            zmin=-2.5, zmax=2.5,
+            showscale=True,
+            colorbar=dict(
+                title=dict(text='z-score', font=dict(color='#BDE2FF', family='Courier New', size=11)),
+                tickfont=dict(color='#BDE2FF', family='Courier New', size=10),
+                tickvals=[-2, -1, 0, 1, 2],
+                ticktext=['-2σ', '-1σ', 'avg', '+1σ', '+2σ'],
+                thickness=10,
+                len=0.6,
+                bgcolor='rgba(22,49,70,0.6)',
+                bordercolor='#3D5E78',
+                borderwidth=1,
+            ),
+            hovertemplate='<b>%{y}</b> · %{x}<br>z-score: <b>%{z:+.2f}σ</b><extra></extra>',
+        ))
+
+        # Colored y-axis tick labels per team
+        ticktext = [f"<span style='color:{c}'><b>{t}</b></span>"
+                    for t, c in zip(teams, team_colors)]
+
+        fig.update_layout(
+            template='gridiron_ink',
+            width=None,
+            height=max(480, n_teams * 52 + 80),
+            margin=dict(t=20, b=60, l=200, r=20),
+            xaxis=dict(
+                side='top',
+                tickfont=dict(size=13, family='Courier New', color='#BDE2FF'),
+                tickangle=0,
+            ),
+            yaxis=dict(
+                tickmode='array',
+                tickvals=list(range(n_teams)),
+                ticktext=ticktext,
+                tickfont=dict(size=12, family='Courier New'),
+                automargin=True,
+            ),
+        )
+
+        # Horizontal divider lines between teams
+        for i in range(1, n_teams):
+            fig.add_hline(y=i - 0.5, line=dict(color='#0d1e2e', width=1))
+
+        return fig
+
     def PositionStengthPolar(self):
         self.PositionStrengthCalculator()
         
@@ -2165,13 +2372,24 @@ class Season:
                                                    [{'type': 'polar'}, {'type': 'polar'}, {'type': 'polar'} ],[{'type': 'polar'}, {'type': 'polar'}, {'type': 'polar'} ]],
                             subplot_titles=list(teamlistorder)
                             )
+        def _hex_to_rgba(hex_color, alpha=0.25):
+            h = hex_color.lstrip('#')
+            r, g, b = int(h[0:2], 16), int(h[2:4], 16), int(h[4:6], 16)
+            return f'rgba({r},{g},{b},{alpha})'
+
         for i in range (1,13):
-            PolarTest = PosistionPivot_Standard_scaled[PosistionPivot_Standard_scaled['team']==teamdict[i]]
+            team_name = teamdict[i]
+            team_color = self.teamcolors.get(team_name, '#BDE2FF')
+            PolarTest = PosistionPivot_Standard_scaled[PosistionPivot_Standard_scaled['team']==team_name]
             PolarTest = PolarTest.set_index('team').T
             PolarTest.columns = ['points']
             PolarTest = PolarTest.reset_index()
-            figPolarAll.add_trace(go.Scatterpolar(r=PolarTest['points'], theta=PolarTest['position'], mode='markers+text',textposition='top center',name=teamdict[i],fill='toself', r0 = -2, dr = .5, 
-                                                  text=round(PolarTest['points'],1)), row=rowdict[i], col=coldict[i])
+            figPolarAll.add_trace(go.Scatterpolar(r=PolarTest['points'], theta=PolarTest['position'], mode='markers+text',textposition='top center',name=team_name,fill='toself', r0 = -2, dr = .5,
+                                                  text=round(PolarTest['points'],1),
+                                                  fillcolor=_hex_to_rgba(team_color),
+                                                  line=dict(color=team_color, width=2),
+                                                  marker=dict(color=team_color),
+                                                  ), row=rowdict[i], col=coldict[i])
             
             
 
@@ -2278,7 +2496,10 @@ class Season:
             title="<b>Positional Strength</b><br><sup>Std Dev from Average</sup>",
             )
         
-        figPolarAll.update_annotations(font_size=22,font = dict(color = '#C49FC1'))
+        for ann in figPolarAll.layout.annotations:
+            team_name = ann.text
+            ann.font.size = 22
+            ann.font.color = self.teamcolors.get(team_name, TEXT_COLOR)
         figPolarAll.update_polars(bgcolor='#BDE2FF')
         
         figPolarAll.add_annotation(
@@ -2291,7 +2512,10 @@ class Season:
             )
             )
         figPolarAll.update_traces(textfont_size=13, textfont=dict(color = '#163146'))
-        
+        figPolarAll.update_traces(
+            hovertemplate="<b>%{theta}</b><br>Strength: <b>%{r:.2f}</b><extra></extra>"
+        )
+
         figPolarAll.update_layout(
                                 margin=dict(t=140, b=100, l=60, r=60)  # Adjust these values as needed
                                 )
@@ -2310,33 +2534,28 @@ class Season:
         TeamPointsTOP = TeamPoints.iloc[0:10]
     
         TeamPointsTOP['color'] = TeamPointsTOP.team.map(self.teamcolors)
+        OpponentPointsNoTeamTOP['color'] = OpponentPointsNoTeamTOP.team.map(self.teamcolors)
         TeamPointsTOP['TeamVs'] = TeamPointsTOP.team + ' w/ ' + TeamPointsTOP.recent_teams
         TeamPointsTOP['Purpose'] = 'Points With...'
-        
-        JointTopBottom = pd.concat([OpponentPointsNoTeamTOP,TeamPointsTOP ])
-        
-        figTeamPoints = go.Figure()
 
         figTeamPoints = make_subplots(
-                    rows=2, cols=1, 
+                    rows=2, cols=1,
                     shared_xaxes=False,
-                    vertical_spacing =  .1,
-                    #column_widths=[0.5, 0.55],  # Adjust the width of each subplot
+                    vertical_spacing=.1,
                     specs=[[{"type": "bar"}],
                             [{"type": "bar"}]],
-                    subplot_titles=['Points With...','Points vs...']# Specify the chart types
+                    subplot_titles=['Points With...','Points vs...']
                 )
         figTeamPoints.add_trace(
                     go.Bar(
-                        x=TeamPointsTOP['points'], 
-                        y=TeamPointsTOP['TeamVs'], 
-                        
+                        x=TeamPointsTOP['points'],
+                        y=TeamPointsTOP['TeamVs'],
                         text=TeamPointsTOP['points'],
-                        textangle = 0,
+                        textangle=0,
                         textposition='auto',
                         showlegend=False,
-                        orientation='h', 
-                        marker_color = TeamPointsTOP.points,
+                        orientation='h',
+                        marker_color=TeamPointsTOP['color'],
                         opacity=.8,
                         textfont=dict(size=24)
                     ),
@@ -2344,15 +2563,14 @@ class Season:
                 )
         figTeamPoints.add_trace(
                     go.Bar(
-                        x=OpponentPointsNoTeamTOP['points'], 
-                        y=OpponentPointsNoTeamTOP['TeamVs'], 
-                        
+                        x=OpponentPointsNoTeamTOP['points'],
+                        y=OpponentPointsNoTeamTOP['TeamVs'],
                         text=OpponentPointsNoTeamTOP['points'],
-                        textangle = 0,
+                        textangle=0,
                         textposition='auto',
                         showlegend=False,
                         orientation='h',
-                        marker_color = OpponentPointsNoTeamTOP.points,
+                        marker_color=OpponentPointsNoTeamTOP['color'],
                         opacity=.8,
                         textfont=dict(size=24)
                     ),
@@ -2365,13 +2583,13 @@ class Season:
         figTeamPoints.update_xaxes(side='bottom')
         figTeamPoints.update_layout(title="<b>Points With & Against NFL Team</b>")
 
-        figTeamPoints.update_annotations(font = dict(color = '#C49FC1'))
+        figTeamPoints.update_annotations(font=dict(color=TEXT_COLOR))
         figTeamPoints.update_layout(margin=dict(t=100, b=100, l=220, r=40))
-        
+
         apply_logo_to_fig(figTeamPoints,xval=.40, yval=-0.06)
 
         return figTeamPoints
-    
+
     def StatusGraph(self,WeekObj):
         self.Calc(WeekObj)
         self.PowerRankings(WeekObj.week)
@@ -2407,7 +2625,7 @@ class Season:
                 number = {'font':{'size': 18}},
                 gauge={
                     'axis': {'range': [None, OptimalScores[team]], 'tickwidth': 1, 'tickcolor': "darkblue"},
-                    'bar': {'color': "#FFC300"}, # Color of the manager's score bar
+                    'bar': {'color': LABEL_COLOR}, # Color of the manager's score bar
                     'shape':'bullet',
                     'borderwidth': 4,
                     'bar':{'thickness': .6, 'color' : 'rgba(148,103,189,.8)'},
@@ -2484,44 +2702,44 @@ class Season:
         fig.add_annotation(
         text="Vs.<br>Personal Avg.",
         xref="paper", yref="paper",
-        x=.4, y=1.05, # Position relative to figure (right side, middle)
+        x=.4, y=1.05,
         showarrow=False,
         font=dict(
             size=15,
-            color="gold"
+            color=LABEL_COLOR
         )
         )
 
         fig.add_annotation(
         text=f"Vs.<br>League Avg.<br><sup>[{int(LeagueAverage)} pts.]</sup>",
         xref="paper", yref="paper",
-        x=.55, y=1.05, # Position relative to figure (right side, middle)
+        x=.55, y=1.05,
         showarrow=False,
         font=dict(
             size=15,
-            color="gold"
+            color=LABEL_COLOR
         )
         )
 
         fig.add_annotation(
         text="Power Rankings",
         xref="paper", yref="paper",
-        x=.83, y=1.05, # Position relative to figure (right side, middle)
+        x=.83, y=1.05,
         showarrow=False,
         font=dict(
             size=25,
-            color="gold"
+            color=LABEL_COLOR
         )
         )
 
         fig.add_annotation(
         text="Power Win %",
         xref="paper", yref="paper",
-        x=1.02, y=1.05, # Position relative to figure (right side, middle)
+        x=1.02, y=1.05,
         showarrow=False,
         font=dict(
             size=25,
-            color="gold"
+            color=LABEL_COLOR
         )
         )
 
@@ -2559,9 +2777,7 @@ class Season:
 
                     # Customize the y-axis labels
         figTotal.update_yaxes(
-                        tickfont=dict(
-                            size=25, weight ='bold'       # Font size
-                        ),
+                        tickfont=dict(size=12, weight='bold'),
                         title=None
                     )
         figTotal.update_traces(insidetextanchor= 'middle',textfont=dict(
@@ -2569,9 +2785,13 @@ class Season:
 
         figTotal.update_layout(margin=dict(t=130, b=100, l=230, r=40))
         figTotal.update_layout(title = dict(y=.93))
-   
-        self.UpdateColors(figTotal)
 
+        figTotal.update_traces(
+            hovertemplate="<b>%{y}</b><br>%{fullData.name}: <b>%{x:.1f}</b><extra></extra>"
+        )
+        figTotal.update_layout(transition=dict(duration=500, easing='cubic-in-out'))
+
+        self.UpdateColors(figTotal)
 
         apply_logo_to_fig(figTotal)
 
@@ -2598,9 +2818,351 @@ class Season:
 
 
         return figBench
-            
-    
-    
+
+    def EPAScatter(self):
+        """Scatter: total EPA (starters) vs fantasy score per team per week, with regression line."""
+        if self.BreakoutSeason is None or self.BreakoutSeason.empty:
+            return go.Figure()
+
+        starters = self.BreakoutSeason[self.BreakoutSeason['starter'] == 1].copy()
+
+        # Find all numeric EPA columns
+        epa_cols = [c for c in starters.columns if 'epa' in c.lower()
+                    and starters[c].dtype in ['float64', 'float32', 'int64']]
+        if not epa_cols:
+            fig = go.Figure()
+            fig.update_layout(
+                template='gridiron_ink',
+                annotations=[dict(text='EPA data not available', x=0.5, y=0.5,
+                                  showarrow=False, font=dict(size=16, color='#BDE2FF'),
+                                  xref='paper', yref='paper')],
+            )
+            return fig
+
+        starters['_total_epa'] = starters[epa_cols].sum(axis=1)
+        grp = starters.groupby(['team', 'week_NFL']).agg(
+            total_epa=('_total_epa', 'sum'),
+            fantasy_pts=('points', 'sum'),
+        ).reset_index()
+
+        grp['label'] = grp['team'] + ' Wk' + grp['week_NFL'].astype(int).astype(str)
+
+        fig = px.scatter(
+            grp, x='total_epa', y='fantasy_pts', color='team',
+            color_discrete_map=self.teamcolors,
+            template='gridiron_ink',
+            labels={'total_epa': 'Total EPA (Starters)', 'fantasy_pts': 'Fantasy Points Scored'},
+            trendline='ols',
+        )
+        fig.update_traces(
+            text=grp['label'],
+            textposition='top center',
+            hovertemplate='<b>%{text}</b><br>EPA: <b>%{x:.1f}</b><br>Pts: <b>%{y:.1f}</b><extra></extra>',
+            selector=dict(mode='markers'),
+        )
+        fig.update_traces(
+            hovertemplate='Trend<extra></extra>',
+            selector=dict(type='scatter', mode='lines'),
+        )
+        fig.update_layout(showlegend=True, margin=dict(b=100))
+        fig.update_xaxes(title_standoff=40, tickfont_size=10)
+        fig.update_yaxes(title_standoff=15)
+        return fig
+
+    def WOPRTreemap(self, week=None):
+        """Treemap of WR/TE starters sized by WOPR (or target_share/targets if wopr absent)."""
+        if self.BreakoutSeason is None or self.BreakoutSeason.empty:
+            return go.Figure()
+
+        starters = self.BreakoutSeason[
+            (self.BreakoutSeason['starter'] == 1) &
+            (self.BreakoutSeason['position'].isin(['WR', 'TE']))
+        ].copy()
+
+        if week is not None:
+            starters = starters[starters['week_NFL'] == float(week)]
+
+        # Find best available opportunity metric
+        size_col = None
+        for candidate in ['wopr', 'wopr_x', 'target_share', 'targets']:
+            if candidate in starters.columns:
+                size_col = candidate
+                break
+
+        if size_col is None or starters.empty:
+            fig = go.Figure()
+            fig.update_layout(
+                template='gridiron_ink',
+                annotations=[dict(text='WOPR/target data not available', x=0.5, y=0.5,
+                                  showarrow=False, font=dict(size=16, color='#BDE2FF'),
+                                  xref='paper', yref='paper')],
+            )
+            return fig
+
+        starters = starters[starters[size_col].notna() & (starters[size_col] > 0)].copy()
+        if starters.empty:
+            fig = go.Figure()
+            fig.update_layout(
+                template='gridiron_ink',
+                annotations=[dict(text='No WOPR data for selected filters', x=0.5, y=0.5,
+                                  showarrow=False, font=dict(size=16, color='#BDE2FF'),
+                                  xref='paper', yref='paper')],
+            )
+            return fig
+
+        fig = px.treemap(
+            starters,
+            path=['team', 'player'],
+            values=size_col,
+            color='points',
+            color_continuous_scale='RdYlGn',
+            template='gridiron_ink',
+            hover_data={'points': ':.1f', size_col: ':.3f'},
+        )
+        fig.update_traces(
+            hovertemplate='<b>%{label}</b><br>' + size_col.upper() +
+                          ': <b>%{value:.3f}</b><br>Pts: <b>%{color:.1f}</b><extra></extra>',
+        )
+        fig.update_layout(margin=dict(t=10, b=10, l=10, r=10))
+        return fig
+
+    def WaiverWireBump(self, top_n=15, mode='rank'):
+        """Bump chart: rank or cumulative points of top players over the season."""
+        if self.BreakoutSeason is None or self.BreakoutSeason.empty:
+            return go.Figure()
+
+        bs = self.BreakoutSeason[self.BreakoutSeason['player'].notna()].copy()
+
+        # Cumulative points per player per week
+        bs = bs[bs['week_NFL'].notna()].copy()
+        bs['week_NFL'] = bs['week_NFL'].astype(int)
+        player_week = bs.groupby(['player', 'week_NFL', 'position'])['points'].sum().reset_index()
+        player_week = player_week.sort_values(['player', 'week_NFL'])
+        player_week['cumulative'] = player_week.groupby('player')['points'].cumsum()
+
+        # Rank players each week by cumulative points
+        player_week['rank'] = player_week.groupby('week_NFL')['cumulative'].rank(
+            ascending=False, method='min')
+
+        # Find top_n players by final cumulative score
+        final_week = player_week['week_NFL'].max()
+        top_players = (
+            player_week[player_week['week_NFL'] == final_week]
+            .nsmallest(top_n, 'rank')['player'].tolist()
+        )
+
+        subset = player_week[player_week['player'].isin(top_players)]
+
+        pos_colors = {
+            'QB': '#FFC300', 'RB': '#54A2E5',
+            'WR': '#90BE6D', 'TE': '#F94144', 'K': '#9467BD',
+        }
+
+        use_points = (mode == 'points')
+
+        fig = go.Figure()
+        for player in top_players:
+            pdata = subset[subset['player'] == player].sort_values('week_NFL')
+            if pdata.empty:
+                continue
+            pos = pdata['position'].iloc[0]
+            color = pos_colors.get(pos, '#BDE2FF')
+            y_vals = pdata['cumulative'].values if use_points else pdata['rank'].values
+            hover = (
+                f'<b>{player}</b> ({pos})<br>'
+                'Week %{x}<br>'
+                + ('Cumulative Pts: <b>%{y:.1f}</b><extra></extra>' if use_points
+                   else 'Rank: <b>%{y:.0f}</b><br>Cumulative Pts: <b>%{customdata:.1f}</b><extra></extra>')
+            )
+            fig.add_trace(go.Scatter(
+                x=pdata['week_NFL'],
+                y=y_vals,
+                mode='lines+markers',
+                name=f'{player} ({pos})',
+                line=dict(color=color, width=2, shape='spline'),
+                marker=dict(size=6),
+                hovertemplate=hover,
+                customdata=pdata['cumulative'].values if not use_points else None,
+            ))
+
+        if use_points:
+            fig.update_yaxes(title='Cumulative Points')
+        else:
+            fig.update_yaxes(autorange='reversed', title='Rank')
+        fig.update_xaxes(title='Week', dtick=1)
+        fig.update_layout(
+            template='gridiron_ink',
+            showlegend=True,
+            legend=dict(orientation='v', x=1.01, xanchor='left'),
+        )
+        return fig
+
+    def LineupEfficiency(self, week):
+        """Returns DataFrame: actual vs optimal scores with gap per team."""
+        if self.BreakoutSeason is None or self.BreakoutSeason.empty:
+            return pd.DataFrame()
+        if self.Matches is None or self.Matches.empty:
+            return pd.DataFrame()
+
+        week_data = self.BreakoutSeason[
+            self.BreakoutSeason['week_NFL'] == float(week)
+        ].copy()
+        if week_data.empty:
+            return pd.DataFrame()
+
+        actuals = (
+            self.Matches[self.Matches['Week'] == week]
+            .set_index('Team')['Total'].to_dict()
+        )
+        if not actuals:
+            return pd.DataFrame()
+
+        SLOTS = {'QB': 1, 'RB': 2, 'WR': 2, 'TE': 1, 'K': 1, 'DEF': 1}
+        FLEX_POSITIONS = {'RB', 'WR', 'TE'}
+
+        rows = []
+        for team, actual in actuals.items():
+            team_players = week_data[week_data['team'] == team]
+            if team_players.empty:
+                continue
+            used = set()
+            optimal_pts = 0.0
+            # Fill positional slots greedily (best player first)
+            for pos, count in SLOTS.items():
+                best = (
+                    team_players[team_players['position'] == pos]
+                    .sort_values('points', ascending=False)
+                    .head(count)
+                )
+                for idx in best.index:
+                    used.add(idx)
+                    optimal_pts += best.loc[idx, 'points']
+            # Flex: best remaining RB/WR/TE
+            flex_candidates = (
+                team_players[
+                    team_players['position'].isin(FLEX_POSITIONS) &
+                    ~team_players.index.isin(used)
+                ].sort_values('points', ascending=False)
+            )
+            if not flex_candidates.empty:
+                best_flex = flex_candidates.iloc[0]
+                used.add(flex_candidates.index[0])
+                optimal_pts += best_flex['points']
+
+            rows.append({
+                'Team': team,
+                'Actual': round(actual, 2),
+                'Optimal': round(optimal_pts, 2),
+                'Gap': round(optimal_pts - actual, 2),
+                'Efficiency': actual / optimal_pts if optimal_pts > 0 else 1.0,
+            })
+        return pd.DataFrame(rows).sort_values('Gap', ascending=False)
+
+    def LineupEfficiencyChart(self, week):
+        """Waterfall-style bar chart: actual vs optimal score per team."""
+        df = self.LineupEfficiency(week)
+        if df.empty:
+            fig = go.Figure()
+            fig.update_layout(template='gridiron_ink',
+                annotations=[dict(text='No efficiency data available', x=0.5, y=0.5,
+                    showarrow=False, font=dict(size=16, color='#BDE2FF'), xref='paper', yref='paper')])
+            return fig
+
+        fig = go.Figure()
+
+        # Actual score bars
+        fig.add_trace(go.Bar(
+            name='Actual Score',
+            x=df['Team'],
+            y=df['Actual'],
+            marker_color='#54A2E5',
+            marker_line_color='rgba(0,0,0,0.25)',
+            marker_line_width=1,
+            hovertemplate='<b>%{x}</b><br>Actual: <b>%{y:.1f}</b><extra></extra>',
+        ))
+
+        # Gap bars (points left on bench)
+        fig.add_trace(go.Bar(
+            name='Left on Bench',
+            x=df['Team'],
+            y=df['Gap'],
+            marker_color='rgba(249,65,68,0.6)',
+            marker_line_color='rgba(0,0,0,0.25)',
+            marker_line_width=1,
+            hovertemplate='<b>%{x}</b><br>+%{y:.1f} pts left on bench<extra></extra>',
+            text=[f'+{g:.1f}' for g in df['Gap']],
+            textposition='outside',
+            textfont=dict(color='#F94144', size=11),
+        ))
+
+        # Horizontal layout: teams on y-axis, points on x-axis
+        fig_h = go.Figure()
+
+        fig_h.add_trace(go.Bar(
+            name='Actual Score',
+            y=df['Team'],
+            x=df['Actual'],
+            orientation='h',
+            marker_color=[self.teamcolors.get(t, '#54A2E5') for t in df['Team']],
+            marker_line_color='rgba(0,0,0,0.25)',
+            marker_line_width=1,
+            hovertemplate='<b>%{y}</b><br>Actual: <b>%{x:.1f}</b><extra></extra>',
+        ))
+
+        _gap_bar_colors = [
+            'rgba(249,65,68,0.55)' if g >= 0 else 'rgba(78,205,196,0.55)'
+            for g in df['Gap']
+        ]
+        _gap_texts = [f'<b>+{g:.1f}</b>' if g >= 0 else f'<b>{g:.1f}</b>' for g in df['Gap']]
+        _gap_hover = [
+            f'<b>{t}</b><br>+{g:.1f} pts left on bench' if g >= 0
+            else f'<b>{t}</b><br>Beat optimal by {abs(g):.1f} pts'
+            for t, g in zip(df['Team'], df['Gap'])
+        ]
+
+        fig_h.add_trace(go.Bar(
+            name='Left on Bench',
+            y=df['Team'],
+            x=df['Gap'],
+            orientation='h',
+            marker_color=_gap_bar_colors,
+            marker_line_color='rgba(0,0,0,0.25)',
+            marker_line_width=1,
+            hovertext=_gap_hover,
+            hovertemplate='%{hovertext}<extra></extra>',
+            text=_gap_texts,
+            textposition='outside',
+            textfont=dict(color=['#F94144' if g >= 0 else '#4ECDC4' for g in df['Gap']], size=11),
+        ))
+
+        fig_h.update_layout(
+            template='gridiron_ink',
+            barmode='stack',
+            showlegend=True,
+            xaxis_title='Points',
+            yaxis_title=None,
+            legend=dict(orientation='h', x=0.5, xanchor='center', y=1.05),
+            yaxis=dict(
+                autorange='reversed',
+                showticklabels=False,
+            ),
+        )
+        # Colored team name labels via annotations (Plotly doesn't support per-tick colors)
+        for team in df['Team']:
+            color = self.teamcolors.get(team, '#BDE2FF')
+            fig_h.add_annotation(
+                x=0, y=team,
+                xref='paper', yref='y',
+                text=f'<b>{team}</b>',
+                showarrow=False,
+                font=dict(color=color, size=13, family='Courier New'),
+                xanchor='right',
+                xshift=-6,
+                align='right',
+            )
+        return fig_h
+
+
 class AllTime:
     def __init__(self):
                
@@ -2635,10 +3197,8 @@ class AllTime:
         self.Breakout_Regular = self.Breakout[self.Breakout.Season == 'Regular']
     
     def SetTeamColors(self, color_dict:dict = None):
-        self.teamcolors = {'JTizzzzle': 'lightsalmon', 'bgmaddox':'mediumpurple', 'jlglover':'cyan', 'RascalHazard':'pink', 
-                    'BMoreBallers88':'gold', 'eegrady':'teal', 'DirtyCommie':'lime', 'jhuntmadd':'orange', 'RReclam':'green', 
-                    'sgmaddox':'darkseagreen', 'RossLikeSauce':'red', 'InfiniteJesse':'magenta'}
-        if color_dict != None:
+        self.teamcolors = get_alltime_teamcolors()
+        if color_dict is not None:
             self.teamcolors = color_dict
 
     
@@ -2930,7 +3490,8 @@ class AllTime:
             name = 'Losers',
             orientation='h',
             text = TopTenLosers['Total'],
-            textfont=dict(size=25)
+            textfont=dict(size=25),
+            marker_color=[self.teamcolors.get(t, '#BDE2FF') for t in TopTenLosers['Team']],
         ))
         figLosers.add_trace(go.Bar(
             x = TopTenLosers['Opp'],
@@ -2940,6 +3501,7 @@ class AllTime:
             opacity=.7,
             text = TopTenLosers['OppName'],
             textfont=dict(size=14),
+            marker_color=[self.teamcolors.get(t, '#BDE2FF') for t in TopTenLosers['Opp_team']],
             ))
         figLosers.update_layout(template="gridiron_ink")
         figLosers.update_layout(width=800, height=1200)
@@ -2953,7 +3515,7 @@ class AllTime:
         figLosers.update_layout(
             title = "<b>Biggest Losers</b><br><sup>Highest Scores in Loss</sup>",
         )
-        figLosers.update_layout(margin=dict(t=130, b=100, l=200, r=40))
+        figLosers.update_layout(margin=MARGIN_HBAR)
         apply_logo_to_fig(figLosers, xval=.35)
 
 
@@ -2965,29 +3527,14 @@ class AllTime:
         TenSmallestMargins['TeamGraph'] = TenSmallestMargins['Team'] + ' - ' + TenSmallestMargins['Year'].astype(str) + ' [' + TenSmallestMargins['Margin'].astype(str) + ']'
         
     
-        figMargin = px.bar(TenSmallestMargins, x='Margin',y=TenSmallestMargins.index,template = 'gridiron_ink',title='<b>Top 10 Smallest Margins</b>', color = 'Week Index', orientation='h', text='TeamGraph' )
+        figMargin = px.bar(TenSmallestMargins, x='Margin',y=TenSmallestMargins.index,template = 'gridiron_ink',title='<b>Top 10 Smallest Margins</b>', color = 'Team', orientation='h', text='TeamGraph', color_discrete_map=self.teamcolors)
         figMargin.update_layout(barmode='stack', yaxis={'categoryorder':'total ascending'})
         figMargin.update_layout(width=None, height=800)
-        
-        figMargin.update_traces(textfont_size=20, textangle=0, cliponaxis=True, textposition = 'auto', textfont=dict(weight='bold', size=15   # Font color
-                ))
+
+        figMargin.update_traces(textfont_size=20, textangle=0, cliponaxis=True, textposition = 'auto', textfont=dict(weight='bold', size=15))
         figMargin.update_layout(
-                xaxis_title="Margin",  # Set x-axis title
-                yaxis_title="",   # Set y-axis title
-                xaxis=dict(
-                    title_font=dict(
-                        size=30,          # Set font size for x-axis title
-                        color ='red',
-                        weight = 'bold'
-                    )
-                ),
-                yaxis=dict(
-                    title_font=dict(
-                        size=30,          # Set font size for y-axis title
-                        color = 'green',
-                        weight = 'bold'
-                    )
-                )
+                xaxis_title="Margin",
+                yaxis_title="",
             )
         figMargin.update_layout(yaxis=dict(showticklabels=False))
         #Update the layout to hide the legend:
@@ -3014,7 +3561,7 @@ class AllTime:
         
         
         
-        figWorst = px.bar(Worst10, x='Total',y='TeamName', color = 'Team', orientation='h', template='gridiron_ink', title = '<b>Hall of Shame</b><br><sup>Team</sup>', text = 'Total')
+        figWorst = px.bar(Worst10, x='Total',y='TeamName', color = 'Team', orientation='h', template='gridiron_ink', title = '<b>Hall of Shame</b><br><sup>Team</sup>', text = 'Total', color_discrete_map=self.teamcolors)
         figWorst.update_layout(height = 1200, width= 800, showlegend=False)
         figWorst.update_layout(title_font = dict(size=45))
         figWorst.update_xaxes(
@@ -3033,7 +3580,7 @@ class AllTime:
 
         # Add the image over a specific bar (adjust xref and yref as needed for placement)
         figWorst.update_traces(textposition='inside', textfont_size=80)
-        figWorst.update_layout(margin=dict(t=130, b=100, l=200, r=40))
+        figWorst.update_layout(margin=MARGIN_HBAR)
         
         apply_logo_to_fig(figWorst,xval=.40)
 
@@ -3044,7 +3591,7 @@ class AllTime:
         Best10['Total'] = Best10['Total'].astype(int)
         Best10['TeamName'] = '<b>'+ Best10['Team'] + '</b>' + '<br>' + "W" +Best10['Week'].astype(str) + " " + Best10['Year'].astype(str)
         
-        figBest = px.bar(Best10, x='Total',y='TeamName', color = 'Team', orientation='h', template='gridiron_ink', title = '<b>Hall of Fame</b><br><sup>Team</sup>', text = 'Total')
+        figBest = px.bar(Best10, x='Total',y='TeamName', color = 'Team', orientation='h', template='gridiron_ink', title = '<b>Hall of Fame</b><br><sup>Team</sup>', text = 'Total', color_discrete_map=self.teamcolors)
         figBest.update_layout(height = 1200, width= 800, showlegend=False)
         figBest.update_xaxes(
                 tickfont=dict(
@@ -3065,7 +3612,7 @@ class AllTime:
                 size=20,  # Set the font size here
             )
         )
-        figBest.update_layout(margin=dict(t=130, b=100, l=180, r=40))
+        figBest.update_layout(margin=MARGIN_HBAR_MED)
         figBest.update_traces(textposition='inside', textfont_size=80)
 
         
@@ -3078,9 +3625,9 @@ class AllTime:
         Best10Players['TeamName'] = '<b>' + Best10Players['team'] + '</b><br><sup>' + "W" +Best10Players['week_x'].astype(str) + " " + Best10Players['year'].astype(str) + '</sup>'
         Best10Players['Player-Points'] = '<b>' + Best10Players.player + '</b><br>' + Best10Players.points.astype(str)
         
-        figBestPlayers = px.bar(Best10Players, x='points',y='TeamName', color = 'team', orientation='h', 
+        figBestPlayers = px.bar(Best10Players, x='points',y='TeamName', color = 'team', orientation='h',
                         template='gridiron_ink', title = '<b>Hall of Fame</b><br><sup>Players</sup>', text = 'Player-Points',
-                        )
+                        color_discrete_map=self.teamcolors)
         figBestPlayers.update_layout(height = 1200, width= 800, showlegend=False)
         figBestPlayers.update_xaxes(
                 tickfont=dict(
@@ -3097,7 +3644,7 @@ class AllTime:
                 categoryorder="total ascending",
             )
         
-        figBestPlayers.update_layout(margin=dict(t=130, b=100, l=180, r=40))
+        figBestPlayers.update_layout(margin=MARGIN_HBAR_MED)
         figBestPlayers.update_traces(textposition='inside', textfont_size=55)
 
         
@@ -3114,35 +3661,30 @@ class AllTime:
         
         TeamPoints = self.Breakout.groupby(['team','recent_teams'])['points'].sum().round(1).reset_index().sort_values('points', ascending=False)
         TeamPointsTOP = TeamPoints.iloc[0:10]
-    
-        #TeamPointsTOP['color'] = TeamPointsTOP.team.map(teamcolors)
+
+        TeamPointsTOP['color'] = TeamPointsTOP.team.map(self.teamcolors)
+        OpponentPointsNoTeamTOP['color'] = OpponentPointsNoTeamTOP.team.map(self.teamcolors)
         TeamPointsTOP['TeamVs'] = TeamPointsTOP.team + ' w/ ' + TeamPointsTOP.recent_teams
         TeamPointsTOP['Purpose'] = 'Points With...'
-        
-        JointTopBottom = pd.concat([OpponentPointsNoTeamTOP,TeamPointsTOP ])
-        
-        figTeamPoints = go.Figure()
 
         figTeamPoints = make_subplots(
-                    rows=2, cols=1, 
+                    rows=2, cols=1,
                     shared_xaxes=False,
-                    vertical_spacing =  .1,
-                    #column_widths=[0.5, 0.55],  # Adjust the width of each subplot
+                    vertical_spacing=.1,
                     specs=[[{"type": "bar"}],
                             [{"type": "bar"}]],
-                    subplot_titles=['Points With...','Points vs...']# Specify the chart types
+                    subplot_titles=['Points With...','Points vs...']
                 )
         figTeamPoints.add_trace(
                     go.Bar(
-                        x=TeamPointsTOP['points'], 
-                        y=TeamPointsTOP['TeamVs'], 
-                        
+                        x=TeamPointsTOP['points'],
+                        y=TeamPointsTOP['TeamVs'],
                         text=TeamPointsTOP['points'],
-                        textangle = 0,
+                        textangle=0,
                         textposition='auto',
                         showlegend=False,
-                        orientation='h', 
-                        marker_color = TeamPointsTOP.points,
+                        orientation='h',
+                        marker_color=TeamPointsTOP['color'],
                         opacity=.8,
                         textfont=dict(size=20)
                     ),
@@ -3150,16 +3692,15 @@ class AllTime:
                 )
         figTeamPoints.add_trace(
                     go.Bar(
-                        x=OpponentPointsNoTeamTOP['points'], 
-                        y=OpponentPointsNoTeamTOP['TeamVs'], 
-                        
+                        x=OpponentPointsNoTeamTOP['points'],
+                        y=OpponentPointsNoTeamTOP['TeamVs'],
                         text=OpponentPointsNoTeamTOP['points'],
-                        textangle = 0,
+                        textangle=0,
                         textposition='auto',
                         showlegend=False,
                         orientation='h',
-                        marker_color = OpponentPointsNoTeamTOP.points,
-                        opacity=.8, 
+                        marker_color=OpponentPointsNoTeamTOP['color'],
+                        opacity=.8,
                     ),
                     row=2, col=1
                 )
@@ -3227,12 +3768,10 @@ class SideBet:
         return fig
     
     def SetTeamColors(self, color_dict:dict = None):
-        Members = self.Season.Matches.Team.unique()
-        self.teamcolors = dict(zip(Members,coastal_colorway))
-        
-        
-        if color_dict != None:
+        self.teamcolors = get_slot_teamcolors(self.League.year)
+        if color_dict is not None:
             self.teamcolors = color_dict
+
     def Scoreboard(self, tally = None):
             
             def calc_table_height(df, base=208, height_per_row=20, char_limit=30, height_padding=16.5):
@@ -3430,7 +3969,7 @@ class SideBet:
 
         fig1.update_layout(annotations=annotations)
 
-        fig1.update_traces(marker_line_width=1.5,marker_line_color='black')
+        fig1.update_traces(marker_line_width=1.5,marker_line_color='rgba(0,0,0,0.25)')
         
         fig1.update_traces(insidetextanchor= 'middle')
         fig1.update_layout(
@@ -3530,7 +4069,7 @@ class SideBet:
                 ),
                 title=None
             )
-        fig.update_traces(marker_line_width=2,marker_line_color='black')
+        fig.update_traces(marker_line_width=2,marker_line_color='rgba(0,0,0,0.25)')
         fig.update_layout(margin=dict(t=130, b=100, l=220, r=40), title ={'y':.94})
         
         
@@ -4188,7 +4727,7 @@ class SideBet:
         )
         
 
-        figQBComplete.update_traces(marker_line_width=1.5,marker_line_color='black')
+        figQBComplete.update_traces(marker_line_width=1.5,marker_line_color='rgba(0,0,0,0.25)')
 
         apply_logo_to_fig(figQBComplete,xval=.43)
         self.UpdateColors2(WeekObj,figQBComplete)

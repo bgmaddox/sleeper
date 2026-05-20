@@ -1,0 +1,302 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Win Progression — D3 Demo</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: #163146;
+    color: #BDE2FF;
+    font-family: "Courier New", monospace;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 32px 16px;
+  }
+
+  h1 {
+    font-size: 1.6rem;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+    margin-bottom: 4px;
+  }
+
+  .subtitle {
+    font-size: .8rem;
+    opacity: .6;
+    margin-bottom: 28px;
+    letter-spacing: .05em;
+  }
+
+  #chart-wrap {
+    width: 100%;
+    max-width: 900px;
+    position: relative;
+  }
+
+  svg { width: 100%; height: auto; display: block; }
+
+  /* Grid lines */
+  .grid line { stroke: #3D5E78; stroke-dasharray: 4 3; }
+  .grid path { display: none; }
+
+  /* Axes */
+  .axis text { fill: #BDE2FF; font-family: "Courier New", monospace; font-size: 13px; }
+  .axis path, .axis line { stroke: #3D5E78; }
+
+  /* Team lines */
+  .team-line {
+    fill: none;
+    stroke-width: 3.5;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+
+  /* End-of-line label */
+  .end-label {
+    font-family: "Courier New", monospace;
+    font-size: 13px;
+    font-weight: bold;
+    paint-order: stroke fill;
+    stroke: #163146;
+    stroke-width: 4px;
+    stroke-linejoin: round;
+  }
+
+  /* Tooltip */
+  #tooltip {
+    position: absolute;
+    pointer-events: none;
+    background: #0d2133;
+    border: 1px solid #3D5E78;
+    border-radius: 6px;
+    padding: 8px 12px;
+    font-size: 12px;
+    line-height: 1.6;
+    opacity: 0;
+    transition: opacity .12s;
+    white-space: nowrap;
+  }
+
+  /* Replay button */
+  #replay {
+    margin-top: 22px;
+    background: none;
+    border: 1px solid #BDE2FF;
+    color: #BDE2FF;
+    font-family: "Courier New", monospace;
+    font-size: .85rem;
+    letter-spacing: .1em;
+    padding: 8px 22px;
+    cursor: pointer;
+    text-transform: uppercase;
+    transition: background .2s;
+  }
+  #replay:hover { background: #BDE2FF22; }
+</style>
+</head>
+<body>
+
+<h1>Win Progression</h1>
+<p class="subtitle">Cumulative wins by week · hover lines for detail</p>
+
+<div id="chart-wrap">
+  <div id="tooltip"></div>
+</div>
+
+<button id="replay">&#9654; Replay Animation</button>
+
+<script src="https://d3js.org/d3.v7.min.js"></script>
+<script>
+// ── Fake data matching your 10-team league shape ────────────────────────────
+const TEAMS = [
+  "Maddox","Canning","Rach","Harris","Harrington",
+  "Krebs","Torres","Muñoz","Fowler","Webb"
+];
+
+const WEEKS = 14;
+
+// Seed a deterministic pseudo-random so the chart looks plausible every load
+function seeded(seed) {
+  let s = seed;
+  return () => { s = (s * 16807 + 0) % 2147483647; return (s - 1) / 2147483646; };
+}
+const rng = seeded(42);
+
+// Build cumulative-wins data: each team wins ~40-60% of weeks
+const raw = TEAMS.map(team => {
+  const rows = [{ team, week: 0, wins: 0 }];
+  let total = 0;
+  for (let w = 1; w <= WEEKS; w++) {
+    if (rng() > 0.45) total++;
+    rows.push({ team, week: w, wins: total });
+  }
+  return rows;
+});
+
+const data = raw.flat();
+
+// ── Layout ───────────────────────────────────────────────────────────────────
+const W = 860, H = 520;
+const margin = { top: 20, right: 130, bottom: 50, left: 48 };
+const iW = W - margin.left - margin.right;
+const iH = H - margin.top - margin.bottom;
+
+const svg = d3.select("#chart-wrap")
+  .append("svg")
+  .attr("viewBox", `0 0 ${W} ${H}`)
+  .attr("preserveAspectRatio", "xMidYMid meet");
+
+const g = svg.append("g").attr("transform", `translate(${margin.left},${margin.top})`);
+
+// ── Scales ───────────────────────────────────────────────────────────────────
+const x = d3.scaleLinear().domain([0, WEEKS]).range([0, iW]);
+const maxWins = d3.max(data, d => d.wins);
+const y = d3.scaleLinear().domain([0, maxWins + 1]).range([iH, 0]);
+
+// Use your coastal colorway feel — bright, saturated, distinct
+const COLOR_PALETTE = [
+  "#4EC9FF","#FF6B6B","#A8FF78","#FFD166","#C77DFF",
+  "#FF9A3C","#00F5D4","#F72585","#ADFF2F","#00B4D8"
+];
+const color = d3.scaleOrdinal().domain(TEAMS).range(COLOR_PALETTE);
+
+// ── Grid ─────────────────────────────────────────────────────────────────────
+g.append("g").attr("class","grid")
+  .call(d3.axisLeft(y).ticks(maxWins).tickSize(-iW).tickFormat(""));
+
+g.append("g").attr("class","grid")
+  .attr("transform",`translate(0,${iH})`)
+  .call(d3.axisBottom(x).ticks(WEEKS).tickSize(-iH).tickFormat(""));
+
+// ── Axes ─────────────────────────────────────────────────────────────────────
+g.append("g").attr("class","axis")
+  .attr("transform",`translate(0,${iH})`)
+  .call(d3.axisBottom(x).ticks(WEEKS).tickFormat(d => d === 0 ? "" : `Wk ${d}`))
+  .selectAll("text").attr("dy","1.2em");
+
+g.append("g").attr("class","axis")
+  .call(d3.axisLeft(y).ticks(maxWins).tickFormat(d3.format("d")));
+
+// ── Clip path so lines animate left-to-right ─────────────────────────────────
+svg.append("defs").append("clipPath").attr("id","clip")
+  .append("rect").attr("id","clip-rect")
+  .attr("x", margin.left).attr("y", 0)
+  .attr("width", 0).attr("height", H);   // starts at 0, expands on animate
+
+// ── Line generator ────────────────────────────────────────────────────────────
+const line = d3.line()
+  .x(d => x(d.week))
+  .y(d => y(d.wins))
+  .curve(d3.curveMonotoneX);
+
+// ── Draw lines ────────────────────────────────────────────────────────────────
+const nested = d3.group(data, d => d.team);
+
+const lineGroup = g.append("g").attr("clip-path","url(#clip)");
+
+const paths = lineGroup.selectAll(".team-line")
+  .data([...nested.entries()])
+  .join("path")
+    .attr("class","team-line")
+    .attr("stroke", ([team]) => color(team))
+    .attr("d", ([, rows]) => line(rows))
+    .style("opacity", 0);  // fade in with clip
+
+// ── End-of-line labels (also clipped) ────────────────────────────────────────
+const labelGroup = g.append("g");
+
+// Sort by final wins to stagger labels
+const finals = TEAMS.map(team => {
+  const rows = nested.get(team);
+  const last = rows.at(-1);
+  return { team, week: last.week, wins: last.wins };
+}).sort((a,b) => b.wins - a.wins);
+
+// Nudge overlapping labels
+const LABEL_H = 16;
+let prev = -Infinity;
+finals.forEach(d => {
+  let yPos = y(d.wins);
+  if (yPos - prev < LABEL_H) yPos = prev + LABEL_H;
+  prev = yPos;
+  d.yLabel = yPos;
+});
+
+const labels = labelGroup.selectAll(".end-label")
+  .data(finals)
+  .join("text")
+    .attr("class","end-label")
+    .attr("x", x(WEEKS) + 8)
+    .attr("y", d => d.yLabel)
+    .attr("dy","0.35em")
+    .attr("fill", d => color(d.team))
+    .attr("stroke", "#163146")
+    .text(d => `${d.team} (${d.wins})`)
+    .style("opacity", 0);
+
+// ── Hover dots ────────────────────────────────────────────────────────────────
+const hoverDots = g.append("g");
+const vLine = g.append("line")
+  .attr("stroke","#3D5E78").attr("stroke-width",1).attr("stroke-dasharray","4 3")
+  .attr("y1",0).attr("y2",iH).attr("x1",-999).attr("x2",-999);
+
+// ── Tooltip ────────────────────────────────────────────────────────────────────
+const tooltip = d3.select("#tooltip");
+
+svg.append("rect")
+  .attr("fill","transparent")
+  .attr("x",margin.left).attr("y",margin.top)
+  .attr("width",iW).attr("height",iH)
+  .on("mousemove", function(event) {
+    const [mx] = d3.pointer(event, g.node());
+    const week = Math.round(x.invert(mx));
+    if (week < 0 || week > WEEKS) return;
+
+    vLine.attr("x1", x(week)).attr("x2", x(week));
+
+    const rows = TEAMS.map(team => {
+      const r = nested.get(team).find(d => d.week === week);
+      return { team, wins: r ? r.wins : 0 };
+    }).sort((a,b) => b.wins - a.wins);
+
+    tooltip
+      .style("opacity",1)
+      .style("left", (event.offsetX + 14) + "px")
+      .style("top",  (event.offsetY - 10) + "px")
+      .html(`<b style="letter-spacing:.05em">WEEK ${week}</b><br>` +
+        rows.map(r =>
+          `<span style="color:${color(r.team)}">${r.team}</span>: ${r.wins} W`
+        ).join("<br>")
+      );
+  })
+  .on("mouseleave", () => {
+    tooltip.style("opacity",0);
+    vLine.attr("x1",-999).attr("x2",-999);
+  });
+
+// ── Animation ─────────────────────────────────────────────────────────────────
+function animate() {
+  // Reset
+  d3.select("#clip-rect").attr("width", 0);
+  paths.style("opacity",1);
+  labels.style("opacity",0);
+
+  // Sweep the clip rect across
+  d3.select("#clip-rect")
+    .transition()
+    .duration(2800)
+    .ease(d3.easeQuadInOut)
+    .attr("width", iW + margin.right + 20)
+    .on("end", () => {
+      labels.transition().duration(350).style("opacity",1);
+    });
+}
+
+animate();
+d3.select("#replay").on("click", animate);
+</script>
+</body>
+</html>
