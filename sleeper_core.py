@@ -945,7 +945,7 @@ class Week:
         fig1.add_annotation(
         text="VS.",
         xref="paper", yref="paper",
-        x=-.025, y=.21, xanchor='center',
+        x=-.025, y=.23, xanchor='center',
         showarrow=False,
         font=dict(
             size=15,
@@ -957,7 +957,7 @@ class Week:
         fig1.add_annotation(
         text="VS.",
         xref="paper", yref="paper",
-        x=-.025, y=.04, xanchor='center',
+        x=-.025, y=.065, xanchor='center',
         showarrow=False,
         font=dict(
             size=15,
@@ -1835,8 +1835,8 @@ class Season:
         fig2 = px.line(df,x='Week',y='Total Wins', color = 'Team',template='gridiron_ink',line_shape = 'spline', facet_col='Team',facet_col_wrap=3, title = '<b>Weekly Wins</b><br><sup>Breakout</sup>', color_discrete_map=self.teamcolors)
         
         
-        fig2.update_yaxes(zerolinewidth = 1, ticklabelposition = 'inside',ticklabelstandoff=130, tickfont = dict(size = 12), dtick = 3,showticklabels=True,showgrid=True)
-        fig2.update_xaxes(zerolinewidth = 1,side = 'bottom', ticklabelposition = 'inside bottom', tickfont = dict(size =12), dtick = 3, showticklabels=True,showgrid=False)
+        fig2.update_yaxes(zerolinewidth = 1, ticklabelposition = 'inside',ticklabelstandoff=130, tickfont = dict(size = 12), dtick = 2,showticklabels=True,showgrid=True)
+        fig2.update_xaxes(zerolinewidth = 1,side = 'bottom', ticklabelposition = 'inside bottom', tickfont = dict(size =12), dtick = 1, showticklabels=True,showgrid=False)
         
 
         
@@ -2110,10 +2110,10 @@ class Season:
     def ViolinPlayer(self, WeekNum,Starters = False):
         WeekRange = range(0,WeekNum+1)
         if Starters == False:
-            df = self.BreakoutSeason[self.BreakoutSeason['week'].isin(WeekRange)]
+            df = self.BreakoutSeason[self.BreakoutSeason['week_x'].isin(WeekRange)]
             titleText = "<b>Positional Points Distribution</b><br><sup>Players</sup>"
         else:
-            df = self.Starters[self.Starters['week'].isin(WeekRange)]
+            df = self.Starters[self.Starters['week_x'].isin(WeekRange)]
             titleText = "<b>Positional Points Distribution</b><br><sup>Starting Players</sup>"
 
         if df.empty:
@@ -2777,7 +2777,7 @@ class Season:
 
                     # Customize the y-axis labels
         figTotal.update_yaxes(
-                        tickfont=dict(size=12, weight='bold'),
+                        tickfont=dict(size=16, weight='bold'),
                         title=None
                     )
         figTotal.update_traces(insidetextanchor= 'middle',textfont=dict(
@@ -3476,7 +3476,7 @@ class AllTime:
     
     def HighestScoringLosers(self, team_colors = None):
         
-        Losers = self.Matches[self.Matches['Won'] == 0]
+        Losers = self.Matches[(self.Matches['Won'] == 0) & self.Matches['Opp'].notna() & (self.Matches['Opp'] > 0) & self.Matches['Opp_team'].notna()]
         TopTenLosers = Losers.sort_values('Total', ascending=False).head(10)
         TopTenLosers['TeamName'] = "<b>" + TopTenLosers['Team'] + '</b><br>' + "W" +TopTenLosers['Week'].astype(str) + " " + TopTenLosers['Year'].astype(str)
         TopTenLosers['Opp'] = round(TopTenLosers['Opp'],2)
@@ -3503,14 +3503,16 @@ class AllTime:
             textfont=dict(size=14),
             marker_color=[self.teamcolors.get(t, '#BDE2FF') for t in TopTenLosers['Opp_team']],
             ))
-        figLosers.update_layout(template="gridiron_ink")
+        figLosers.update_layout(template="gridiron_ink", barmode='group')
         figLosers.update_layout(width=800, height=1200)
         figLosers.update_layout(showlegend=False)
-        figLosers.update_yaxes(
-                tickfont=dict(
-                    size=18,         # Font size
-                ),
-                title = None,
+        figLosers.update_yaxes(showticklabels=False, title=None)
+        for label, team in zip(TopTenLosers['TeamName'], TopTenLosers['Team']):
+            figLosers.add_annotation(
+                x=0, y=label, xref='paper', yref='y',
+                text=label, showarrow=False,
+                xanchor='right', align='right', xshift=-8,
+                font=dict(color=self.teamcolors.get(team, '#BDE2FF'), size=16, family='Courier New'),
             )
         figLosers.update_layout(
             title = "<b>Biggest Losers</b><br><sup>Highest Scores in Loss</sup>",
@@ -3570,15 +3572,15 @@ class AllTime:
                 ),
                 title = None,
             )
-        figWorst.update_yaxes(
-                tickfont=dict(
-                    size=16,         # Font size
-                ),
-                title = None,
-                categoryorder="total descending",
+        figWorst.update_yaxes(showticklabels=False, title=None, categoryorder="total descending")
+        for label, team in zip(Worst10['TeamName'], Worst10['Team']):
+            figWorst.add_annotation(
+                x=0, y=label, xref='paper', yref='y',
+                text=label, showarrow=False,
+                xanchor='right', align='right', xshift=-8,
+                font=dict(color=self.teamcolors.get(team, '#BDE2FF'), size=16, family='Courier New'),
             )
 
-        # Add the image over a specific bar (adjust xref and yref as needed for placement)
         figWorst.update_traces(textposition='inside', textfont_size=80)
         figWorst.update_layout(margin=MARGIN_HBAR)
         
@@ -3600,18 +3602,15 @@ class AllTime:
                 title = None,
                 
             )
-        figBest.update_yaxes(
-                tickfont=dict(
-                    size=16,         # Font size
-                ),
-                title = None,
-                categoryorder="total ascending",
+        figBest.update_yaxes(showticklabels=False, title=None, categoryorder="total ascending")
+        for label, team in zip(Best10['TeamName'], Best10['Team']):
+            figBest.add_annotation(
+                x=0, y=label, xref='paper', yref='y',
+                text=label, showarrow=False,
+                xanchor='right', align='right', xshift=-8,
+                font=dict(color=self.teamcolors.get(team, '#BDE2FF'), size=16, family='Courier New'),
             )
-        figBest.update_layout(
-            font=dict(
-                size=20,  # Set the font size here
-            )
-        )
+        figBest.update_layout(font=dict(size=20))
         figBest.update_layout(margin=MARGIN_HBAR_MED)
         figBest.update_traces(textposition='inside', textfont_size=80)
 
@@ -3636,14 +3635,15 @@ class AllTime:
                 title = None,
                 
             )
-        figBestPlayers.update_yaxes(
-                tickfont=dict(
-                    size=16,         # Font size
-                ),
-                title = None,
-                categoryorder="total ascending",
+        figBestPlayers.update_yaxes(showticklabels=False, title=None, categoryorder="total ascending")
+        for label, team in zip(Best10Players['TeamName'], Best10Players['team']):
+            figBestPlayers.add_annotation(
+                x=0, y=label, xref='paper', yref='y',
+                text=label, showarrow=False,
+                xanchor='right', align='right', xshift=-8,
+                font=dict(color=self.teamcolors.get(team, '#BDE2FF'), size=16, family='Courier New'),
             )
-        
+
         figBestPlayers.update_layout(margin=MARGIN_HBAR_MED)
         figBestPlayers.update_traces(textposition='inside', textfont_size=55)
 
@@ -3710,10 +3710,10 @@ class AllTime:
         figTeamPoints.update_layout(yaxis2 = {'categoryorder': 'total ascending'})
         figTeamPoints.update_annotations(font_size=25)
         figTeamPoints.update_layout(title="<b>Points With & Against NFL Teams</b>")
-        
+
         figTeamPoints.update_layout(xaxis1=dict(side='bottom'),xaxis2=dict(side='bottom'))
 
-        figTeamPoints.update_layout(margin=dict(t=100, b=100, l=220, r=40))
+        figTeamPoints.update_layout(margin=dict(t=140, b=100, l=320, r=40))
         
         apply_logo_to_fig(figTeamPoints,xval=.40, yval=-0.06)
 

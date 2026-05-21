@@ -31,6 +31,7 @@ SECTION MAP (for targeted edits — grep the # ── markers to jump directly)
 
 import sys
 import os
+import time
 import threading
 import traceback
 
@@ -1265,17 +1266,28 @@ def _tab_players(year, week, teams):
             {'label': 'TE', 'value': 'TE'},
         ], value='QB', className='toggle-group', inline=True),
         html.Div([
-            html.Div('MIN TOTAL PTS', className='threshold-label'),
-            html.Div([
-                dcc.Slider(
-                    id='top-players-threshold',
-                    min=0, max=300, step=25, value=50,
-                    marks={0: '0', 100: '100', 200: '200', 300: '300'},
-                    tooltip={'placement': 'top', 'always_visible': True},
-                    className='threshold-slider',
-                ),
-            ], className='threshold-slider-wrap'),
-        ], className='threshold-row'),
+            html.Span('Min pts:', style={'color': '#BDE2FF', 'fontFamily': 'Courier New, monospace', 'fontSize': '13px', 'opacity': '0.7'}),
+            dcc.Input(
+                id='top-players-threshold',
+                type='number',
+                value=50,
+                min=0,
+                step=1,
+                debounce=True,
+                style={
+                    'width': '72px',
+                    'background': 'rgba(255,255,255,0.06)',
+                    'border': '1px solid rgba(189,226,255,0.2)',
+                    'borderRadius': '6px',
+                    'color': '#BDE2FF',
+                    'fontFamily': 'Courier New, monospace',
+                    'fontSize': '14px',
+                    'padding': '4px 8px',
+                    'marginLeft': '8px',
+                    'outline': 'none',
+                }
+            ),
+        ], style={'display': 'flex', 'alignItems': 'center', 'margin': '6px 0 14px'}),
         html.Div(initial_top, id='top-players-chart'),
     ], className='chart-card chart-col-full'))
 
@@ -1772,8 +1784,9 @@ def _update_top_players(position, thresh, year, week, teams):
     Input('store-year',  'data'),
     Input('store-week',  'data'),
     Input('team-list',   'value'),
+    Input('boot',        'disabled'),
 )
-def _populate_d3_stores(tab, year, week, teams):
+def _populate_d3_stores(tab, year, week, teams, _boot_done):
     if tab != 'tab-season':
         return no_update, no_update, no_update
     year = year or CURRENT_YEAR
@@ -1988,7 +2001,6 @@ app.clientside_callback(
     Output('d3-choropleth-container', 'data-rendered'),
     Input('store-choropleth-data', 'data'),
     Input('tabs', 'value'),
-    prevent_initial_call=True,
 )
 
 app.clientside_callback(
@@ -2012,7 +2024,6 @@ app.clientside_callback(
     Output('d3-territory-container', 'data-rendered'),
     Input('store-chord-data', 'data'),
     Input('tabs', 'value'),
-    prevent_initial_call=True,
 )
 
 app.clientside_callback(
@@ -2020,7 +2031,6 @@ app.clientside_callback(
     Output('d3-chord-container', 'data-rendered'),
     Input('store-chord-data', 'data'),
     Input('tabs', 'value'),
-    prevent_initial_call=True,
 )
 
 
@@ -2031,8 +2041,9 @@ app.clientside_callback(
     Input('tabs',        'value'),
     Input('store-year',  'data'),
     Input('store-week',  'data'),
+    Input('boot',        'disabled'),
 )
-def _populate_bubble_data(tab, year, week):
+def _populate_bubble_data(tab, year, week, _boot_done):
     if tab != 'tab-week':
         return no_update
     year = year or CURRENT_YEAR
@@ -2124,8 +2135,9 @@ def _populate_bubble_data(tab, year, week):
     Output('store-draft-data', 'data'),
     Input('tabs', 'value'),
     Input('store-year', 'data'),
+    Input('boot',       'disabled'),
 )
-def _populate_draft_data(tab, year):
+def _populate_draft_data(tab, year, _boot_done):
     if tab != 'tab-season':
         return no_update
     year = year or CURRENT_YEAR
@@ -2219,9 +2231,10 @@ _NFL_TEAM_STATE = {
 
 @app.callback(
     Output('store-choropleth-data', 'data'),
-    Input('tabs', 'value'),
+    Input('tabs',  'value'),
+    Input('boot',  'disabled'),
 )
-def _populate_choropleth_data(tab):
+def _populate_choropleth_data(tab, _boot_done):
     if tab != 'tab-alltime':
         return no_update
     try:
@@ -2265,7 +2278,7 @@ def _populate_choropleth_data(tab):
             })
 
         max_pts = max((s['total_pts'] for s in states_list), default=1.0)
-        return {'states': states_list, 'max_pts': round(max_pts, 1)}
+        return {'states': states_list, 'max_pts': round(max_pts, 1), '_ts': time.time()}
 
     except Exception as e:
         print(f'[choropleth] error: {e}')
@@ -2277,9 +2290,10 @@ def _populate_choropleth_data(tab):
 
 @app.callback(
     Output('store-chord-data', 'data'),
-    Input('tabs', 'value'),
+    Input('tabs',  'value'),
+    Input('boot',  'disabled'),
 )
-def _populate_chord_data(tab):
+def _populate_chord_data(tab, _boot_done):
     if tab != 'tab-alltime':
         return no_update
     try:
@@ -2328,8 +2342,9 @@ def _populate_chord_data(tab):
             return no_update
 
         # Filter to NFL teams with meaningful contribution (at least 50 total pts)
-        nfl_teams = sorted([t for t in nfl_teams_seen if sum(matrix_dict[t].values()) >= 50])
-        owners    = [o for o in all_owners if any(matrix_dict[t].get(o, 0) > 0 for t in nfl_teams)]
+        nfl_teams  = sorted([t for t in nfl_teams_seen if sum(matrix_dict[t].values()) >= 50])
+        all_owners = sorted({o for owner_dict in matrix_dict.values() for o in owner_dict})
+        owners     = [o for o in all_owners if any(matrix_dict[t].get(o, 0) > 0 for t in nfl_teams)]
 
         if not nfl_teams or not owners:
             return no_update
@@ -2346,6 +2361,7 @@ def _populate_chord_data(tab):
             'colors': {o: colors[o] for o in owners if o in colors},
             'matrix': matrix,
             'stadium_coords': {t: NFL_STADIUM_COORDS[t] for t in nfl_teams if t in NFL_STADIUM_COORDS},
+            '_ts': time.time(),
         }
     except Exception as e:
         print(f'[chord] error: {e}')
