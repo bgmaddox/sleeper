@@ -1099,20 +1099,20 @@ html, body {
 .playoff-wrapper { display: flex; gap: 20px; width: 100%; align-items: flex-start; }
 .playoff-column { flex: 1; min-width: 0; }
 .playoff-column--losers { flex: 0 0 36%; }
-.playoff-column-header { font-size: 0.8rem; font-weight: bold; color: var(--accent); padding: 0 0 10px; border-bottom: 2px solid var(--grid); margin-bottom: 16px; letter-spacing: 0.12em; text-transform: uppercase; }
-.playoff-round { margin-bottom: 24px; }
-.playoff-round-label { font-size: 0.65rem; color: var(--text); opacity: 0.5; text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 8px; padding-bottom: 4px; border-bottom: 1px solid var(--grid); }
-.playoff-matchup { background: #1C3C54; border: 1px solid var(--grid); border-radius: 4px; padding: 12px 14px; margin-bottom: 10px; }
+.playoff-column-header { font-size: 1rem; font-weight: bold; color: var(--accent); padding: 0 0 10px; border-bottom: 2px solid var(--grid); margin-bottom: 18px; letter-spacing: 0.12em; text-transform: uppercase; }
+.playoff-round { margin-bottom: 28px; }
+.playoff-round-label { font-size: 0.8rem; color: var(--text); opacity: 0.55; text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 10px; padding-bottom: 6px; border-bottom: 1px solid var(--grid); }
+.playoff-matchup { background: #1C3C54; border: 1px solid var(--grid); border-radius: 4px; padding: 14px 16px; margin-bottom: 12px; }
 .playoff-matchup--placement { opacity: 0.8; }
-.playoff-placement-badge { font-size: 0.6rem; color: var(--accent); text-transform: uppercase; letter-spacing: 0.12em; margin-bottom: 6px; }
-.playoff-team { display: flex; justify-content: space-between; align-items: center; padding: 5px 0; font-family: 'Courier New', monospace; }
+.playoff-placement-badge { font-size: 0.75rem; color: var(--accent); text-transform: uppercase; letter-spacing: 0.12em; margin-bottom: 8px; }
+.playoff-team { display: flex; justify-content: space-between; align-items: center; padding: 6px 0; font-family: 'Courier New', monospace; }
 .playoff-team--winner .playoff-team-name,
 .playoff-team--winner .playoff-team-score { color: var(--accent); font-weight: bold; }
 .playoff-team--loser { opacity: 0.45; }
-.playoff-team-name { font-size: 0.85rem; flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--text); }
-.playoff-team-score { font-size: 0.85rem; font-variant-numeric: tabular-nums; margin-left: 12px; color: var(--text); }
-.playoff-divider { border: none; border-top: 1px solid var(--grid); margin: 2px 0; }
-.playoff-stats { display: flex; justify-content: space-between; margin-top: 8px; padding-top: 7px; border-top: 1px solid var(--grid); font-size: 0.65rem; color: var(--text); opacity: 0.6; font-family: 'Courier New', monospace; gap: 8px; }
+.playoff-team-name { font-size: 1rem; flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--text); }
+.playoff-team-score { font-size: 1rem; font-variant-numeric: tabular-nums; margin-left: 12px; color: var(--text); }
+.playoff-divider { border: none; border-top: 1px solid var(--grid); margin: 3px 0; }
+.playoff-stats { display: flex; justify-content: space-between; margin-top: 10px; padding-top: 8px; border-top: 1px solid var(--grid); font-size: 0.8rem; color: var(--text); opacity: 0.65; font-family: 'Courier New', monospace; gap: 8px; }
 .playoff-stats span:last-child { text-align: right; white-space: nowrap; }
 
 @media (max-width: 768px) {

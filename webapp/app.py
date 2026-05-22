@@ -1509,8 +1509,26 @@ def _tab_playoffs(year):
     winners_col = _bracket_col(playoffs.winners, 'Winners Bracket', stats=True)
     losers_col  = _bracket_col(playoffs.losers,  'Losers Bracket',  stats=False, extra_cls='playoff-column--losers')
 
+    # Analytics charts
+    analytics = []
+    for fn, title, subtitle in [
+        ('ChampionRoad',    "Champion's Road",
+         "Score vs opponent in each round on the path to the title"),
+        ('PlayoffHeatCheck','Playoff Heat Check',
+         "Did each team peak at the right time? Last 3 regular season weeks vs playoff average"),
+        ('BenchPointsLeft', 'Bench Points Left',
+         "How many points did each team leave on the bench per playoff game"),
+    ]:
+        try:
+            fig = getattr(playoffs, fn)()
+            analytics.append(_card(_strip(fig), title, subtitle=subtitle))
+        except Exception as e:
+            traceback.print_exc()
+            analytics.append(_card(_err(str(e)), title))
+
     return html.Div([
         html.Div([winners_col, losers_col], className='playoff-wrapper'),
+        *analytics,
     ], className='charts-row')
 
 

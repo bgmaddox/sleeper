@@ -3201,6 +3201,120 @@ class Playoffs:
 
         return rounds
 
+    # ── Analytics charts ──────────────────────────────────────────────────────
+
+    def ChampionRoad(self):
+        """Horizontal grouped bar: champion's score vs opponent each round."""
+        champ_match = next((m for m in self.winners.get(3, []) if m.get('placement') == 1), None)
+        if not champ_match:
+            return go.Figure()
+        champion = champ_match['winner']
+
+        ROUND_LABELS = {1: 'Wild Card', 2: 'Semifinals', 3: 'Championship'}
+        rounds_data = []
+        for rnd in sorted(self.winners):
+            for m in self.winners[rnd]:
+                if champion not in (m['team1'], m['team2']):
+                    continue
+                is_t1 = champion == m['team1']
+                rounds_data.append({
+                    'label':       f"{ROUND_LABELS.get(rnd, f'Round {rnd}')} · Wk {self.playoff_week_start + rnd - 1}",
+                    'champ_score': m['score1'] if is_t1 else m['score2'],
+                    'opp_score':   m['score2'] if is_t1 else m['score1'],
+                    'opponent':    m['team2']  if is_t1 else m['team1'],
+                })
+
+        labels      = [d['label']       for d in rounds_data]
+        champ_scores= [d['champ_score'] for d in rounds_data]
+        opp_scores  = [d['opp_score']   for d in rounds_data]
+        opponents   = [d['opponent']    for d in rounds_data]
+
+        fig = go.Figure([
+            go.Bar(name=champion,   y=labels, x=champ_scores, orientation='h',
+                   marker_color='#FFC300',
+                   text=[f"{s:.1f}" for s in champ_scores], textposition='outside'),
+            go.Bar(name='Opponent', y=labels, x=opp_scores,   orientation='h',
+                   marker_color='#3D5E78',
+                   text=[f"{s:.1f} ({o})" for s, o in zip(opp_scores, opponents)],
+                   textposition='outside'),
+        ])
+        fig.update_layout(template='gridiron_ink', barmode='group',
+                          title=f"🏆 {champion}'s Road to the Championship",
+                          xaxis_title='Points', height=320,
+                          margin=dict(t=50, b=40, l=160, r=120))
+        return fig
+
+    def PlayoffHeatCheck(self):
+        """Grouped bar: each playoff team's last-3-regular-season-week avg vs playoff avg."""
+        playoff_teams = sorted({
+            m[t] for rnd in self.winners.values() for m in rnd for t in ('team1', 'team2')
+        })
+        reg_end   = self.playoff_week_start - 1
+        reg_weeks = list(range(max(1, reg_end - 2), reg_end + 1))   # last 3 regular weeks
+        pl_weeks  = list(range(self.playoff_week_start, self.playoff_week_start + 3))
+
+        def avg(team, weeks):
+            scores = []
+            for wk in weeks:
+                df = AllMatchesDict.get(self.year, {}).get(wk, pd.DataFrame())
+                if df.empty:
+                    continue
+                row = df[df['Team'] == team]
+                if not row.empty:
+                    scores.append(float(row['Total'].iloc[0]))
+            return round(sum(scores) / len(scores), 2) if scores else 0.0
+
+        reg_avgs = [avg(t, reg_weeks) for t in playoff_teams]
+        pl_avgs  = [avg(t, pl_weeks)  for t in playoff_teams]
+
+        fig = go.Figure([
+            go.Bar(name=f'Wks {reg_weeks[0]}–{reg_weeks[-1]} Avg', x=playoff_teams, y=reg_avgs,
+                   marker_color='#3D5E78',
+                   text=[f"{v:.1f}" for v in reg_avgs], textposition='outside'),
+            go.Bar(name='Playoff Avg', x=playoff_teams, y=pl_avgs,
+                   marker_color='#FFC300',
+                   text=[f"{v:.1f}" for v in pl_avgs], textposition='outside'),
+        ])
+        fig.update_layout(template='gridiron_ink', barmode='group',
+                          title='Playoff Heat Check — Final Regular Season Weeks vs Playoff Avg',
+                          yaxis_title='Avg Points', height=420,
+                          margin=dict(t=50, b=80, l=60, r=40))
+        return fig
+
+    def BenchPointsLeft(self):
+        """Grouped bar: bench points left per team per winners-bracket game."""
+        ROUND_SHORT = {1: 'Wild Card', 2: 'Semis', 3: 'Championship'}
+        labels, t1_vals, t2_vals, t1_names, t2_names = [], [], [], [], []
+
+        for rnd in sorted(self.winners):
+            week     = self.playoff_week_start + rnd - 1
+            breakout = AllBreakoutDict.get(self.year, {}).get(week, pd.DataFrame())
+            for m in self.winners[rnd]:
+                lbl = f"{ROUND_SHORT.get(rnd, f'R{rnd}')} · {m['team1'][:9]} vs {m['team2'][:9]}"
+                labels.append(lbl)
+                t1_vals.append(self._bench_left(breakout, m['team1']))
+                t2_vals.append(self._bench_left(breakout, m['team2']))
+                t1_names.append(m['team1'])
+                t2_names.append(m['team2'])
+
+        fig = go.Figure([
+            go.Bar(x=labels, y=t1_vals, name='Team 1',
+                   marker_color='#4A90D9',
+                   text=[f"{v:.1f}" for v in t1_vals], textposition='outside',
+                   customdata=t1_names,
+                   hovertemplate='%{customdata}: %{y:.1f} pts<extra></extra>'),
+            go.Bar(x=labels, y=t2_vals, name='Team 2',
+                   marker_color='#E8A838',
+                   text=[f"{v:.1f}" for v in t2_vals], textposition='outside',
+                   customdata=t2_names,
+                   hovertemplate='%{customdata}: %{y:.1f} pts<extra></extra>'),
+        ])
+        fig.update_layout(template='gridiron_ink', barmode='group',
+                          title='Bench Points Left — Winners Bracket',
+                          yaxis_title='Points on Bench', height=420,
+                          margin=dict(t=50, b=120, l=60, r=40))
+        return fig
+
 
 class AllTime:
     def __init__(self):
