@@ -595,6 +595,7 @@ class Week:
                 rows.append({
                     'team': roster_id,
                     'matchup': matchup_id,
+                    'player_id': player,
                     'player': player_name,
                     'points': points,
                     'starter': int(is_starter),

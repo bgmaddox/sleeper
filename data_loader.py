@@ -69,6 +69,31 @@ def fetch_state_json() -> dict:
     return data
 
 
+def fetch_transactions_json(league_id: int, week: int) -> list:
+    """All transactions (trades, waivers, FA pickups) for a given week."""
+    key = f"transactions_{league_id}_{week}"
+    cached = _load_cache(key)
+    if cached is not None:
+        return cached
+    data = requests.get(
+        f"https://api.sleeper.app/v1/league/{league_id}/transactions/{week}"
+    ).json()
+    _save_cache(key, data)
+    return data
+
+def fetch_traded_picks_json(league_id: int) -> list:
+    """All traded draft picks in the league's history."""
+    key = f"traded_picks_{league_id}"
+    cached = _load_cache(key)
+    if cached is not None:
+        return cached
+    data = requests.get(
+        f"https://api.sleeper.app/v1/league/{league_id}/traded_picks"
+    ).json()
+    _save_cache(key, data)
+    return data
+
+
 # ── High-level data loading ───────────────────────────────────────────────────
 
 def load_data_for_year(year: int, max_week: int = 18, verbose: bool = True):

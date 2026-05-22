@@ -286,7 +286,7 @@ The All-Time tab aggregates all years — if it's broken on historical position 
 
 ---
 
-### Task 3A — Carry player_id through dfBreakout
+### Task 3A — Carry player_id through dfBreakout ✅ DONE
 
 **File:** `sleeper_core.py` — `PlayerBreakout()` and `WeeklyDataframe()`
 
@@ -303,7 +303,7 @@ The All-Time tab aggregates all years — if it's broken on historical position 
 
 ---
 
-### Task 3B — Document name-matching fragility (no code change yet)
+### Task 3B — Document name-matching fragility ✅ DONE
 
 **Background:** The nflverse stats CSV (`stats_player_week_2025.csv`) uses GSIS player IDs — a different system than Sleeper's own IDs. No direct ID-based crosswalk exists. The current name-based join (`player_week_id = player_display_name + ' - ' + week`) is the only practical approach without a separate crosswalk table.
 
@@ -336,7 +336,7 @@ The All-Time tab aggregates all years — if it's broken on historical position 
 
 ---
 
-### Task 3D — Add transaction data fetching to data_loader
+### Task 3D — Add transaction data fetching to data_loader ✅ DONE
 
 **File:** `data_loader.py`
 
