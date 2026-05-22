@@ -20,6 +20,7 @@ SECTION MAP (for targeted edits — grep the # ── markers to jump directly)
   L1171 Tab: Players              — _tab_players()
   L1261 Tab: All-Time             — _tab_alltime()
   L1331 Tab: Head-to-Head         — _tab_h2h_shell(), _h2h() callback
+  L1450 Tab: Playoffs             — _tab_playoffs() (winners + losers bracket cards)
   L1456 Toggle callbacks          — luck/timeline/pfa/freq/bench/bump/violin/top-players
   L1741 D3 store population       — _populate_d3_stores() (snake draft, schedule, matchups)
   L2003 D3: Bubble Map            — _populate_bubble_data()
@@ -711,7 +712,8 @@ app.layout = html.Div([
             dcc.Tab(label='Season',      value='tab-season',  className='tab tab--season',  selected_className='tab--selected'),
             dcc.Tab(label='Players',     value='tab-players', className='tab tab--players', selected_className='tab--selected'),
             dcc.Tab(label='All-Time',    value='tab-alltime', className='tab tab--alltime', selected_className='tab--selected'),
-            dcc.Tab(label='Head-to-Head', value='tab-h2h',    className='tab tab--h2h',     selected_className='tab--selected'),
+            dcc.Tab(label='Head-to-Head', value='tab-h2h',      className='tab tab--h2h',      selected_className='tab--selected'),
+            dcc.Tab(label='Playoffs',     value='tab-playoffs', className='tab tab--playoffs', selected_className='tab--selected'),
         ]),
 
         dcc.Loading(
@@ -991,7 +993,8 @@ def _render_tab(tab, year, week, teams):
     if tab == 'tab-season':  return _tab_season(year, week, teams)
     if tab == 'tab-players': return _tab_players(year, week, teams)
     if tab == 'tab-alltime': return _tab_alltime(teams, year)
-    if tab == 'tab-h2h':     return _tab_h2h_shell()
+    if tab == 'tab-h2h':       return _tab_h2h_shell()
+    if tab == 'tab-playoffs':  return _tab_playoffs(year)
     return html.Div('Unknown tab')
 
 
@@ -1016,7 +1019,8 @@ def _parse_url(search):
         except ValueError:
             year = no_update
     tab_map = {'week': 'tab-week', 'season': 'tab-season',
-               'players': 'tab-players', 'alltime': 'tab-alltime', 'h2h': 'tab-h2h'}
+               'players': 'tab-players', 'alltime': 'tab-alltime',
+               'h2h': 'tab-h2h', 'playoffs': 'tab-playoffs'}
     if tab is not no_update:
         tab = tab_map.get(tab, no_update)
     return tab, year
@@ -1443,6 +1447,71 @@ def _tab_h2h_shell():
             type='circle', color='#FFC300',
         ),
     ])
+
+
+# ── Tab: Playoffs ─────────────────────────────────────────────────────────────
+
+def _tab_playoffs(year):
+    if year not in _data:
+        return html.Div('No data loaded for this year.', className='loading-msg')
+
+    league  = _data[year]['league']
+    season  = _data[year]['season']
+
+    try:
+        playoffs = core.Playoffs(league, season)
+    except Exception as e:
+        traceback.print_exc()
+        return html.Div(f'Could not build playoff data: {e}', className='error-msg-card')
+
+    ROUND_LABELS = {1: 'Wild Card', 2: 'Semifinals', 3: 'Championship Week'}
+    PLACE_LABELS = {1: '🏆 Championship', 3: '3rd Place', 5: '5th Place'}
+    week_start   = playoffs.playoff_week_start
+
+    def _matchup_card(m, stats=True):
+        placement  = m.get('placement')
+        t1_cls = 'playoff-team playoff-team--winner' if m['winner'] == m['team1'] else 'playoff-team playoff-team--loser'
+        t2_cls = 'playoff-team playoff-team--winner' if m['winner'] == m['team2'] else 'playoff-team playoff-team--loser'
+
+        kids = []
+        if placement:
+            kids.append(html.Div(PLACE_LABELS.get(placement, ''), className='playoff-placement-badge'))
+        kids += [
+            html.Div([
+                html.Span(m['team1'], className='playoff-team-name'),
+                html.Span(f"{m['score1']:.2f}", className='playoff-team-score'),
+            ], className=t1_cls),
+            html.Hr(className='playoff-divider'),
+            html.Div([
+                html.Span(m['team2'], className='playoff-team-name'),
+                html.Span(f"{m['score2']:.2f}", className='playoff-team-score'),
+            ], className=t2_cls),
+        ]
+        if stats:
+            kids.append(html.Div([
+                html.Span(f"⭐ {m['best_player']}"),
+                html.Span(f"Bench left: {m['bench_left']:.1f} pts"),
+            ], className='playoff-stats'))
+
+        cls = 'playoff-matchup' + (' playoff-matchup--placement' if placement else '')
+        return html.Div(kids, className=cls)
+
+    def _bracket_col(bracket, title, stats, extra_cls=''):
+        col_kids = [html.Div(title, className='playoff-column-header')]
+        for rnd in sorted(bracket):
+            week  = week_start + rnd - 1
+            label = f"{ROUND_LABELS.get(rnd, f'Round {rnd}')} · Week {week}"
+            cards = [html.Div(label, className='playoff-round-label')]
+            cards += [_matchup_card(m, stats) for m in bracket[rnd]]
+            col_kids.append(html.Div(cards, className='playoff-round'))
+        return html.Div(col_kids, className=f'playoff-column {extra_cls}'.strip())
+
+    winners_col = _bracket_col(playoffs.winners, 'Winners Bracket', stats=True)
+    losers_col  = _bracket_col(playoffs.losers,  'Losers Bracket',  stats=False, extra_cls='playoff-column--losers')
+
+    return html.Div([
+        html.Div([winners_col, losers_col], className='playoff-wrapper'),
+    ], className='charts-row')
 
 
 @app.callback(
