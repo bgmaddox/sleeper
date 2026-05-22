@@ -2043,17 +2043,23 @@ class Season:
                               xaxis_visible=False, yaxis_visible=False)
             return fig
 
-        figViolin = px.violin(df,x='points', y='position',facet_col='team',facet_col_wrap=3, color = 'position', template='gridiron_ink')
-        figViolin.update_traces(orientation='h', side='positive', width=3, points=False, spanmode = 'hard')
+        figViolin = px.violin(df, x='points', y='position', facet_col='team', facet_col_wrap=3, color='position',
+                              template='gridiron_ink',
+                              category_orders={"position": ["QB", "RB", "WR", "TE", "K", "DEF"]})
+        figViolin.update_traces(orientation='h', side='positive', width=3, points=False, spanmode='hard')
         figViolin.update_layout(
             title=dict(text=titleText)
         )
         figViolin.update_layout(width=800, height=1200)
         figViolin.for_each_annotation(lambda a: a.update(text=a.text.split("=")[-1]))
-        figViolin.update_annotations(font_size = 25)
+        figViolin.update_annotations(font_size=25)
 
         figViolin.for_each_xaxis(lambda xaxis: xaxis.update(showticklabels=True))
         figViolin.update_yaxes(
+                showticklabels=True,
+                matches=None,
+                categoryorder='array',
+                categoryarray=["QB", "RB", "WR", "TE", "K", "DEF"],
                 tickfont=dict(
                     size=20,
                 ),
@@ -2099,8 +2105,10 @@ class Season:
         figViolin2.for_each_annotation(lambda a: a.update(text=a.text.split("=")[-1]))
         figViolin2.for_each_xaxis(lambda xaxis: xaxis.update(showticklabels=True))
         figViolin2.update_yaxes(
+                showticklabels=True,
+                matches=None,
                 tickfont=dict(
-                    size=13,         # Font size
+                    size=13,
                 ),
                 title=None
             )

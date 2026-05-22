@@ -92,6 +92,30 @@ NFL_STADIUM_COORDS = {
 
 CURRENT_YEAR  = 2025
 ALL_YEARS     = core.AVAILABLE_YEARS
+REGULAR_SEASON_WEEKS = 14  # weeks 15-18 are playoffs; capped until playoff feature is built
+
+try:
+    _nfl_state = dl.fetch_state_json()
+except Exception:
+    _nfl_state = {}
+
+
+def _default_week(year: int, weeks_dict: dict) -> tuple:
+    """Return (slider_max, default_week) for a given season year.
+
+    Active regular season: use the API leg as default, full max as slider max.
+    Completed / pre-season: cap both at REGULAR_SEASON_WEEKS (14).
+    """
+    if not weeks_dict:
+        return 1, 1
+    available_max = max(weeks_dict.keys())
+    state_season = str(_nfl_state.get('season', ''))
+    state_type   = _nfl_state.get('season_type', '')
+    if str(year) == state_season and state_type == 'regular':
+        leg = int(_nfl_state.get('leg', 1) or 1)
+        return available_max, min(leg, available_max)
+    default = min(REGULAR_SEASON_WEEKS, available_max)
+    return available_max, default
 SECRET_KEY    = os.environ.get('SECRET_KEY', 'dev-secret-change-in-production')
 LEAGUE_PASS   = os.environ.get('LEAGUE_PASSWORD', 'legacy')
 COOKIE_NAME   = 'll_auth'
@@ -715,8 +739,8 @@ def _boot(_, year):
     w = _weeks(year or CURRENT_YEAR)
     if not w:
         return no_update, no_update, no_update, no_update, False, no_update  # keep polling
-    mw = max(w.keys())
-    return mw, mw, mw, mw, True, []  # data ready — disable interval, clear any stale team filter
+    slider_max, default_week = _default_week(year or CURRENT_YEAR, w)
+    return slider_max, default_week, default_week, slider_max, True, []  # data ready — disable interval
 
 
 @app.callback(
@@ -733,10 +757,10 @@ def _year_changed(year):
         threading.Thread(target=_load_bg, args=(year,), daemon=True).start()
         _ensure(year)
     w = _weeks(year)
-    mw = max(w.keys()) if w else 1
+    slider_max, default_week = _default_week(year, w) if w else (1, 1)
     teams = sorted(core.roster_ids.get(year, {}).values())
     opts = [{'label': t, 'value': t} for t in teams]
-    return mw, mw, mw, opts, []
+    return slider_max, default_week, slider_max, opts, []
 
 
 @app.callback(
@@ -815,7 +839,11 @@ def _week_btn_click(n_clicks_list, id_list):
     import json as _json
     if not callback_context.triggered:
         return no_update, no_update
-    trigger_prop = callback_context.triggered[0]['prop_id']
+    triggered = callback_context.triggered[0]
+    # Ignore fires caused by dynamically adding new buttons (n_clicks=0 = not a real click)
+    if not triggered.get('value'):
+        return no_update, no_update
+    trigger_prop = triggered['prop_id']
     id_part = trigger_prop.split('.')[0]
     try:
         clicked_id = _json.loads(id_part)
