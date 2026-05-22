@@ -394,36 +394,111 @@ leagueNumbers_Dict = {2019: ..., 2020: ..., ..., 2025: ...}
 
 ---
 
-## Phase 4 — Playoff Bracket Feature
+## Phase 4 — Playoffs Tab (Current)
 
-*Future phase. Scoped here for planning purposes.*
+**Goal:** New "Playoffs" tab with matchup cards for winners and losers brackets, plus analytics charts for the winners bracket.
 
-**Goal:** Visualize the playoff bracket for any season on the All-Time tab (or a new "Playoffs" sub-tab).
+**Layout:**
+- Year driven by the global sidebar year selector (no separate control)
+- Top half: two-column bracket cards — Winners (left, full treatment) / Losers (right, scores only)
+- Bottom half: analytics charts (winners bracket only)
 
-**API endpoints needed:**
-- `GET /v1/league/<league_id>/winners_bracket` — returns bracket matchup objects with `r` (round), `m` (match ID), `t1`/`t2` (roster IDs), `w`/`l` (winner/loser roster IDs)
-- `GET /v1/league/<league_id>/losers_bracket` — same structure for consolation bracket
-
-**Bracket object key fields:**
+**Bracket data shape (verified against 2025 league):**
 ```json
-{ "r": 1, "m": 1, "t1": 3, "t2": 6, "w": null, "l": null }
+{ "r": 1, "m": 1, "t1": 4, "t2": 5, "w": 5, "l": 4 }
+{ "r": 2, "m": 3, "t1": 10, "t2": 5, "t2_from": {"w": 1}, "w": 10, "l": 5 }
+{ "r": 3, "m": 6, "p": 1, "t1": 10, "t2": 9, "w": 9, "l": 10 }
 ```
-Teams may also be referenced as `{ "w": <match_id> }` (winner of prior match) rather than a direct roster ID — the rendering logic needs to resolve these.
+- `r`: round (1=wild card, 2=semis, 3=championship week)
+- `m`: match ID used by `t1_from`/`t2_from` references
+- `p`: placement (1=champion, 3=3rd place, 5=5th place) — only on placement games
+- `t1`/`t2`: roster IDs (direct) or resolved from `t1_from`/`t2_from` refs
+- `w`/`l`: winner/loser roster IDs (null only for current in-progress year)
 
-**Data fetchers to add (to data_loader.py, Task 3D already handles transactions):**
-```python
-def fetch_winners_bracket(league_id: int) -> list: ...
-def fetch_losers_bracket(league_id: int) -> list: ...
-```
+**Match count for 6-team format:**
+- R1: 2 matches (wild card)
+- R2: 3 matches (2 semis + 5th place game)
+- R3: 2 matches (championship + 3rd place game)
+- Same structure mirrors in losers bracket
 
-**Visualization options:**
-- D3.js bracket tree (consistent with existing D3 chord/race charts)
-- Plotly nested annotations (simpler but less flexible)
+**Playoff weeks:** derived from `league_json['settings']['playoff_week_start']` (currently 15) — not hardcoded.
 
-**Considerations:**
-- Bracket structure varies by league size and format — must handle 4-team, 6-team, and 8-team playoffs
-- Roster IDs must be mapped to team names via the existing roster_ids dict
-- Historical brackets (2019–2024) are fully settled; only the current year bracket may have nulls
+---
+
+### Task 4A — Add bracket fetchers to data_loader ✅ DONE
+
+**File:** `data_loader.py`
+
+Added `fetch_winners_bracket(league_id)` and `fetch_losers_bracket(league_id)` — same cached GET pattern as other fetchers.
+
+---
+
+### Task 4B — Playoff processing in sleeper_core.py
+
+**File:** `sleeper_core.py`
+
+Add a `Playoffs` class (or methods on `Season`) that:
+1. Reads `playoff_week_start` from `league_json['settings']` — no hardcoding
+2. Fetches winners and losers bracket JSON via data_loader
+3. Resolves `t1_from`/`t2_from` references (winner/loser of match X) to actual roster IDs
+4. Maps roster IDs → team names via `roster_ids[year]`
+5. Joins scores from `AllMatchesDict[year][week]` for playoff weeks
+6. Joins best player and bench points from `AllBreakoutDict[year][week]` for winners bracket
+7. Produces two structured dicts — one per bracket — keyed by round then match:
+   ```python
+   {
+     1: [{'match': 1, 'team1': 'Brett', 'score1': 142.3, 'team2': 'Kyle', 'score2': 138.1, 'winner': 'Brett', 'best_player': 'CeeDee Lamb (38.2)', 'bench_left': 24.1}],
+     2: [...],
+     3: [...]
+   }
+   ```
+
+**Scores join note:** `AllMatchesDict[year][week]` has one row per matchup with `Team`, `Score`, `matchup_id`. Join by matching both roster IDs in the bracket entry to the same `matchup_id` in that week's dataframe.
+
+---
+
+### Task 4C — Winners bracket cards (app.py)
+
+**File:** `webapp/app.py` — new `_tab_playoffs()` function
+
+Two-column layout. Left column: winners bracket cards, 3 rounds stacked top-to-bottom.
+
+Each card shows:
+- Team names and scores, winner highlighted
+- Round label (Wild Card / Semifinals / Championship)
+- Placement label for p=3/p=5 games (3rd Place / 5th Place)
+- Best player of the game (name + points)
+- Bench points left (starter points that were available on bench)
+
+Round 2 has 3 cards — lay them out as: [Semi 1] [Semi 2] [5th Place] or stack vertically.
+
+---
+
+### Task 4D — Losers bracket cards (app.py)
+
+**File:** `webapp/app.py` — within `_tab_playoffs()`
+
+Right column alongside winners bracket. Same card component but minimal:
+- Team names and scores only
+- Winner highlighted
+- Round label
+
+No best player, no bench points.
+
+---
+
+### Task 4E — Analytics charts (sleeper_core.py + app.py)
+
+**File:** `sleeper_core.py` — chart methods on `Playoffs` class  
+**File:** `webapp/app.py` — render below bracket cards
+
+Three charts, winners bracket only:
+
+1. **Champion's road** — horizontal bar chart showing the champion's score in each round vs. their opponent's score. One set of bars per round (3 rounds).
+
+2. **Playoff heat check** — for each playoff team, their average points in last 3 regular season weeks (weeks 12–14) vs. their playoff average. Grouped bar chart. Shows who peaked at the right time.
+
+3. **Bench points left** — per playoff game across both brackets (winners only), how many points were left on each team's bench. Stacked or grouped bar, one bar per team per game.
 
 ---
 

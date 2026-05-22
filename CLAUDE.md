@@ -2,6 +2,15 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Testing Convention
+
+Write tests before or during implementation — not after. For any new class, method, or data pipeline change:
+- Add tests to `tests/test_pipeline.py` (data shape/integrity) or `tests/test_charts.py` (chart smoke tests) or a new file if the feature is large enough to warrant it (e.g., `tests/test_playoffs.py`)
+- Use `@pytest.mark.xfail(strict=True)` for tests targeting code that doesn't exist yet — they document the expected contract and flip to passing once implemented
+- Run `pytest tests/ -m "not slow" -q` after every meaningful change to catch regressions early
+
+All tests load from `.cache/` — no API calls during test runs. If a cache file is missing, fixtures use `pytest.skip` rather than failing.
+
 ## Keeping Docs Current
 
 After any edit to `webapp/app.py`:

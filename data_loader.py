@@ -69,6 +69,30 @@ def fetch_state_json() -> dict:
     return data
 
 
+def fetch_winners_bracket(league_id: int) -> list:
+    """Winners bracket matchup objects for the league's playoff."""
+    key = f"winners_bracket_{league_id}"
+    cached = _load_cache(key)
+    if cached is not None:
+        return cached
+    data = requests.get(
+        f"https://api.sleeper.app/v1/league/{league_id}/winners_bracket"
+    ).json()
+    _save_cache(key, data)
+    return data
+
+def fetch_losers_bracket(league_id: int) -> list:
+    """Losers (consolation) bracket matchup objects for the league's playoff."""
+    key = f"losers_bracket_{league_id}"
+    cached = _load_cache(key)
+    if cached is not None:
+        return cached
+    data = requests.get(
+        f"https://api.sleeper.app/v1/league/{league_id}/losers_bracket"
+    ).json()
+    _save_cache(key, data)
+    return data
+
 def fetch_transactions_json(league_id: int, week: int) -> list:
     """All transactions (trades, waivers, FA pickups) for a given week."""
     key = f"transactions_{league_id}_{week}"
