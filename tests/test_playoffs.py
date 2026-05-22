@@ -136,7 +136,6 @@ LOSERS_REQUIRED_KEYS  = {'match', 'team1', 'score1', 'team2', 'score2', 'winner'
                           'placement'}
 
 
-@pytest.mark.xfail(strict=True, reason="Task 4B: Playoffs class not yet implemented")
 class TestPlayoffsClass:
 
     def test_playoffs_class_exists(self, league_2024_playoffs):

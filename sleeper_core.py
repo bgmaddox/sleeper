@@ -3090,6 +3090,118 @@ class Season:
         return fig_h
 
 
+class Playoffs:
+    """
+    Resolves winners and losers bracket data for a single season into structured
+    round-by-round matchup dicts, joined with scores and player stats.
+
+    Usage:
+        playoffs = Playoffs(league, season)
+        playoffs.winners   # {1: [...], 2: [...], 3: [...]}
+        playoffs.losers    # same structure, no player stats
+    """
+
+    def __init__(self, league, season):
+        import data_loader as dl
+
+        self.league = league
+        self.year = league.year
+        self.playoff_week_start = int(
+            league.league_settings.get('settings.playoff_week_start', 15)
+        )
+        self._roster_map = {int(k): v for k, v in roster_ids[self.year].items()}
+
+        winners_raw = dl.fetch_winners_bracket(league.id)
+        losers_raw  = dl.fetch_losers_bracket(league.id)
+
+        self.winners = self._process_bracket(winners_raw, include_stats=True)
+        self.losers  = self._process_bracket(losers_raw,  include_stats=False)
+
+    # ── Helpers ───────────────────────────────────────────────────────────────
+
+    def _team_name(self, roster_id):
+        return self._roster_map.get(int(roster_id), f"Roster {roster_id}")
+
+    def _week_frames(self, round_num):
+        week = self.playoff_week_start + round_num - 1
+        matches  = AllMatchesDict.get(self.year, {}).get(week, pd.DataFrame())
+        breakout = AllBreakoutDict.get(self.year, {}).get(week, pd.DataFrame())
+        return matches, breakout
+
+    def _score(self, matches_df, team_name):
+        if matches_df.empty:
+            return 0.0
+        row = matches_df[matches_df['Team'] == team_name]
+        return float(row['Total'].iloc[0]) if not row.empty else 0.0
+
+    def _best_player(self, breakout_df, team1, team2):
+        if breakout_df.empty:
+            return 'N/A'
+        starters = breakout_df[
+            (breakout_df['team'].isin([team1, team2])) & (breakout_df['starter'] == 1)
+        ]
+        if starters.empty:
+            return 'N/A'
+        best = starters.loc[starters['points'].idxmax()]
+        return f"{best['player']} ({best['points']:.1f})"
+
+    def _bench_left(self, breakout_df, team_name):
+        """Total points scored by bench players for a team that week."""
+        if breakout_df.empty:
+            return 0.0
+        bench = breakout_df[
+            (breakout_df['team'] == team_name) & (breakout_df['starter'] == 0)
+        ]
+        return float(bench['points'].sum()) if not bench.empty else 0.0
+
+    # ── Core processing ───────────────────────────────────────────────────────
+
+    def _process_bracket(self, bracket_raw, include_stats):
+        by_round = {}
+        for entry in bracket_raw:
+            by_round.setdefault(entry['r'], []).append(entry)
+
+        rounds = {}
+        for round_num, entries in by_round.items():
+            matches_df, breakout_df = self._week_frames(round_num)
+            matchups = []
+
+            for entry in entries:
+                t1_id = entry.get('t1')
+                t2_id = entry.get('t2')
+                if t1_id is None or t2_id is None:
+                    continue  # bracket not yet resolved (in-progress season)
+
+                team1  = self._team_name(t1_id)
+                team2  = self._team_name(t2_id)
+                w_id   = entry.get('w')
+                winner = self._team_name(w_id) if w_id is not None else None
+
+                matchup = {
+                    'match':     entry['m'],
+                    'team1':     team1,
+                    'score1':    self._score(matches_df, team1),
+                    'team2':     team2,
+                    'score2':    self._score(matches_df, team2),
+                    'winner':    winner,
+                    'placement': entry.get('p'),
+                }
+
+                if include_stats:
+                    matchup['best_player'] = self._best_player(breakout_df, team1, team2)
+                    matchup['bench_left']  = (
+                        self._bench_left(breakout_df, winner) if winner else 0.0
+                    )
+
+                matchups.append(matchup)
+
+            # Main bracket games (no placement) sort before placement games
+            matchups.sort(key=lambda m: (m['placement'] is not None, m['placement'] or 0, m['match']))
+            rounds[round_num] = matchups
+
+        return rounds
+
+
 class AllTime:
     def __init__(self):
                
