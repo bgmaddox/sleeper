@@ -57,6 +57,17 @@ def fetch_league_json(league_id: int) -> dict:
     _save_cache(key, data)
     return data
 
+def fetch_state_json() -> dict:
+    """Current NFL season state: week (leg), season_type, season year.
+    Returns keys: season, season_type, leg, display_week, season_start_date."""
+    key = "nfl_state"
+    cached = _load_cache(key)
+    if cached is not None:
+        return cached
+    data = requests.get("https://api.sleeper.app/v1/state/nfl").json()
+    _save_cache(key, data)
+    return data
+
 
 # ── High-level data loading ───────────────────────────────────────────────────
 
@@ -140,16 +151,10 @@ def get_current_week(year: int) -> int:
 
 
 def invalidate_week(year: int, week: int):
-    """Remove cached data for a single week so it will be re-fetched on next load."""
+    """Remove season cache for `year` so it rebuilds from the Sleeper API on next load.
+    Deleting the season pickle forces all weeks (including `week`) to be re-fetched."""
     import sleeper_core as core
-    league_id = core.leagueNumbers_Dict[year]
-    # Remove matchup-level cache
-    matchup_key = f"matchup_{league_id}_{week}"
-    mp = _cache_path(matchup_key)
-    if os.path.exists(mp):
-        os.remove(mp)
-    # Remove season-level cache (it embeds all weeks)
     season_path = _cache_path(f"season_data_{year}_{18}")
     if os.path.exists(season_path):
         os.remove(season_path)
-    print(f"Invalidated cache for {year} Week {week}.")
+    print(f"Invalidated cache for {year} (will re-fetch all weeks including Week {week}).")

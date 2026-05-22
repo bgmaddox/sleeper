@@ -26,17 +26,16 @@ def apply_logo_to_fig(fig, xval=0.5, yval=-0.05):
     return fig
 
 # ── NFL Player Data ──────────────────────────────────────────────────────────
-def ImportPlayerData():
-    player_data_response = requests.get('https://api.sleeper.app/v1/players/nfl')
-    return player_data_response.json()
-
 NFLPlayerData = {}   # populated lazily by init_player_data()
 
 def init_player_data():
     global NFLPlayerData
     if not NFLPlayerData:
-        NFLPlayerData = ImportPlayerData()
+        import data_loader as dl
+        NFLPlayerData = dl.fetch_player_data()
 
+# ── Season configuration ──────────────────────────────────────────────────────
+CURRENT_SEASON = 2025   # Update once per year when the new season begins
 
 import plotly.io as pio
 
@@ -490,9 +489,9 @@ class Week:
         self.WeeklyDataframe()
         self.SetTeamColors()
         self.PlayerBreakout()
-        if self.year != 2025: 
+        if self.year != CURRENT_SEASON:
             self.OptimalTeams()
-        
+
             self.EfficincyScore()
 
         
@@ -508,9 +507,6 @@ class Week:
         week_json = week_response.json()
         self.json = week_json
 
-    def ImportFixes(self):
-        self.json
-    
     def SetTeamColors(self, color_dict:dict = None):
         self.teamcolors = get_slot_teamcolors(self.year)
         if color_dict is not None:
@@ -638,7 +634,7 @@ class Week:
         dfBreakout['Game_date_time'] = dfBreakout['weekday'] + ' ' + dfBreakout['gametime'].astype(str).replace(r'0', "", regex=True)
         dfBreakout = dfBreakout.rename(columns={'team_x':'team','team_y':'recent_teams'})
         dfBreakout = dfBreakout.loc[:,~dfBreakout.columns.duplicated()].copy()
-        if self.year != 2025: dfBreakout['color'] = dfBreakout['team'].map(self.teamcolors)
+        if self.year != CURRENT_SEASON: dfBreakout['color'] = dfBreakout['team'].map(self.teamcolors)
         
         self.Breakout = dfBreakout
         Breakout_Year_Dict = AllBreakoutDict[self.year]
@@ -658,7 +654,7 @@ class Week:
             matchup_id = team['matchup_id']
             
             # Replace player IDs with player names
-            starters_with_names = [self.league.player_names[player] for player in starters]
+            starters_with_names = [self.league.player_names.get(player, f"Unknown ({player})") for player in starters]
             
             # Combine players and their points into a list where each entry is a list [dictionary, matchup_id]
             df_dict[roster_id] = [{player: points} for player, points in zip(starters_with_names, starters_points)]
@@ -700,13 +696,11 @@ class Week:
         #WeeklyDf.loc[[WeeklyDf['Won']] == 0,'Opp Score'] = WeeklyDf.groupby('Matchup')['Total'].transform('min')
         
         
-        SeasonMultiplier = {2019:0, 2020:1, 2021:2, 2022:3, 2023:4, 2024:5, 2025:6}
-        
         WeeklyDf = WeeklyDf.rename(columns=positions).sort_values('Matchup')
         WeeklyDf = WeeklyDf.reset_index().rename({'index':'Team'}, axis = 1)
         WeeklyDf['Week'] = self.week
         WeeklyDf['Season'] = "Regular" if self.week < 15 else "Playoff"
-        WeeklyDf['Week Index'] = self.week + (14 * SeasonMultiplier[self.year])
+        WeeklyDf['Week Index'] = self.week + (14 * (self.year - 2019))
         WeeklyDf['Year'] = self.year
         
         percent = WeeklyDf.groupby('Week')['Total'].sum()
@@ -813,7 +807,7 @@ class Week:
 
         # Concatenate the two DataFrames to get the final, complete optimal lineup
         final_optimal_lineup = pd.concat([core_lineup_df, flex_players_df])
-        if self.year != 2025:
+        if self.year != CURRENT_SEASON:
             final_dream_team = pd.concat([dream_lineup_df, flex_dream_pool_df])
             self.DreamTeamDF = final_dream_team
 
@@ -3231,12 +3225,12 @@ class AllTime:
         self.BottomTeamScores['Names'] = self.BottomTeamScores.Team + ' [W' + self.BottomTeamScores.Week.astype(str) + ' ' + self.BottomTeamScores.Year.astype(str)+ ']' + ' - ' + self.BottomTeamScores.Total.round(1).astype(str) 
         self.BottomTeamScores['Year'] = self.BottomTeamScores['Year'].astype(int)
         
-        self.TopPlayerScores = self.Breakout.sort_values('points', ascending=False)[:10]
-        self.TopPlayerScores['Names'] = self.TopPlayerScores.team + ' [W' + self.TopPlayerScores.week_x.astype(str) + ' ' + self.TopPlayerScores.year.astype(str)+ ']' + ' - ' + self.TopPlayerScores.points.round(1).astype(str) 
+        self.TopPlayerScores = self.Breakout.sort_values('points', ascending=False)[:10].rename(columns={'team': 'Team'})
+        self.TopPlayerScores['Names'] = self.TopPlayerScores.Team + ' [W' + self.TopPlayerScores.week_x.astype(str) + ' ' + self.TopPlayerScores.year.astype(str)+ ']' + ' - ' + self.TopPlayerScores.points.round(1).astype(str)
         self.TopPlayerScores['Year'] = self.TopPlayerScores['year'].astype(int)
 
-        self.BottomPlayerScores = self.Breakout.sort_values('points', ascending=True)[:10]
-        self.BottomPlayerScores['Names'] = self.BottomPlayerScores.team + ' [W' + self.BottomPlayerScores.week_x.astype(str) + ' ' + self.BottomPlayerScores.year.astype(str)+ ']' + ' - ' + self.BottomPlayerScores.points.round(1).astype(str) 
+        self.BottomPlayerScores = self.Breakout.sort_values('points', ascending=True)[:10].rename(columns={'team': 'Team'})
+        self.BottomPlayerScores['Names'] = self.BottomPlayerScores.Team + ' [W' + self.BottomPlayerScores.week_x.astype(str) + ' ' + self.BottomPlayerScores.year.astype(str)+ ']' + ' - ' + self.BottomPlayerScores.points.round(1).astype(str)
         self.BottomPlayerScores['Year'] = self.BottomPlayerScores['year'].astype(int)
 
     
