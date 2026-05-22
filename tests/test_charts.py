@@ -160,12 +160,7 @@ class TestAllTimeCharts:
         assert _is_valid_fig(fig)
 
 
-# ── Post-Phase-2 charts (xfail until integrated) ─────────────────────────────
-# These will start passing after Tasks 2B/2C/2D are complete.
-# Remove the xfail mark when each task is done.
-
-@pytest.mark.xfail(reason="Task 2C: PositionStrengthPolar renamed in Phase 2", strict=False)
 def test_position_strength_polar_renamed(sf):
-    """After Task 2C, method name should be PositionStrengthPolar (no typo)."""
+    """PositionStrengthPolar (corrected spelling, was PositionStengthPolar)."""
     fig = sf.PositionStrengthPolar()
     assert _is_valid_fig(fig)

@@ -1,10 +1,63 @@
 # Legacy League Webapp — Development Roadmap
 
 **Created:** 2026-05-21  
-**Status:** Active  
+**Last updated:** 2026-05-21 (end of session)  
+**Status:** Active — Phase 3 is next  
 **Supersedes:** `design/fix-plan.md` (all tasks complete as of commit `41094a3`)
 
 This document is the single source of truth for planned work. Update status inline as tasks complete.
+
+---
+
+## Session Summary (2026-05-21)
+
+### Completed this session
+- All Phase 1 tasks (1A–1G) — committed as `065de71`
+- All Phase 2 tasks (2A–2D) — **not yet committed** (see below)
+- Discovered and fixed a critical data bug in `PlayerBreakout` — **not yet committed**
+
+### Pending commit
+The following changes are staged but uncommitted:
+- Phase 2 graph integrations (2A–2D in `sleeper_core.py` + `webapp/app.py`)
+- `PlayerBreakout` position column bug fix (see Bug Fix Log below)
+- `tests/test_charts.py` xfail marker removed from `test_position_strength_polar_renamed`
+
+### Test suite status
+`pytest tests/ -m "not slow"` → **55 passed, 0 failed, 0 xfailed**
+
+---
+
+## Bug Fix Log
+
+### BUG: PlayerBreakout — wrong `position` column used by all charts
+
+**Discovered:** 2026-05-21 session  
+**Fixed in:** `sleeper_core.py` — `PlayerBreakout()` (~line 630)  
+**Symptoms:** DEF missing from all position charts (NaN instead of 'DEF'), phantom "CB" category in violin charts (Michael Thomas name collision), Season tab bottom charts failing intermittently, "All Rostered" violin missing half its position categories.
+
+**Root cause:** Three sequential merges on `dfBreakout` produced a naming collision:
+1. Build rows → `dfBreakout['position']` = Sleeper fantasy position (QB/WR/RB/TE/K/DEF) ✓
+2. Merge with `self.league.Rosters` — Rosters also has a `position` column (NFL roster positions: DB/OL/DL/WR/LB etc.). With no `suffixes` specified, pandas renamed dfBreakout's column to `position_x` and Rosters' to `position_y`. The original Sleeper `position` was gone.
+3. Merge with `WeeklyNFLData` using `suffixes=('','_NFL')` — nflverse stats has a `position` column (WR/RB/QB/TE/K, **no DEF** for team defenses). This landed as `position`, shadowing `position_x`. Result: all charts used the wrong column.
+
+**Fix:**
+```python
+# Line 630 — add suffixes to Rosters merge to preserve the Sleeper position column
+dfBreakout = dfBreakout.merge(self.league.Rosters, on='player_name', how='left', suffixes=('', '_roster'))
+
+# After WeeklyNFLData merge — deduplicate rows from name collisions
+# (e.g., WR Michael Thomas and CB Michael Thomas both match "Michael Thomas - 8")
+dfBreakout = dfBreakout.drop_duplicates(subset=['team_x', 'player', 'week'])
+```
+
+**Column structure after fix:**
+- `position` = Sleeper fantasy position (QB/WR/RB/TE/K/DEF) — **use this in charts**
+- `position_roster` = nflverse roster position (DB/OL/DL/LB/etc.) — not for fantasy use
+- `position_NFL` = nflverse weekly stats position (WR/RB/QB/TE/K, NaN for DEF) — for stats-side analysis only
+
+**Cache impact:** 2024 and 2025 season caches were cleared and rebuilt. All other year caches (2019–2023) also have the old broken column structure and will produce wrong data if those charts are used. **Clear them before doing position-dependent work on historical years, or add a cache version check.**
+
+**Verified:** `BreakoutSeason['position'].unique()` → `['QB', 'WR', 'RB', 'K', 'TE', 'DEF']`, 0 NaN rows, 0 CB rows. All 55 tests pass.
 
 ---
 
@@ -20,7 +73,7 @@ This document is the single source of truth for planned work. Update status inli
 
 ---
 
-## Phase 1 — Code Quality & Robustness (Current)
+## Phase 1 — Code Quality & Robustness ✅ COMPLETE (commit `065de71`)
 
 Low-risk, no visual changes. Makes the codebase safer and future-proof before adding new features.
 
@@ -179,118 +232,57 @@ self.BottomPlayerScores = self.BottomPlayerScores.rename(columns={'team': 'Team'
 
 ---
 
-## Phase 2 — Graph Integration (Orphaned Methods)
+## Phase 2 — Graph Integration (Orphaned Methods) ✅ COMPLETE (pending commit)
 
 Adds three existing-but-unwired chart methods to the UI, cleans up two redundant ones.
 
 ---
 
-### Task 2A — Delete redundant Season methods
+### Task 2A — Delete redundant Season methods ✅ DONE
 
 **File:** `sleeper_core.py`
 
-**Delete these two method definitions entirely:**
-- `WholeSeasonBarGraph()` (~line 1932) — stacked weekly bar chart; redundant with Win Progression and Points For/Against
-- `WeekYTDTotalsPercents()` (~line 1962) — stacked percentage bar; same problem
-
-Both methods are confirmed unreferenced by `app.py` and `data_loader.py`. Safe to delete.
-
-**Verify:** `grep` confirms no remaining references. App loads without errors.
+`WholeSeasonBarGraph()` and `WeekYTDTotalsPercents()` deleted. No remaining references.
 
 ---
 
-### Task 2B — Fix typo and add StarterPerformanceGraph to Season tab
+### Task 2B — Add StarterPerformanceGraph to Season tab ✅ DONE
 
-**File:** `sleeper_core.py` and `webapp/app.py`
+**Files changed:** `webapp/app.py` — `_tab_season()`
 
-**Part 1 — sleeper_core.py:** No code changes needed. Method is complete and functional.
-
-**Part 2 — app.py, Season tab (`_tab_season`):**
-
-Add a new chart card after the existing bench/efficiency charts. Uses `self.BreakoutSeason` (already populated by `Season.Update()`), so no new data dependencies.
-
-```python
-try:
-    fig = sf.StarterPerformanceGraph()
-    cards.append(_card(_strip(fig, 1200), 'Starter Points by Position',
-                       subtitle='Total fantasy points scored by starters, broken down by position'))
-except Exception as e:
-    traceback.print_exc()
-    cards.append(_card(_err(str(e)), 'Starter Points by Position'))
-```
-
-**Note on `_strip()`:** `StarterPerformanceGraph` sets `height=1200` internally. `_strip()` will reset margins. If the chart appears clipped, add a post-strip margin override in the rendering pipeline (same pattern as `ForAgainstwithTeams` at app.py ~line 1328).
-
-**Verify:** Season tab shows a horizontal stacked bar chart of starter points by position, sorted by total points.
+Added after PositionStrengthHeatmap block. Uses `fig.update_layout(title=None, width=None, height=1200, margin=dict(t=20, b=80, l=160, r=40))` — margins applied directly (not via `_strip()`) to avoid clipping the tall horizontal bar chart. No `sleeper_core.py` changes needed; method was already complete.
 
 ---
 
-### Task 2C — Fix typo and add PositionStrengthPolar to Season tab
+### Task 2C — Rename PositionStengthPolar → PositionStrengthPolar and add to Season tab ✅ DONE
 
-**File:** `sleeper_core.py` and `webapp/app.py`
+**Files changed:** `sleeper_core.py` (method rename only), `webapp/app.py` — `_tab_season()`
 
-**Part 1 — sleeper_core.py, rename method and clean internal typos:**
-- Rename `PositionStengthPolar` → `PositionStrengthPolar` (fix the missing 'r')
-- Rename the internal variable typos for consistency: `PosistionAvg` → `PositionAvg`, `PosistionPolar` → `PositionPolar` (these are local variables only, no external references to update)
-
-**Part 2 — app.py, Season tab:**
-
-The method calls `self.PositionStrengthCalculator()` internally, which sets `self.PosistionPivot_scaled` and `self.PosistionPivot_Standard_scaled`. These attributes don't exist until that method runs, so guard against `AttributeError`:
-
-```python
-try:
-    fig = sf.PositionStrengthPolar()
-    cards.append(_card(_strip(fig, 1400), 'Positional Strength',
-                       subtitle='Each team\'s scoring by position as z-scores vs league average'))
-except Exception as e:
-    traceback.print_exc()
-    cards.append(_card(_err(str(e)), 'Positional Strength'))
-```
-
-**Note:** This is a 4×3 grid of 12 polar subplots — a heavy render. Set height generously (1400px+). If render time is unacceptable, consider lazy-loading via a callback rather than building at tab-render time.
-
-**Verify:** Season tab shows a 4×3 polar chart grid. Each panel represents one team, with positional z-scores as the radar shape.
+- Method renamed in `sleeper_core.py`. Internal variable typos (`PosistionAvg`, `PosistionPolar`, etc.) are local-only and left as-is — harmless.
+- Added after StarterPerformanceGraph block with `height=1400`. No `_strip()` — layout applied directly.
+- `test_position_strength_polar_renamed` in `tests/test_charts.py` promoted from `@pytest.mark.xfail` to a normal passing test.
 
 ---
 
-### Task 2D — Extend violin toggle to include ViolinPosition (by-position view)
+### Task 2D — Extend violin toggle to 4-way (by-team + by-position) ✅ DONE
 
-**File:** `webapp/app.py` — Players tab violin card and its callback
+**File changed:** `webapp/app.py` — `_tab_players()` toggle UI and `_update_violin` callback
 
-**Current toggle:** 2 options — `starters` / `all`  
-**New toggle:** 4 options — `starters` / `all` / `pos_starters` / `pos_all`
-
-The first two call `sf.ViolinPlayer(...)` (existing). The last two call `sf.ViolinPosition(Starters=True/False)` (the orphaned method).
-
-**Part 1 — Update the toggle UI** (in `_tab_players`, where the violin card is built):
-```python
-dcc.RadioItems(id='violin-toggle', options=[
-    {'label': 'Starters (By Team)',    'value': 'starters'},
-    {'label': 'All Rostered (By Team)', 'value': 'all'},
-    {'label': 'Starters (By Position)', 'value': 'pos_starters'},
-    {'label': 'All (By Position)',      'value': 'pos_all'},
-], value='starters', className='toggle-group', inline=True),
-```
-
-**Part 2 — Update the violin callback** (grep for `@app.callback` with `violin-toggle` as input):
-
-Add two new branches:
-```python
-elif toggle == 'pos_starters':
-    fig = sf.ViolinPosition(Starters=True)
-elif toggle == 'pos_all':
-    fig = sf.ViolinPosition(Starters=False)
-```
-
-**Note:** `ViolinPosition` uses `self.BreakoutSeason` or `self.Starters` — both available on the season object. The chart has its own margins set internally (`margin=dict(t=140, b=100, l=120, r=40)`). Confirm `_strip()` doesn't clobber these in the callback's return path.
-
-**Verify:** Players tab violin toggle shows all 4 options. Switching to a by-position option shows faceted violin plots split by QB/RB/WR/TE/K/DEF.
+Toggle values: `starters` / `all` → call `sf.ViolinPlayer(week, Starters=...)` at height 1000  
+New values: `pos_starters` / `pos_all` → call `sf.ViolinPosition(Starters=...)` at height 1200  
+Subtitle updated to mention the by-position option. Callback branches on `mode in ('starters', 'all')` vs else.
 
 ---
 
-## Phase 3 — API & Data Robustness
+## Phase 3 — API & Data Robustness (Current)
 
 Deeper improvements to data quality, matching, and future-proofing.
+
+**⚠️ Before starting Phase 3:** The 2019–2023 season caches still have the old broken `position` column structure (position=NaN for DEF, `position_x`/`position_y` naming). They were not cleared when the PlayerBreakout bug was fixed. Any Phase 3 work that touches position-dependent data in historical seasons should clear those caches first:
+```bash
+rm .cache/season_data_2019_*.pkl .cache/season_data_2020_*.pkl .cache/season_data_2021_*.pkl .cache/season_data_2022_*.pkl .cache/season_data_2023_*.pkl
+```
+The All-Time tab aggregates all years — if it's broken on historical position data, this is why.
 
 ---
 

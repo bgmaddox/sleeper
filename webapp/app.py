@@ -607,6 +607,7 @@ app.layout = html.Div([
     dcc.Store(id='store-arc-mode', data='top'),
     dcc.Store(id='store-snake-mode', data='wins'),
     dcc.Store(id='store-max-week', data=1),
+    dcc.Store(id='store-d3-trigger', data=0),
     dcc.Interval(id='boot', interval=1500, n_intervals=0, max_intervals=60),
 
     # Top bar
@@ -1061,6 +1062,7 @@ def _tab_week(year, week, teams):
     cards.append(html.Div([
         html.Div('NFL Contribution Map · This Week', className='chart-title'),
         html.Div('Where your fantasy points came from this week — bubble size = points contributed', className='chart-subtitle'),
+        html.Button('▶  Load Chart', id='load-bubble', n_clicks=0, className='btn', style={'margin': '12px 0'}),
         html.Div(id='d3-bubble-container', style={'width': '100%', 'height': '860px'}),
     ], className='chart-card chart-col-full'))
 
@@ -1158,9 +1160,26 @@ def _tab_season(year, week, teams):
         cards.append(_card(_err(str(e)), 'Position Strength'))
 
     try:
+        fig = sf.StarterPerformanceGraph()
+        fig.update_layout(title=None, width=None, height=1200, margin=dict(t=20, b=80, l=160, r=40))
+        cards.append(_card(fig, 'Starter Points by Position', subtitle='Total fantasy points scored by starters this season, broken down by position'))
+    except Exception as e:
+        traceback.print_exc()
+        cards.append(_card(_err(str(e)), 'Starter Points by Position'))
+
+    try:
+        fig = sf.PositionStrengthPolar()
+        fig.update_layout(title=None, width=None, height=1400)
+        cards.append(_card(fig, 'Positional Strength · Radar', subtitle='Each team\'s scoring by position as z-scores vs league average — shows positional build strategy'))
+    except Exception as e:
+        traceback.print_exc()
+        cards.append(_card(_err(str(e)), 'Positional Strength · Radar'))
+
+    try:
         fig = sf.WaiverWireBump(mode='rank')
         initial_bump = dcc.Graph(figure=_strip(fig, 660), config={'displayModeBar': False, 'responsive': True}, style={'width': '100%'})
     except Exception as e:
+        traceback.print_exc()
         initial_bump = _err(str(e))
     cards.append(html.Div([
         html.Div('Top Scorers · Points Race', className='chart-title'),
@@ -1175,18 +1194,21 @@ def _tab_season(year, week, teams):
     cards.append(html.Div([
         html.Div('Season Score Race · Cumulative Points', className='chart-title'),
         html.Div('Animated race of total points accumulated — hover any week to see the full standings', className='chart-subtitle'),
+        html.Button('▶  Load Chart', id='load-race', n_clicks=0, className='btn', style={'margin': '12px 0'}),
         html.Div(id='d3-race-container', style={'width': '100%', 'height': '580px'}),
     ], className='chart-card chart-col-full'))
 
     cards.append(html.Div([
         html.Div('Season Heatmap · Score vs Average', className='chart-title'),
         html.Div('Each team\'s score vs their season average each week — green above, red below', className='chart-subtitle'),
+        html.Button('▶  Load Chart', id='load-heatmap', n_clicks=0, className='btn', style={'margin': '12px 0'}),
         html.Div(id='d3-heatmap-container', style={'width': '100%', 'height': '500px'}),
     ], className='chart-card chart-col-full'))
 
     cards.append(html.Div([
         html.Div(f'Draft Board Replay · {year}', className='chart-title'),
         html.Div('The full draft in pick order — hover any player to see their season stats', className='chart-subtitle'),
+        html.Button('▶  Load Chart', id='load-draft', n_clicks=0, className='btn', style={'margin': '12px 0'}),
         html.Div(id='d3-draft-container', style={'width': '100%', 'height': '640px'}),
     ], className='chart-card chart-col-full'))
 
@@ -1219,10 +1241,12 @@ def _tab_players(year, week, teams):
         initial_violin = _err(str(e))
     cards.append(html.Div([
         html.Div('Scoring Distribution', className='chart-title'),
-        html.Div('Score spread per player — the box shows the typical range, dots are weekly outings', className='chart-subtitle'),
+        html.Div('Score spread per player — the box shows the typical range, dots are weekly outings. Switch to By Position to compare positional depth across teams.', className='chart-subtitle'),
         dcc.RadioItems(id='violin-toggle', options=[
-            {'label': 'Starters Only', 'value': 'starters'},
-            {'label': 'All Rostered', 'value': 'all'},
+            {'label': 'Starters (By Team)',     'value': 'starters'},
+            {'label': 'All Rostered (By Team)', 'value': 'all'},
+            {'label': 'Starters (By Position)', 'value': 'pos_starters'},
+            {'label': 'All (By Position)',       'value': 'pos_all'},
         ], value='starters', className='toggle-group', inline=True),
         html.Div(initial_violin, id='violin-chart'),
     ], className='chart-card chart-col-full'))
@@ -1740,8 +1764,12 @@ def _update_violin(mode, year, week, teams):
         return _loading_placeholder()
     sf = _filter_season(season, teams)
     try:
-        fig = sf.ViolinPlayer(week, Starters=(mode == 'starters'))
-        fig.update_layout(title=None, width=None, height=1000)
+        if mode in ('starters', 'all'):
+            fig = sf.ViolinPlayer(week, Starters=(mode == 'starters'))
+            fig.update_layout(title=None, width=None, height=1000)
+        else:
+            fig = sf.ViolinPosition(Starters=(mode == 'pos_starters'))
+            fig.update_layout(title=None, width=None, height=1200)
         return dcc.Graph(figure=fig, config={'displayModeBar': False, 'responsive': True}, style={'width': '100%'})
     except Exception as e:
         return html.Div(f'Error: {e}', style={'color': '#F94144', 'padding': '20px'})
@@ -1780,13 +1808,14 @@ def _update_top_players(position, thresh, year, week, teams):
     Output('store-snake-data',   'data'),
     Output('store-race-data',    'data'),
     Output('store-heatmap-data', 'data'),
-    Input('tabs',        'value'),
-    Input('store-year',  'data'),
-    Input('store-week',  'data'),
-    Input('team-list',   'value'),
-    Input('boot',        'disabled'),
+    Input('tabs',              'value'),
+    Input('store-year',        'data'),
+    Input('store-week',        'data'),
+    Input('team-list',         'value'),
+    Input('boot',              'disabled'),
+    Input('store-d3-trigger',  'data'),
 )
-def _populate_d3_stores(tab, year, week, teams, _boot_done):
+def _populate_d3_stores(tab, year, week, teams, _boot_done, _trigger):
     if tab != 'tab-season':
         return no_update, no_update, no_update
     year = year or CURRENT_YEAR
@@ -2033,17 +2062,44 @@ app.clientside_callback(
     Input('tabs', 'value'),
 )
 
+# Wire D3 load buttons via event delegation.
+# Buttons live inside tab-content (dynamic IDs can't be Dash Inputs), so we
+# attach a document-level click listener once and call set_props to increment
+# store-d3-trigger, which feeds into the Python data-population callbacks.
+app.clientside_callback(
+    '''
+    function(n) {
+        if (!window._d3LoadBound) {
+            window._d3LoadBound = true;
+            window._d3TriggerCount = 0;
+            document.addEventListener('click', function(e) {
+                var btn = e.target.closest('button');
+                if (btn && (btn.id === 'load-race' || btn.id === 'load-heatmap' || btn.id === 'load-draft' || btn.id === 'load-bubble')) {
+                    window._d3TriggerCount = (window._d3TriggerCount || 0) + 1;
+                    window.dash_clientside.set_props('store-d3-trigger', {data: window._d3TriggerCount});
+                }
+            });
+        }
+        return window.dash_clientside.no_update;
+    }
+    ''',
+    Output('store-d3-trigger', 'data'),
+    Input('boot', 'disabled'),
+    prevent_initial_call=True,
+)
+
 
 # ── D3 store population — Bubble Map ─────────────────────────────────────────
 
 @app.callback(
     Output('store-bubble-data', 'data'),
-    Input('tabs',        'value'),
-    Input('store-year',  'data'),
-    Input('store-week',  'data'),
-    Input('boot',        'disabled'),
+    Input('tabs',             'value'),
+    Input('store-year',       'data'),
+    Input('store-week',       'data'),
+    Input('boot',             'disabled'),
+    Input('store-d3-trigger', 'data'),
 )
-def _populate_bubble_data(tab, year, week, _boot_done):
+def _populate_bubble_data(tab, year, week, _boot_done, _trigger):
     if tab != 'tab-week':
         return no_update
     year = year or CURRENT_YEAR
@@ -2133,11 +2189,12 @@ def _populate_bubble_data(tab, year, week, _boot_done):
 
 @app.callback(
     Output('store-draft-data', 'data'),
-    Input('tabs', 'value'),
-    Input('store-year', 'data'),
-    Input('boot',       'disabled'),
+    Input('tabs',             'value'),
+    Input('store-year',       'data'),
+    Input('boot',             'disabled'),
+    Input('store-d3-trigger', 'data'),
 )
-def _populate_draft_data(tab, year, _boot_done):
+def _populate_draft_data(tab, year, _boot_done, _trigger):
     if tab != 'tab-season':
         return no_update
     year = year or CURRENT_YEAR

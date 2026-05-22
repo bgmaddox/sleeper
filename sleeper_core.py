@@ -627,9 +627,12 @@ class Week:
         
         
         dfBreakout = dfBreakout.merge(schedule, on = 'week_id', how = 'left')
-        dfBreakout = dfBreakout.merge(self.league.Rosters, on= 'player_name',how = 'left')
-        
+        # suffixes=('','_roster') preserves 'position' as the Sleeper fantasy position (QB/RB/WR/TE/K/DEF)
+        dfBreakout = dfBreakout.merge(self.league.Rosters, on='player_name', how='left', suffixes=('', '_roster'))
+
         dfBreakout = dfBreakout.merge(WeeklyNFLData, on = 'player_week_id', how = 'left', suffixes=('','_NFL'))
+        # Drop rows duplicated by name collisions in nflverse (e.g., two NFL players sharing a display name)
+        dfBreakout = dfBreakout.drop_duplicates(subset=['team_x', 'player', 'week'])
         dfBreakout['gametime'] = pd.to_datetime(dfBreakout['gametime'], format='mixed').dt.strftime('%I %p')
         dfBreakout['Game_date_time'] = dfBreakout['weekday'] + ' ' + dfBreakout['gametime'].astype(str).replace(r'0', "", regex=True)
         dfBreakout = dfBreakout.rename(columns={'team_x':'team','team_y':'recent_teams'})
@@ -1923,85 +1926,6 @@ class Season:
         
         return fig2
  
-    def WholeSeasonBarGraph(self):
-        No = '#F94144', # Coral Red
-        Yes = '#90BE6D', # Lime Green
-        
-        figBarWeek = px.bar(self.Matches.reset_index().sort_values(['Week','Total']), x='Team',y='Total',template = 'gridiron_ink',color = "Won", barmode='stack', 
-                            title = 'Seasonal Performance', text='Week',color_continuous_scale=px.colors.diverging.Tealrose)
-        figBarWeek.update_layout( xaxis={'categoryorder':'total descending', 'title': None},
-                                 yaxis={'categoryorder':'total ascending','title': None}
-                                 )
-        
-        figBarWeek.update_layout(legend=dict(
-                orientation="h",
-                yanchor="bottom",
-                y=1.02,
-                xanchor="right",
-                x=1,
-                title = ''
-            ))
-        #Update the layout to hide the legend:
-        figBarWeek.update(layout_coloraxis_showscale=False)
-        figBarWeek = px.colors.diverging.swatches_continuous()
-        figBarWeek.add_vline(x=5.5)
-        figBarWeek.update_layout(title = dict(y=.93))
-        
-        figBarWeek.update_layout(
-                                margin=dict(t=180, b=100, l=60, r=60)  # Adjust these values as needed
-                                )
-        apply_logo_to_fig(figBarWeek, yval=-0.07)
-        return figBarWeek
-        
-    def WeekYTDTotalsPercents(self):
-        self.WeeklyWins()
-        df = self.ConcatinatedWeeks
-        df['BarName'] = df['PercentTotal'].astype(str) + '%'
-        df.groupby('Week')['Total'].sum()
-        
-        figBar = px.bar(df.sort_values('Total'), x='Week',y='Total',template = 'gridiron_ink',color = "Team", barmode='stack',text='BarName', title = f'<b>Week-by-Week Domination</b><br><sup>{self.year}</sup>')
-        figBar.update_layout(barmode='stack', xaxis={'categoryorder':'total descending'})
-        figBar.update_layout(barcornerradius=5)
-        figBar.update_layout(legend=dict(
-                orientation="v",
-                yanchor="middle",
-                y=.5,
-                xanchor="right",
-                x=1.2,
-                title = '',
-                font = dict(size = 16)
-            ))
-        figBar.update_traces(textfont_size=10, textangle=0, cliponaxis=True,insidetextanchor="middle", textposition = 'inside', textfont=dict(size=10))
-        figBar.update_layout(width=None, height=800)
-        figBar.update_layout(showlegend=True, title = dict(y= .93))
-
-            # Customize the x-axis labels
-        figBar.update_xaxes(
-                tickfont=dict(
-                    size=16,         # Font size
-                ),
-                title = None
-            )
-
-            # Customize the y-axis labels
-        figBar.update_yaxes(
-                tickfont=dict(
-                    size=18,         # Font size
-                ),
-                title=None
-            )
-        figBar.update_xaxes(dtick=1)
-        figBar.update_yaxes(dtick=200)
-        figBar.update_traces(width=.96)
-        figBar.update_traces(marker_line_width=2,marker_line_color='rgba(0,0,0,0.25)')
-
-        figBar.update_layout(
-                                margin=dict(t=120, b=100, l=60, r=100)  # Adjust these values as needed
-                                )
-        apply_logo_to_fig(figBar, xval = .57,yval=-0.07)
-
-        return figBar
-            
     def ScoreFrequencyGraph(self, WeekNum):
         figScoring = px.histogram(self.Matches[self.Matches['Week'].isin(range(0,WeekNum+1))], x='Total', template='gridiron_ink',title = 'Scoring Frequency', marginal='rug',
                                   color = 'Team', labels = 'Team', color_discrete_map=self.teamcolors)
@@ -2339,7 +2263,7 @@ class Season:
 
         return fig
 
-    def PositionStengthPolar(self):
+    def PositionStrengthPolar(self):
         self.PositionStrengthCalculator()
         
         PosistionAvg = self.Starters.groupby('position')['points'].mean()
