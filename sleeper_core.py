@@ -3313,20 +3313,20 @@ class Playoffs:
                 t2_names.append(m['team2'])
 
         fig = go.Figure([
-            go.Bar(x=labels, y=t1_vals, name='Team 1',
+            go.Bar(y=labels, x=t1_vals, name='Team 1', orientation='h',
                    marker_color='#4A90D9',
                    text=[f"{v:.1f}" for v in t1_vals], textposition='outside',
                    customdata=t1_names,
-                   hovertemplate='%{customdata}: %{y:.1f} pts<extra></extra>'),
-            go.Bar(x=labels, y=t2_vals, name='Team 2',
+                   hovertemplate='%{customdata}: %{x:.1f} pts<extra></extra>'),
+            go.Bar(y=labels, x=t2_vals, name='Team 2', orientation='h',
                    marker_color='#E8A838',
                    text=[f"{v:.1f}" for v in t2_vals], textposition='outside',
                    customdata=t2_names,
-                   hovertemplate='%{customdata}: %{y:.1f} pts<extra></extra>'),
+                   hovertemplate='%{customdata}: %{x:.1f} pts<extra></extra>'),
         ])
         fig.update_layout(template='gridiron_ink', barmode='group',
-                          title=None, yaxis_title='Points on Bench', height=420,
-                          margin=dict(t=20, b=120, l=60, r=40))
+                          title=None, xaxis_title='Points on Bench', height=420,
+                          margin=dict(t=20, b=40, l=200, r=80))
         return fig
 
 

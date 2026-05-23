@@ -1529,17 +1529,21 @@ def _tab_playoffs(year):
 
     # Analytics charts
     analytics = []
-    for fn, title, subtitle, h in [
+    for fn, title, subtitle, h, margins in [
         ('ChampionRoad',    "Champion's Road",
-         "Score vs opponent in each round on the path to the title", 320),
+         "Score vs opponent in each round on the path to the title", 320,
+         dict(t=20, b=40, l=180, r=170)),
         ('PlayoffHeatCheck','Playoff Heat Check',
-         "Did each team peak at the right time? Last 3 regular season weeks vs playoff average", 420),
+         "Did each team peak at the right time? Last 3 regular season weeks vs playoff average", 420,
+         dict(t=40, b=80, l=60, r=40)),
         ('BenchPointsLeft', 'Bench Points Left',
-         "How many points did each team leave on the bench per playoff game", 420),
+         "How many points did each team leave on the bench per playoff game", 460,
+         dict(t=20, b=40, l=200, r=100)),
     ]:
         try:
             fig = getattr(playoffs, fn)()
-            analytics.append(_card(_strip(fig, h=h), title, subtitle=subtitle))
+            _strip(fig, h=h).update_layout(margin=margins)
+            analytics.append(_card(fig, title, subtitle=subtitle))
         except Exception as e:
             traceback.print_exc()
             analytics.append(_card(_err(str(e)), title))
