@@ -1465,7 +1465,12 @@ def _tab_playoffs(year):
         return html.Div(f'Could not build playoff data: {e}', className='error-msg-card')
 
     ROUND_LABELS = {1: 'Wild Card', 2: 'Semifinals', 3: 'Championship Week'}
-    PLACE_LABELS = {1: '🏆 Championship', 3: '3rd Place', 5: '5th Place'}
+    _ico = lambda name: html.Span(className=f'playoff-icon playoff-icon--{name}')
+    PLACE_LABELS = {
+        1: [_ico('trophy'), ' Championship'],
+        3: '3rd Place',
+        5: '5th Place',
+    }
     week_start   = playoffs.playoff_week_start
 
     def _matchup_card(m, stats=True):
@@ -1500,7 +1505,7 @@ def _tab_playoffs(year):
         ]
         if stats:
             kids.append(html.Div([
-                html.Span(f"⭐ {m['best_player']}"),
+                html.Span([_ico('star'), m['best_player']]),
                 html.Span(f"Bench left: {m['bench_left']:.1f} pts"),
             ], className='playoff-stats'))
 
