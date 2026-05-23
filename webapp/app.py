@@ -499,8 +499,18 @@ def _loading_placeholder():
 
 
 def _filter_season(season, teams):
-    if season is None or not teams:
+    if season is None or teams is None:
         return season
+    if not teams:
+        # "none selected" — return a season copy with empty dataframes
+        import copy
+        s = copy.copy(season)
+        if hasattr(s, 'Matches') and s.Matches is not None:
+            s.Matches = s.Matches.iloc[0:0].copy()
+        if hasattr(s, 'BreakoutSeason') and s.BreakoutSeason is not None:
+            s.BreakoutSeason = s.BreakoutSeason.iloc[0:0].copy()
+            s.Starters = s.Starters.iloc[0:0].copy()
+        return s
     import copy
     s = copy.copy(season)
     if hasattr(s, 'Matches') and s.Matches is not None:
@@ -632,6 +642,7 @@ app.layout = html.Div([
     dcc.Store(id='store-arc-mode', data='top'),
     dcc.Store(id='store-snake-mode', data='wins'),
     dcc.Store(id='store-max-week', data=1),
+    dcc.Store(id='store-playoff-week-start', data=15),
     dcc.Store(id='store-d3-trigger', data=0),
     dcc.Interval(id='boot', interval=1500, n_intervals=0, max_intervals=60),
 
@@ -687,7 +698,7 @@ app.layout = html.Div([
                 html.Button('All',  id='btn-all',  className='btn btn--xs'),
                 html.Button('None', id='btn-none', className='btn btn--xs'),
             ], className='ctrl-team-btns'),
-            dcc.Dropdown(id='team-list', options=[], value=[], multi=True,
+            dcc.Dropdown(id='team-list', options=[], value=None, multi=True,
                          style={'display': 'none'}),
         ], className='ctrl-group ctrl-group--teams'),
 
@@ -726,11 +737,19 @@ app.layout = html.Div([
 
 # ── Callbacks ─────────────────────────────────────────────────────────────────
 
+def _playoff_week_start(year):
+    league = _data.get(year or CURRENT_YEAR, {}).get('league')
+    if league:
+        return int(league.league_settings.get('settings.playoff_week_start', 15))
+    return 15
+
+
 @app.callback(
     Output('week-slider', 'max'),
     Output('week-slider', 'value'),
     Output('store-week', 'data'),
     Output('store-max-week', 'data'),
+    Output('store-playoff-week-start', 'data'),
     Output('boot', 'disabled'),
     Output('team-list', 'value', allow_duplicate=True),
     Input('boot', 'n_intervals'),
@@ -740,15 +759,17 @@ app.layout = html.Div([
 def _boot(_, year):
     w = _weeks(year or CURRENT_YEAR)
     if not w:
-        return no_update, no_update, no_update, no_update, False, no_update  # keep polling
+        return no_update, no_update, no_update, no_update, no_update, False, no_update  # keep polling
     slider_max, default_week = _default_week(year or CURRENT_YEAR, w)
-    return slider_max, default_week, default_week, slider_max, True, []  # data ready — disable interval
+    pws = _playoff_week_start(year or CURRENT_YEAR)
+    return slider_max, default_week, default_week, slider_max, pws, True, None  # data ready — disable interval
 
 
 @app.callback(
-    Output('week-slider', 'max',         allow_duplicate=True),
-    Output('week-slider', 'value',       allow_duplicate=True),
-    Output('store-max-week', 'data',     allow_duplicate=True),
+    Output('week-slider', 'max',                allow_duplicate=True),
+    Output('week-slider', 'value',              allow_duplicate=True),
+    Output('store-max-week', 'data',            allow_duplicate=True),
+    Output('store-playoff-week-start', 'data',  allow_duplicate=True),
     Output('team-list', 'options'),
     Output('team-list', 'value'),
     Input('year-dd', 'value'),
@@ -760,9 +781,10 @@ def _year_changed(year):
         _ensure(year)
     w = _weeks(year)
     slider_max, default_week = _default_week(year, w) if w else (1, 1)
+    pws = _playoff_week_start(year)
     teams = sorted(core.roster_ids.get(year, {}).values())
     opts = [{'label': t, 'value': t} for t in teams]
-    return slider_max, default_week, slider_max, opts, []
+    return slider_max, default_week, slider_max, pws, opts, None
 
 
 @app.callback(
@@ -815,19 +837,23 @@ def _year_btn_click(n_clicks_list, id_list):
     Output('week-scrubber', 'children'),
     Input('store-max-week', 'data'),
     Input('store-week', 'data'),
+    Input('store-playoff-week-start', 'data'),
 )
-def _render_week_scrubber(max_week, current_week):
-    max_week = max_week or 18
+def _render_week_scrubber(max_week, current_week, playoff_week_start):
+    max_week = max_week or 17
     current_week = current_week or 1
-    return [
-        html.Button(
+    playoff_week_start = playoff_week_start or 15
+    items = []
+    for w in range(1, max_week + 1):
+        if w == playoff_week_start:
+            items.append(html.Span(className='week-scrubber-divider'))
+        items.append(html.Button(
             str(w),
             id={'type': 'week-btn', 'index': w},
             className='week-btn' + (' week-btn--active' if w == current_week else ''),
             n_clicks=0,
-        )
-        for w in range(1, max_week + 1)
-    ]
+        ))
+    return items
 
 
 @app.callback(
@@ -866,9 +892,8 @@ def _week_btn_click(n_clicks_list, id_list):
 )
 def _toggle_teams(_, __, year):
     if callback_context.triggered_id == 'btn-all':
-        return []
-    teams = sorted(core.roster_ids.get(year, {}).values())
-    return teams
+        return None   # None = all active
+    return []         # [] = none active
 
 
 @app.callback(
@@ -879,8 +904,8 @@ def _toggle_teams(_, __, year):
 def _render_team_chips(year, selected_teams):
     year = year or CURRENT_YEAR
     slot_colors = core.get_slot_teamcolors(year)
-    selected_set = set(selected_teams or [])
-    all_active = not selected_set
+    all_active = selected_teams is None
+    selected_set = set(selected_teams) if selected_teams else set()
 
     chips = []
     for slot, team in sorted(core.roster_ids.get(year, {}).items()):
@@ -926,19 +951,23 @@ def _toggle_team_chip(n_clicks_list, id_list, current_teams, year):
 
     year = year or CURRENT_YEAR
     all_teams = list(core.roster_ids.get(year, {}).values())
-    current = list(current_teams or [])
 
-    if not current:
-        # All visible — deselect the clicked one (show everyone else)
+    if current_teams is None:
+        # All active — deselect the clicked one (show everyone else)
         current = [t for t in all_teams if t != team]
-    elif team in current:
-        current.remove(team)
-        if not current:
-            current = []  # empty → show all
+    elif not current_teams:
+        # None active — select only the clicked one
+        current = [team]
     else:
-        current.append(team)
-        if set(current) == set(all_teams):
-            current = []  # full selection → collapse to "all"
+        current = list(current_teams)
+        if team in current:
+            current.remove(team)
+            if not current:
+                current = None  # last one removed → back to all
+        else:
+            current.append(team)
+            if set(current) == set(all_teams):
+                current = None  # all selected → collapse to "all"
 
     return current
 
