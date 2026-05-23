@@ -3326,7 +3326,7 @@ class Playoffs:
         ])
         fig.update_layout(template='gridiron_ink', barmode='group',
                           title=None, xaxis_title='Points on Bench', height=420,
-                          margin=dict(t=20, b=40, l=210, r=80))
+                          margin=dict(t=20, b=40, l=290, r=80))
         return fig
 
 
