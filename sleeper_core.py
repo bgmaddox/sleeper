@@ -3154,6 +3154,18 @@ class Playoffs:
         ]
         return float(bench['points'].sum()) if not bench.empty else 0.0
 
+    def _efficiency(self, round_num, team_name, actual_score):
+        """Lineup efficiency: actual / optimal * 100. Returns None if unavailable."""
+        week = self.playoff_week_start + round_num - 1
+        opt_df = OptimalScoresByYear.get(self.year, {}).get(week)
+        if opt_df is None or opt_df.empty or actual_score == 0:
+            return None
+        row = opt_df[opt_df['team'] == team_name]
+        if row.empty:
+            return None
+        optimal = float(row['points'].sum())
+        return round(actual_score / optimal * 100, 1) if optimal > 0 else None
+
     # ── Core processing ───────────────────────────────────────────────────────
 
     def _process_bracket(self, bracket_raw, include_stats):
@@ -3177,14 +3189,19 @@ class Playoffs:
                 w_id   = entry.get('w')
                 winner = self._team_name(w_id) if w_id is not None else None
 
+                score1 = self._score(matches_df, team1)
+                score2 = self._score(matches_df, team2)
+
                 matchup = {
-                    'match':     entry['m'],
-                    'team1':     team1,
-                    'score1':    self._score(matches_df, team1),
-                    'team2':     team2,
-                    'score2':    self._score(matches_df, team2),
-                    'winner':    winner,
-                    'placement': entry.get('p'),
+                    'match':       entry['m'],
+                    'team1':       team1,
+                    'score1':      score1,
+                    'team2':       team2,
+                    'score2':      score2,
+                    'winner':      winner,
+                    'placement':   entry.get('p'),
+                    'efficiency1': self._efficiency(round_num, team1, score1),
+                    'efficiency2': self._efficiency(round_num, team2, score2),
                 }
 
                 if include_stats:

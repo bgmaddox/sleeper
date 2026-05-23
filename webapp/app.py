@@ -1473,19 +1473,30 @@ def _tab_playoffs(year):
         t1_cls = 'playoff-team playoff-team--winner' if m['winner'] == m['team1'] else 'playoff-team playoff-team--loser'
         t2_cls = 'playoff-team playoff-team--winner' if m['winner'] == m['team2'] else 'playoff-team playoff-team--loser'
 
+        eff1 = m.get('efficiency1')
+        eff2 = m.get('efficiency2')
+        s1, s2 = m['score1'], m['score2']
+        total = s1 + s2 if s1 + s2 > 0 else 1
+
         kids = []
         if placement:
             kids.append(html.Div(PLACE_LABELS.get(placement, ''), className='playoff-placement-badge'))
         kids += [
             html.Div([
                 html.Span(m['team1'], className='playoff-team-name'),
-                html.Span(f"{m['score1']:.2f}", className='playoff-team-score'),
+                html.Span(f"{s1:.2f}", className='playoff-team-score'),
+                html.Span(f"{eff1:.0f}%" if eff1 is not None else '', className='playoff-team-eff'),
             ], className=t1_cls),
             html.Hr(className='playoff-divider'),
             html.Div([
                 html.Span(m['team2'], className='playoff-team-name'),
-                html.Span(f"{m['score2']:.2f}", className='playoff-team-score'),
+                html.Span(f"{s2:.2f}", className='playoff-team-score'),
+                html.Span(f"{eff2:.0f}%" if eff2 is not None else '', className='playoff-team-eff'),
             ], className=t2_cls),
+            html.Div([
+                html.Div(style={'flex': str(s1), 'background': 'var(--accent)' if m['winner'] == m['team1'] else 'rgba(189,226,255,0.2)'}),
+                html.Div(style={'flex': str(s2), 'background': 'var(--accent)' if m['winner'] == m['team2'] else 'rgba(189,226,255,0.2)'}),
+            ], className='playoff-score-bar'),
         ]
         if stats:
             kids.append(html.Div([
