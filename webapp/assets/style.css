@@ -1101,7 +1101,7 @@ html, body {
 .playoff-column--losers { flex: 0 0 36%; }
 .playoff-column-header { font-size: 1rem; font-weight: bold; color: var(--accent); padding: 0 0 10px; border-bottom: 2px solid var(--grid); margin-bottom: 18px; letter-spacing: 0.12em; text-transform: uppercase; }
 .playoff-round { margin-bottom: 28px; }
-.playoff-round-games { display: flex; gap: 12px; align-items: flex-start; }
+.playoff-round-games { display: flex; gap: 12px; align-items: stretch; }
 .playoff-round-games .playoff-matchup { flex: 1; min-width: 0; margin-bottom: 0; }
 .playoff-round-label { font-size: 0.8rem; color: var(--text); opacity: 0.55; text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 10px; padding-bottom: 6px; border-bottom: 1px solid var(--grid); }
 .playoff-matchup { background: #1C3C54; border: 1px solid var(--grid); border-radius: 4px; padding: 14px 16px; margin-bottom: 12px; }
