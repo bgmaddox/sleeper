@@ -847,24 +847,24 @@ html, body {
 
 .chart-title {
   font-family: var(--font-display);
-  font-size: 1.1rem;
+  font-size: 1.3rem;
   font-weight: bold;
   color: var(--accent);
   letter-spacing: 1.5px;
   text-transform: uppercase;
-  text-shadow: 0 0 10px var(--accent-glow);
-  padding: 0 6px 10px;
+  text-shadow: 0 0 14px var(--accent-glow);
+  padding: 0 6px 12px;
   border-bottom: 1px solid var(--border);
   margin-bottom: 4px;
 }
 
 .chart-subtitle {
   font-family: var(--font-main);
-  font-size: 0.72rem;
+  font-size: 0.78rem;
   color: var(--text-muted);
   letter-spacing: 0.5px;
   font-style: italic;
-  padding: 4px 6px 8px;
+  padding: 4px 6px 10px;
   margin-bottom: 2px;
 }
 
@@ -1101,6 +1101,8 @@ html, body {
 .playoff-column--losers { flex: 0 0 36%; }
 .playoff-column-header { font-size: 1rem; font-weight: bold; color: var(--accent); padding: 0 0 10px; border-bottom: 2px solid var(--grid); margin-bottom: 18px; letter-spacing: 0.12em; text-transform: uppercase; }
 .playoff-round { margin-bottom: 28px; }
+.playoff-round-games { display: flex; gap: 12px; align-items: flex-start; }
+.playoff-round-games .playoff-matchup { flex: 1; min-width: 0; margin-bottom: 0; }
 .playoff-round-label { font-size: 0.8rem; color: var(--text); opacity: 0.55; text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 10px; padding-bottom: 6px; border-bottom: 1px solid var(--grid); }
 .playoff-matchup { background: #1C3C54; border: 1px solid var(--grid); border-radius: 4px; padding: 14px 16px; margin-bottom: 12px; }
 .playoff-matchup--placement { opacity: 0.8; }

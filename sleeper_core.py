@@ -3239,9 +3239,8 @@ class Playoffs:
                    textposition='outside'),
         ])
         fig.update_layout(template='gridiron_ink', barmode='group',
-                          title=f"🏆 {champion}'s Road to the Championship",
-                          xaxis_title='Points', height=320,
-                          margin=dict(t=50, b=40, l=160, r=120))
+                          title=None, xaxis_title='Points', height=320,
+                          margin=dict(t=20, b=40, l=160, r=120))
         return fig
 
     def PlayoffHeatCheck(self):
@@ -3276,9 +3275,8 @@ class Playoffs:
                    text=[f"{v:.1f}" for v in pl_avgs], textposition='outside'),
         ])
         fig.update_layout(template='gridiron_ink', barmode='group',
-                          title='Playoff Heat Check — Final Regular Season Weeks vs Playoff Avg',
-                          yaxis_title='Avg Points', height=420,
-                          margin=dict(t=50, b=80, l=60, r=40))
+                          title=None, yaxis_title='Avg Points', height=420,
+                          margin=dict(t=20, b=80, l=60, r=40))
         return fig
 
     def BenchPointsLeft(self):
@@ -3310,9 +3308,8 @@ class Playoffs:
                    hovertemplate='%{customdata}: %{y:.1f} pts<extra></extra>'),
         ])
         fig.update_layout(template='gridiron_ink', barmode='group',
-                          title='Bench Points Left — Winners Bracket',
-                          yaxis_title='Points on Bench', height=420,
-                          margin=dict(t=50, b=120, l=60, r=40))
+                          title=None, yaxis_title='Points on Bench', height=420,
+                          margin=dict(t=20, b=120, l=60, r=40))
         return fig
 
 

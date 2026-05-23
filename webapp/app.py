@@ -1501,9 +1501,11 @@ def _tab_playoffs(year):
         for rnd in sorted(bracket):
             week  = week_start + rnd - 1
             label = f"{ROUND_LABELS.get(rnd, f'Round {rnd}')} · Week {week}"
-            cards = [html.Div(label, className='playoff-round-label')]
-            cards += [_matchup_card(m, stats) for m in bracket[rnd]]
-            col_kids.append(html.Div(cards, className='playoff-round'))
+            games = html.Div(
+                [_matchup_card(m, stats) for m in bracket[rnd]],
+                className='playoff-round-games',
+            )
+            col_kids.append(html.Div([html.Div(label, className='playoff-round-label'), games], className='playoff-round'))
         return html.Div(col_kids, className=f'playoff-column {extra_cls}'.strip())
 
     winners_col = _bracket_col(playoffs.winners, 'Winners Bracket', stats=True)
@@ -1511,17 +1513,17 @@ def _tab_playoffs(year):
 
     # Analytics charts
     analytics = []
-    for fn, title, subtitle in [
+    for fn, title, subtitle, h in [
         ('ChampionRoad',    "Champion's Road",
-         "Score vs opponent in each round on the path to the title"),
+         "Score vs opponent in each round on the path to the title", 320),
         ('PlayoffHeatCheck','Playoff Heat Check',
-         "Did each team peak at the right time? Last 3 regular season weeks vs playoff average"),
+         "Did each team peak at the right time? Last 3 regular season weeks vs playoff average", 420),
         ('BenchPointsLeft', 'Bench Points Left',
-         "How many points did each team leave on the bench per playoff game"),
+         "How many points did each team leave on the bench per playoff game", 420),
     ]:
         try:
             fig = getattr(playoffs, fn)()
-            analytics.append(_card(_strip(fig), title, subtitle=subtitle))
+            analytics.append(_card(_strip(fig, h=h), title, subtitle=subtitle))
         except Exception as e:
             traceback.print_exc()
             analytics.append(_card(_err(str(e)), title))
