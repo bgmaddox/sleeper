@@ -1115,7 +1115,8 @@ html, body {
 .playoff-team-score { font-size: 1rem; font-variant-numeric: tabular-nums; margin-left: 12px; color: var(--text); }
 .playoff-team-eff { font-size: 0.72rem; color: var(--text); opacity: 0.5; margin-left: 6px; font-family: 'Courier New', monospace; min-width: 2.8em; text-align: right; }
 .playoff-team--winner .playoff-team-eff { opacity: 0.75; }
-.playoff-score-bar { display: flex; height: 5px; border-radius: 3px; overflow: hidden; margin: 10px 0 6px; gap: 2px; }
+.playoff-score-bar { display: flex; height: 5px; border-radius: 3px; overflow: hidden; margin: 10px 0 6px; gap: 2px; position: relative; }
+.playoff-score-bar::after { content: ''; position: absolute; left: 50%; top: 0; width: 2px; height: 100%; background: var(--bg); transform: translateX(-50%); }
 .playoff-divider { border: none; border-top: 1px solid var(--grid); margin: 3px 0; }
 .playoff-stats { display: flex; justify-content: space-between; margin-top: 10px; padding-top: 8px; border-top: 1px solid var(--grid); font-size: 0.8rem; color: var(--text); opacity: 0.65; font-family: 'Courier New', monospace; gap: 8px; }
 .playoff-stats span:last-child { text-align: right; white-space: nowrap; }
