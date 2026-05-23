@@ -3298,7 +3298,7 @@ class Playoffs:
 
     def BenchPointsLeft(self):
         """Grouped bar: bench points left per team per winners-bracket game."""
-        ROUND_SHORT = {1: 'Wild Card', 2: 'Semis', 3: 'Championship'}
+        ROUND_SHORT = {1: 'WC', 2: 'Semi', 3: 'Final'}
         labels, t1_vals, t2_vals, t1_names, t2_names = [], [], [], [], []
 
         for rnd in sorted(self.winners):
@@ -3326,7 +3326,7 @@ class Playoffs:
         ])
         fig.update_layout(template='gridiron_ink', barmode='group',
                           title=None, xaxis_title='Points on Bench', height=420,
-                          margin=dict(t=20, b=40, l=200, r=80))
+                          margin=dict(t=20, b=40, l=210, r=80))
         return fig
 
 

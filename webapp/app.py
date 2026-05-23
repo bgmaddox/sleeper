@@ -1538,7 +1538,7 @@ def _tab_playoffs(year):
          dict(t=40, b=80, l=60, r=40)),
         ('BenchPointsLeft', 'Bench Points Left',
          "How many points did each team leave on the bench per playoff game", 460,
-         dict(t=20, b=40, l=200, r=100)),
+         dict(t=20, b=40, l=210, r=100)),
     ]:
         try:
             fig = getattr(playoffs, fn)()
