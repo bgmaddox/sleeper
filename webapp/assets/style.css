@@ -823,7 +823,7 @@ html, body {
 }
 
 .chart-col-full  { width: 100%; }
-.chart-col-half  { width: calc(50% - 8px); }
+.chart-col-half  { width: calc(50% - 12px); }
 
 @media (max-width: 900px) {
   .chart-col-half { width: 100%; }

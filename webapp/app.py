@@ -1595,39 +1595,6 @@ def _tab_alltime(teams, year=None):
         html.Div(id='d3-chord-container', style={'width': '100%', 'height': '700px'}),
     ], className='chart-card chart-col-full'))
 
-    # ── Phase 6: All-Time Playoff Analytics ───────────────────────────────────
-    cards.append(html.Div(
-        html.Div('Playoff History', className='section-divider-label'),
-        className='section-divider',
-    ))
-
-    try:
-        atp = core.AllTimePlayoffs()
-
-        cards.append(_playoff_records_card(atp))
-
-        _playoff_chart_meta = [
-            ('PlayoffPedigree', 'Playoff Pedigree',         True,
-             'Appearances, semifinal runs, finals, and championships — nested bars show depth of playoff success'),
-            ('PlayoffWinRate',  'Playoff Win Rate',          True,
-             'Win rate in competitive playoff rounds (placement games excluded) — min. 2 games'),
-            ('SeedingScatter',  'Does Seeding Matter?',      False,
-             'Regular season rank vs. playoff finish for every team in every season — dots above the diagonal are upsets'),
-            ('PathToGlory',     'Path to Glory',             False,
-             'Each champion\'s scoring trajectory across their three playoff rounds'),
-        ]
-        for fn, title, half, sub in _playoff_chart_meta:
-            try:
-                fig = getattr(atp, fn)()
-                cards.append(_card(fig, title, half=half, subtitle=sub))
-            except Exception as e:
-                traceback.print_exc()
-                cards.append(_card(_err(str(e)), title, half=half))
-
-    except Exception as e:
-        traceback.print_exc()
-        cards.append(_card(_err(f'Playoff data unavailable: {e}'), 'Playoff History'))
-
     return html.Div(cards, className='charts-row')
 
 
@@ -1759,9 +1726,50 @@ def _tab_playoffs(year):
             traceback.print_exc()
             analytics.append(_card(_err(str(e)), title))
 
+    # ── All-Time Playoff Analytics ────────────────────────────────────────────
+    alltime_section = []
+    alltime_section.append(html.Div(
+        html.Div('All-Time Playoff History', className='section-divider-label'),
+        className='section-divider',
+    ))
+
+    missing_years = [y for y in ALL_YEARS if y not in _data]
+    if missing_years:
+        for y in missing_years:
+            threading.Thread(target=_load_bg, args=(y,), daemon=True).start()
+        alltime_section.append(html.Div([
+            html.Div(className='loading-spinner'),
+            f'Loading {len(missing_years)} historical season(s)… switch back in a moment.',
+        ], className='loading-msg'))
+    else:
+        try:
+            atp = core.AllTimePlayoffs()
+            alltime_section.append(_playoff_records_card(atp))
+            _playoff_chart_meta = [
+                ('PlayoffPedigree', 'Playoff Pedigree',    True,
+                 'Appearances, semifinal runs, finals, and championships — nested bars show depth of playoff success'),
+                ('PlayoffWinRate',  'Playoff Win Rate',    True,
+                 'Win rate in competitive playoff rounds (placement games excluded) — min. 2 games'),
+                ('SeedingScatter',  'Does Seeding Matter?', False,
+                 'Regular season rank vs. playoff finish for every team in every season — dots above the diagonal are upsets'),
+                ('PathToGlory',     'Path to Glory',       False,
+                 "Each champion's scoring trajectory across their three playoff rounds"),
+            ]
+            for fn, title, half, sub in _playoff_chart_meta:
+                try:
+                    fig = getattr(atp, fn)()
+                    alltime_section.append(_card(fig, title, half=half, subtitle=sub))
+                except Exception as e:
+                    traceback.print_exc()
+                    alltime_section.append(_card(_err(str(e)), title, half=half))
+        except Exception as e:
+            traceback.print_exc()
+            alltime_section.append(_card(_err(f'Playoff data unavailable: {e}'), 'All-Time Playoff History'))
+
     return html.Div([
         html.Div([winners_col, losers_col], className='playoff-wrapper'),
         *analytics,
+        *alltime_section,
     ], className='charts-row')
 
 
