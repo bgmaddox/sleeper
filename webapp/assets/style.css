@@ -486,6 +486,16 @@ html, body {
 }
 .week-scrubber-row::-webkit-scrollbar { display: none; }
 
+.week-scrubber-divider {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--text-muted);
+  opacity: 0.4;
+  flex-shrink: 0;
+  margin: 0 3px;
+}
+
 .week-btn {
   display: inline-flex;
   align-items: center;
@@ -1016,6 +1026,34 @@ html, body {
 .pr-th-center { text-align: center; }
 .pr-th-bar    { width: 100%; text-align: left; }
 
+/* Sort icon triangles */
+.pr-th-sortable { cursor: pointer; user-select: none; white-space: nowrap; }
+.pr-th-sortable:hover { color: var(--text-main); }
+.pr-sort {
+  display: inline-flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-left: 5px;
+  vertical-align: middle;
+  line-height: 1;
+}
+.pr-sort-up, .pr-sort-dn {
+  display: block;
+  width: 0; height: 0;
+}
+.pr-sort-up {
+  border-left: 4px solid transparent;
+  border-right: 4px solid transparent;
+  border-bottom: 5px solid var(--border);
+}
+.pr-sort-dn {
+  border-left: 4px solid transparent;
+  border-right: 4px solid transparent;
+  border-top: 5px solid var(--border);
+}
+.pr-th-sorted-asc  .pr-sort-up { border-bottom-color: var(--text-main); }
+.pr-th-sorted-desc .pr-sort-dn { border-top-color: var(--text-main); }
+
 .pr-td {
   padding: 8px 10px;
   white-space: nowrap;
@@ -1027,6 +1065,8 @@ html, body {
 .pr-data-row:hover td { background: rgba(84, 162, 229, 0.07); }
 
 .pr-td-rank  { text-align: center; font-weight: bold; line-height: 1; }
+.pr-td-pwrrank { text-align: center; font-size: 0.78rem; color: var(--text-muted); }
+.pr-th-pwrrank { color: var(--text-muted) !important; }
 .pr-td-chg   { text-align: center; font-size: 0.72rem; font-weight: bold; }
 .pr-td-team  { font-size: 0.95rem; font-weight: bold; letter-spacing: 0.5px;
                max-width: 180px; overflow: hidden; text-overflow: ellipsis; }
@@ -1069,7 +1109,8 @@ html, body {
   .pr-th-streak, .pr-td-streak,
   .pr-th-pf,     .pr-td-pf,
   .pr-th-vsavg,  .pr-td-vsavg,
-  .pr-th-vsleague, .pr-td-vsleague { display: none; }
+  .pr-th-vsleague, .pr-td-vsleague,
+  .pr-th-pwrrank, .pr-td-pwrrank { display: none; }
 }
 
 /* ── Bootstrap row shim (Dash uses row/col classes) ─────────────────────── */

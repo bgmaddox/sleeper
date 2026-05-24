@@ -1,8 +1,8 @@
 # Legacy League Webapp — Development Roadmap
 
 **Created:** 2026-05-21  
-**Last updated:** 2026-05-21 (end of session)  
-**Status:** Active — Phase 3 is next  
+**Last updated:** 2026-05-23  
+**Status:** Active — Phase 4 complete; Phase 6 planned next; Phase 3/5 deferred  
 **Supersedes:** `design/fix-plan.md` (all tasks complete as of commit `41094a3`)
 
 This document is the single source of truth for planned work. Update status inline as tasks complete.
@@ -274,7 +274,7 @@ Subtitle updated to mention the by-position option. Callback branches on `mode i
 
 ---
 
-## Phase 3 — API & Data Robustness (Current)
+## Phase 3 — API & Data Robustness (deferred — see Phase 6 for next active work)
 
 Deeper improvements to data quality, matching, and future-proofing.
 
@@ -394,7 +394,7 @@ leagueNumbers_Dict = {2019: ..., 2020: ..., ..., 2025: ...}
 
 ---
 
-## Phase 4 — Playoffs Tab (Current)
+## Phase 4 — Playoffs Tab ✅ COMPLETE
 
 **Goal:** New "Playoffs" tab with matchup cards for winners and losers brackets, plus analytics charts for the winners bracket.
 
@@ -427,78 +427,55 @@ leagueNumbers_Dict = {2019: ..., 2020: ..., ..., 2025: ...}
 
 ### Task 4A — Add bracket fetchers to data_loader ✅ DONE
 
-**File:** `data_loader.py`
-
-Added `fetch_winners_bracket(league_id)` and `fetch_losers_bracket(league_id)` — same cached GET pattern as other fetchers.
+Added `fetch_winners_bracket(league_id)` and `fetch_losers_bracket(league_id)`.
 
 ---
 
-### Task 4B — Playoff processing in sleeper_core.py
+### Task 4B — Playoff processing in sleeper_core.py ✅ DONE
 
-**File:** `sleeper_core.py`
-
-Add a `Playoffs` class (or methods on `Season`) that:
-1. Reads `playoff_week_start` from `league_json['settings']` — no hardcoding
-2. Fetches winners and losers bracket JSON via data_loader
-3. Resolves `t1_from`/`t2_from` references (winner/loser of match X) to actual roster IDs
-4. Maps roster IDs → team names via `roster_ids[year]`
-5. Joins scores from `AllMatchesDict[year][week]` for playoff weeks
-6. Joins best player and bench points from `AllBreakoutDict[year][week]` for winners bracket
-7. Produces two structured dicts — one per bracket — keyed by round then match:
-   ```python
-   {
-     1: [{'match': 1, 'team1': 'Brett', 'score1': 142.3, 'team2': 'Kyle', 'score2': 138.1, 'winner': 'Brett', 'best_player': 'CeeDee Lamb (38.2)', 'bench_left': 24.1}],
-     2: [...],
-     3: [...]
-   }
-   ```
-
-**Scores join note:** `AllMatchesDict[year][week]` has one row per matchup with `Team`, `Score`, `matchup_id`. Join by matching both roster IDs in the bracket entry to the same `matchup_id` in that week's dataframe.
+`Playoffs` class added to `sleeper_core.py`. Reads `playoff_week_start` from league settings, resolves `t1_from`/`t2_from` refs, maps roster IDs → team names, joins scores from `AllMatchesDict`, joins best player and bench points from `AllBreakoutDict`.
 
 ---
 
-### Task 4C — Winners bracket cards (app.py)
+### Task 4C — Winners bracket cards ✅ DONE
 
-**File:** `webapp/app.py` — new `_tab_playoffs()` function
-
-Two-column layout. Left column: winners bracket cards, 3 rounds stacked top-to-bottom.
-
-Each card shows:
-- Team names and scores, winner highlighted
-- Round label (Wild Card / Semifinals / Championship)
-- Placement label for p=3/p=5 games (3rd Place / 5th Place)
-- Best player of the game (name + points)
-- Bench points left (starter points that were available on bench)
-
-Round 2 has 3 cards — lay them out as: [Semi 1] [Semi 2] [5th Place] or stack vertically.
+Two-column bracket layout in `_tab_playoffs()`. Winners bracket (left): team names/scores, winner highlighted, round labels, best player, bench points left, lineup efficiency bar, score differential bar. SVG icons (star = best player, trophy = champion) via CSS mask-image technique.
 
 ---
 
-### Task 4D — Losers bracket cards (app.py)
+### Task 4D — Losers bracket cards ✅ DONE
 
-**File:** `webapp/app.py` — within `_tab_playoffs()`
-
-Right column alongside winners bracket. Same card component but minimal:
-- Team names and scores only
-- Winner highlighted
-- Round label
-
-No best player, no bench points.
+Right column: team names, scores, winner highlighted, round label. No best player or bench detail.
 
 ---
 
-### Task 4E — Analytics charts (sleeper_core.py + app.py)
+### Task 4E — Analytics charts ✅ DONE
 
-**File:** `sleeper_core.py` — chart methods on `Playoffs` class  
-**File:** `webapp/app.py` — render below bracket cards
+Three charts below bracket cards (winners bracket only):
+1. **Champion's Road** — horizontal bar, champion vs. opponent score by round
+2. **Playoff Heat Check** — last 3 regular season weeks avg vs. playoff avg, grouped bar
+3. **Bench Points Left** — horizontal bar, bench points stranded per team per game
 
-Three charts, winners bracket only:
+**Additional work beyond original spec (all committed in `7373411` and earlier):**
+- Dynamic week scrubber: week buttons derived from actual league data; visual separator between regular season and playoff weeks; orphaned phantom weeks (Sleeper returns matchup_id=None entries after season ends) trimmed in both fresh loads and cached data in `data_loader.py`
+- Team chip filter: fixed three initialization points (dcc.Dropdown value, `_boot` callback, `_year_changed` callback) to use `None` (all teams active / unfiltered) instead of `[]`; established consistent `None` = pass-through vs. `[]` = empty result paradigm in `_filter_season`
+- Playoff bracket UI polish: horizontal matchup card layout, proportional score bar with centerline tick, card height standardization, y-axis label clipping fixes across all three analytics charts, abbreviated round names for BenchPointsLeft
 
-1. **Champion's road** — horizontal bar chart showing the champion's score in each round vs. their opponent's score. One set of bars per round (3 rounds).
+---
 
-2. **Playoff heat check** — for each playoff team, their average points in last 3 regular season weeks (weeks 12–14) vs. their playoff average. Grouped bar chart. Shows who peaked at the right time.
+## This Week Tab — Power Rankings Enhancements ⚠️ UNCOMMITTED
 
-3. **Bench points left** — per playoff game across both brackets (winners only), how many points were left on each team's bench. Stacked or grouped bar, one bar per team per game.
+Work completed 2026-05-23. Changes in `webapp/app.py`, `webapp/assets/style.css`, and new `webapp/assets/tablesort.js`.
+
+### Standings Rank column
+Added a `Rank` column (leftmost) showing each team's actual league standings position — sorted by wins descending, then season points-for as tiebreaker. Gold/silver/bronze medal colors for top 3. The existing `#` column was relabeled `Pwr` (power rank) and rendered in smaller muted text to signal it's the derived/secondary metric.
+
+### Sortable column headers
+All columns except the change indicator (↑/↓) and Streak now have click-to-sort behavior:
+- Headers show stacked CSS border-triangle icons (▲▼) in `var(--border)` muted color; the active sort direction highlights in `var(--text-main)` blue
+- Each `<td>` carries a `data-val` attribute with its raw numeric (or string) sort value
+- `webapp/assets/tablesort.js` — new file; uses `MutationObserver` to re-attach click handlers after each Dash re-render so sorting survives year/week changes without any Dash callbacks
+- String sort supported via `data-sort-type="str"` on the Team column
 
 ---
 
@@ -537,6 +514,154 @@ Three charts, winners bracket only:
 - Review and update the existing `SideBet` class — much of it may be out of date with the current data schema
 - Confirm `leagueNumbers_Dict` has all years needed for transaction history pull
 - Transaction data must be fetched for all 18 weeks × 7 seasons = 126 API calls on first load (all cached after that)
+
+---
+
+## Phase 6 — All-Time Playoff Analytics
+
+**Goal:** Add five playoff-specific charts to the All-Time tab, aggregating bracket and score data across all seasons (2019–2025).
+
+**Where they live:** Bottom of the All-Time tab, below the existing hall-of-fame / records cards. No new tab needed.
+
+**Data dependency:** Each year's bracket data is already fetchable via `data_loader.fetch_winners_bracket(league_id)` and `fetch_losers_bracket(league_id)` (Task 4A). Playoff week scores are in `AllMatchesDict[year][week]` for playoff weeks. The `Playoffs` class (Phase 4B) handles a single year — Phase 6 needs a multi-year aggregation layer.
+
+---
+
+### Task 6A — AllTimePlayoffs aggregator in sleeper_core.py
+
+**File:** `sleeper_core.py` — new method(s) on or alongside `AllTime`
+
+This is the data foundation all five charts depend on. Build a function (or `AllTime` method) that iterates over all available years and produces two flat dataframes:
+
+**`playoff_results` dataframe** — one row per team per playoff appearance:
+```
+year | team | reg_season_rank | playoff_seed | round_exit | placement | wins | losses | scores_by_round
+```
+- `reg_season_rank`: standings rank at end of regular season (wins then PF — same logic as the power rankings table Rank column)
+- `playoff_seed`: position in bracket (1–6 for 6-team format)
+- `round_exit`: last round played (1=wild card, 2=semis, 3=finals)
+- `placement`: final finish (1=champion, 2=runner-up, 3=3rd, etc.)
+- `scores_by_round`: list of scores per round played
+
+**`playoff_games` dataframe** — one row per team per playoff game:
+```
+year | week | round | match | team | score | opponent | opp_score | won | placement_game | bracket
+```
+- `bracket`: "winners" or "losers"
+- `placement_game`: True if this was a 3rd/5th place game
+
+**Implementation notes:**
+- Use `roster_ids[year]` to map roster numbers → team names
+- Resolve `t1_from`/`t2_from` references same way the existing `Playoffs` class does
+- Scores come from `AllMatchesDict[year][week]` — match teams by `matchup_id` within each playoff week
+- Teams that didn't make the playoffs in a given year simply have no row for that year
+- Handle years where bracket data may be incomplete (e.g., in-progress season) gracefully with a try/except and skip
+
+**Verify:** `playoff_results` has one row per team per year they made playoffs. `playoff_games` has two rows per game (one per team). Cross-check: total games in `playoff_games` for a 6-team bracket = 7 winners + 7 losers = 14 per year.
+
+---
+
+### Task 6B — Chart 1: Playoff Appearances Leaderboard
+
+**Type:** Horizontal grouped bar chart  
+**Data source:** `playoff_results` — group by `team`, count appearances / semifinal appearances (round_exit >= 2) / championship appearances (round_exit == 3) / wins (placement == 1)  
+**File:** `sleeper_core.py` — new chart method; `webapp/app.py` — add to `_tab_alltime()`
+
+**Design:**
+- Y axis: manager names, sorted by total appearances descending
+- X axis: count (0–7 max, one per season)
+- Four bars per manager: appearances (muted), semifinals (medium), finals appearances (bright), championships (gold `#FFC300`)
+- Legend below chart
+- Title: "Playoff Pedigree"
+
+**Edge cases:** Managers who've never made the playoffs don't appear. If the same person has used different display names across years (unlikely but possible), they'll show as separate entries — acceptable for now.
+
+---
+
+### Task 6C — Chart 2: Playoff Win Rate
+
+**Type:** Horizontal bar chart  
+**Data source:** `playoff_games` — for each team, `wins / (wins + losses)` in non-placement games (placement games skew the stat since both teams "lost" to get there)  
+**File:** `sleeper_core.py` — new chart method; `webapp/app.py` — add to `_tab_alltime()`
+
+**Design:**
+- Y axis: manager names, sorted by win rate descending
+- X axis: win rate (0–1, formatted as %)
+- Bar annotated with raw record (e.g., "4-2") at end of bar
+- Color: gradient or threshold-based (≥ 0.60 green, 0.40–0.59 yellow, < 0.40 red)
+- Minimum 2 games played to appear (filters out managers with only 1 playoff game)
+- Title: "Playoff Win Rate"
+- Subtitle: "Winners and losers bracket, placement games excluded"
+
+---
+
+### Task 6D — Chart 3: Regular Season Rank vs. Playoff Finish
+
+**Type:** Scatter plot  
+**Data source:** `playoff_results` — one dot per (year, team) pair  
+**File:** `sleeper_core.py` — new chart method; `webapp/app.py` — add to `_tab_alltime()`
+
+**Design:**
+- X axis: regular season rank (1–12, inverted so 1 is on left — best seed on left)
+- Y axis: playoff placement (1–6, inverted so 1 is at top — champion on top)
+- Each dot colored by team (use `teamcolors`)
+- Dot annotated with year (small font) or revealed on hover
+- Reference diagonal line showing "finished where seeded" — deviations above it are upsets
+- Title: "Does Seeding Matter?"
+- Subtitle: "Regular season rank vs. playoff finish, all seasons"
+
+**Note:** Only the 6 playoff participants per year appear. Regular season rank uses the same wins-then-PF tiebreaker as the power rankings Rank column.
+
+---
+
+### Task 6E — Chart 4: Playoff Records Card
+
+**Type:** Native HTML card (same pattern as existing All-Time records cards)  
+**Data source:** `playoff_games`  
+**File:** `webapp/app.py` — new `_playoff_records_card()` helper; add to `_tab_alltime()`
+
+**Records to surface:**
+| Stat | Description |
+|------|-------------|
+| Highest playoff score | Best single-game score in any playoff matchup |
+| Lowest playoff score | Worst score in a playoff win (survived despite low score) |
+| Biggest blowout | Largest margin of victory in a playoff game |
+| Closest game | Smallest winning margin in a playoff game |
+| Most playoff wins all-time | Manager with most total wins across all playoff appearances |
+| Most championships | Manager with most titles (could tie with Chart 1 but shows prominently here) |
+
+**Design:** Matches the existing `_digest` / league digest card aesthetic — grid of stat pills, monospace font, team color accents on the team names.
+
+---
+
+### Task 6F — Chart 5: Championship Road Scores
+
+**Type:** Grouped bar chart  
+**Data source:** `playoff_results` filtered to `placement == 1`; scores from `playoff_games`  
+**File:** `sleeper_core.py` — new chart method; `webapp/app.py` — add to `_tab_alltime()`
+
+**Design:**
+- X axis: playoff round (Wild Card / Semis / Championship) — 3 groups
+- Y axis: points scored
+- One bar pair per year: champion score (colored by team) + opponent score (muted gray)
+- Bars within each round grouped by year
+- Champion's bar labeled with their name + year
+- Title: "Path to Glory"
+- Subtitle: "Champion scores by round, all seasons"
+
+**Alternative if grouped bars get too crowded (7 years × 3 rounds):** Facet by round (3 small charts side by side), one bar per year within each facet. Decide after seeing how dense it looks.
+
+---
+
+### Layout in All-Time tab
+
+Add a section header ("Playoff History") dividing the existing records cards from the new playoff charts. Order:
+
+1. Playoff Records Card (6E) — top, full width, quick visual hit
+2. Playoff Appearances Leaderboard (6B) — half width left
+3. Playoff Win Rate (6C) — half width right
+4. Regular Season Rank vs. Playoff Finish (6D) — full width
+5. Championship Road Scores (6F) — full width, bottom
 
 ---
 

@@ -406,23 +406,48 @@ def _power_rankings_native(sf, week_obj):
         recent = grp.tail(3)['Won'].tolist()
         streak_map[team] = ''.join('W' if w else 'L' for w in recent)
 
+    # Standings rank: wins desc, then season PF desc as tiebreaker
+    all_teams = list(Scores.keys())
+    standings_order = sorted(
+        all_teams,
+        key=lambda t: (
+            -(int(rec.loc[t, 'wins']) if t in rec.index else 0),
+            -pf_map.get(t, 0)
+        )
+    )
+    srank = {t: i + 1 for i, t in enumerate(standings_order)}
+
     teams = sorted(Scores.keys(), key=lambda t: Ranks[t])
 
     RANK_COLORS = {1: '#FFC300', 2: '#A8BCC8', 3: '#CD8C52'}
 
+    def _sort_th(label, col_idx, extra_cls=''):
+        """Header cell with sort toggle icon."""
+        return html.Th(
+            [label, html.Span([
+                html.Span(className='pr-sort-up'),
+                html.Span(className='pr-sort-dn'),
+            ], className='pr-sort')],
+            className=f'pr-th pr-th-sortable {extra_cls}'.strip(),
+            **{'data-sortcol': str(col_idx)},
+        )
+
+    # Col indices: 0=Rank 1=Pwr 2=chg(nosort) 3=Team 4=Score 5=Margin
+    #              6=Efficiency 7=Record 8=Streak(nosort) 9=SsnPF 10=vsAvg 11=vsLeague 12=PwrWin%
     thead = html.Thead(html.Tr([
-        html.Th('#',          className='pr-th pr-th-center'),
-        html.Th('',           className='pr-th'),
-        html.Th('Team',       className='pr-th'),
-        html.Th('Score',      className='pr-th pr-th-right'),
-        html.Th('Margin',     className='pr-th pr-th-right pr-th-margin'),
-        html.Th('Efficiency', className='pr-th pr-th-bar'),
-        html.Th('Record',     className='pr-th pr-th-center'),
-        html.Th('Streak',     className='pr-th pr-th-center pr-th-streak'),
-        html.Th('Ssn PF',     className='pr-th pr-th-right pr-th-pf'),
-        html.Th('vs Avg',     className='pr-th pr-th-right pr-th-vsavg'),
-        html.Th('vs League',  className='pr-th pr-th-right pr-th-vsleague'),
-        html.Th('Pwr Win%',   className='pr-th pr-th-right'),
+        _sort_th('Rank',       0,  'pr-th-center'),
+        _sort_th('Pwr',        1,  'pr-th-center pr-th-pwrrank'),
+        html.Th('',            className='pr-th'),
+        _sort_th('Team',       3,  ''),
+        _sort_th('Score',      4,  'pr-th-right'),
+        _sort_th('Margin',     5,  'pr-th-right pr-th-margin'),
+        _sort_th('Efficiency', 6,  'pr-th-bar'),
+        _sort_th('Record',     7,  'pr-th-center'),
+        html.Th('Streak',      className='pr-th pr-th-center pr-th-streak'),
+        _sort_th('Ssn PF',     9,  'pr-th-right pr-th-pf'),
+        _sort_th('vs Avg',     10, 'pr-th-right pr-th-vsavg'),
+        _sort_th('vs League',  11, 'pr-th-right pr-th-vsleague'),
+        _sort_th('Pwr Win%',   12, 'pr-th-right'),
     ]))
 
     def _delta_el(val):
@@ -439,13 +464,15 @@ def _power_rankings_native(sf, week_obj):
         opt   = Optimal.get(team, score)
         pct   = PowerPcts[team]
         color = sf.teamcolors.get(team, '#BDE2FF')
-        rank_color = RANK_COLORS.get(rank, '#BDE2FF')
 
         wins   = int(rec.loc[team, 'wins'])   if team in rec.index else 0
         losses = int(rec.loc[team, 'losses']) if team in rec.index else 0
         ssn_pf = pf_map.get(team, 0)
         margin = margin_map.get(team, 0)
         streak = streak_map.get(team, '')
+
+        sr = srank[team]
+        sr_color = RANK_COLORS.get(sr, '#BDE2FF')
 
         delta = prev - rank
         if delta > 0:
@@ -461,33 +488,45 @@ def _power_rankings_native(sf, week_obj):
                      '#E6DB74' if eff >= 0.70 else '#F94144')
 
         data_rows.append(html.Tr([
-            html.Td(str(rank), className='pr-td pr-td-rank',
-                    style={'color': rank_color,
-                           'fontSize': '1.35rem' if rank <= 3 else '1.1rem'}),
+            html.Td(str(sr), className='pr-td pr-td-rank',
+                    style={'color': sr_color,
+                           'fontSize': '1.35rem' if sr <= 3 else '1.1rem'},
+                    **{'data-val': str(sr)}),
+            html.Td(str(rank), className='pr-td pr-td-center pr-td-pwrrank',
+                    **{'data-val': str(rank)}),
             html.Td(chg_el,  className='pr-td pr-td-chg'),
-            html.Td(team,    className='pr-td pr-td-team', style={'color': color}),
-            html.Td(f'{score:.1f}', className='pr-td pr-td-score'),
-            html.Td(_delta_el(margin), className='pr-td pr-td-right pr-td-margin'),
+            html.Td(team,    className='pr-td pr-td-team', style={'color': color},
+                    **{'data-val': team, 'data-sort-type': 'str'}),
+            html.Td(f'{score:.1f}', className='pr-td pr-td-score',
+                    **{'data-val': str(score)}),
+            html.Td(_delta_el(margin), className='pr-td pr-td-right pr-td-margin',
+                    **{'data-val': str(margin)}),
             html.Td(html.Div([
                 html.Div(className='pr-bar-fill',
                          style={'width': f'{eff_pct:.0f}%', 'background': bar_color}),
                 html.Span(f'{eff_pct:.0f}%', className='pr-bar-label'),
-            ], className='pr-bar-wrap'), className='pr-td pr-td-bar'),
-            html.Td(f'{wins}-{losses}', className='pr-td pr-td-center'),
+            ], className='pr-bar-wrap'), className='pr-td pr-td-bar',
+                    **{'data-val': str(round(eff_pct, 1))}),
+            html.Td(f'{wins}-{losses}', className='pr-td pr-td-center',
+                    **{'data-val': str(wins)}),
             html.Td([
                 html.Span(ch, style={'color': '#90BE6D' if ch == 'W' else '#F94144'})
                 for ch in streak
             ], className='pr-td pr-td-center pr-td-streak', style={'letterSpacing': '2px'}),
-            html.Td(f'{ssn_pf:.1f}',          className='pr-td pr-td-right pr-td-pf'),
-            html.Td(_delta_el(score - avg),    className='pr-td pr-td-right pr-td-vsavg'),
-            html.Td(_delta_el(score - LeagueAvg), className='pr-td pr-td-right pr-td-vsleague'),
-            html.Td(f'{pct:.0%}', className='pr-td pr-td-right pr-td-muted'),
+            html.Td(f'{ssn_pf:.1f}', className='pr-td pr-td-right pr-td-pf',
+                    **{'data-val': str(ssn_pf)}),
+            html.Td(_delta_el(score - avg), className='pr-td pr-td-right pr-td-vsavg',
+                    **{'data-val': str(round(score - avg, 1))}),
+            html.Td(_delta_el(score - LeagueAvg), className='pr-td pr-td-right pr-td-vsleague',
+                    **{'data-val': str(round(score - LeagueAvg, 1))}),
+            html.Td(f'{pct:.0%}', className='pr-td pr-td-right pr-td-muted',
+                    **{'data-val': str(round(pct, 4))}),
         ], className='pr-data-row'))
 
     return html.Div([
         html.Div('Power Rankings', className='chart-title'),
         html.Div('Composite rank built from record, points for, and strength of schedule through this week', className='chart-subtitle'),
-        html.Table([thead, html.Tbody(data_rows)], className='pr-table'),
+        html.Table([thead, html.Tbody(data_rows)], id='pr-table', className='pr-table'),
     ], className='chart-card chart-col-full')
 
 

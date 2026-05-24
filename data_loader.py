@@ -141,6 +141,14 @@ def load_data_for_year(year: int, max_week: int = 18, verbose: bool = True):
     if cached is not None:
         if verbose:
             print(f"[cache] Loaded {year} from disk.")
+        # Trim trailing weeks with no actual matchups (matchup_id=None for all entries).
+        # Fixes caches built before this check existed (e.g. 2021–2024 with phantom week 18).
+        for wk_num in sorted(cached["weeks"].keys(), reverse=True):
+            wk = cached["weeks"][wk_num]
+            if wk.json and all(m.get('matchup_id') is None for m in wk.json):
+                del cached["weeks"][wk_num]
+            else:
+                break
         # Restore global dicts so Season methods work
         core.AllMatchesDict[year].update(cached["matches_snap"])
         core.AllBreakoutDict[year].update(cached["breakout_snap"])
@@ -161,6 +169,10 @@ def load_data_for_year(year: int, max_week: int = 18, verbose: bool = True):
             wk = core.Week(w, league_obj)
             # Only keep weeks that have data (empty matchup JSON = season hasn't reached that week)
             if not wk.json:
+                break
+            # Skip weeks where every entry has matchup_id=None (Sleeper returns roster
+            # score data for all NFL weeks even after the fantasy season ends)
+            if all(m.get('matchup_id') is None for m in wk.json):
                 break
             weeks_dict[w] = wk
         except Exception as e:
