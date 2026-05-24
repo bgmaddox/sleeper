@@ -3330,6 +3330,335 @@ class Playoffs:
         return fig
 
 
+class AllTimePlayoffs:
+    """
+    Aggregates winners-bracket playoff data across all available seasons.
+
+    Attributes:
+        playoff_results  — one row per team per year they made the playoffs
+        playoff_games    — one row per team per playoff game (both brackets)
+    """
+
+    def __init__(self):
+        import data_loader as dl
+        self._build(dl)
+
+    # ── Data helpers ──────────────────────────────────────────────────────────
+
+    @staticmethod
+    def _get_score(matches_df, team_name):
+        if matches_df.empty:
+            return 0.0
+        row = matches_df[matches_df['Team'] == team_name]
+        return float(row['Total'].iloc[0]) if not row.empty else 0.0
+
+    def _process_year(self, year, league_id, dl, results_rows, games_rows):
+        league_json = dl.fetch_league_json(league_id)
+        playoff_week_start = int(
+            league_json.get('settings', {}).get('playoff_week_start', 15)
+        )
+        roster_map = {int(k): v for k, v in roster_ids[year].items()}
+
+        # Regular season standings (wins → PF tiebreaker)
+        reg_weeks_data = {wk: df for wk, df in AllMatchesDict.get(year, {}).items()
+                          if wk < playoff_week_start and not df.empty}
+        if not reg_weeks_data:
+            return
+
+        all_reg = pd.concat(list(reg_weeks_data.values()), ignore_index=True)
+        rec = all_reg.groupby('Team').agg(wins=('Won', 'sum'), total_pf=('Total', 'sum'))
+        standings_order = sorted(
+            rec.index,
+            key=lambda t: (-rec.loc[t, 'wins'], -rec.loc[t, 'total_pf'])
+        )
+        reg_rank = {t: i + 1 for i, t in enumerate(standings_order)}
+
+        winners_raw = dl.fetch_winners_bracket(league_id)
+        losers_raw  = dl.fetch_losers_bracket(league_id)
+
+        # Process both brackets into flat game rows
+        year_games = []
+        for bracket_raw, bracket_name in [(winners_raw, 'winners'), (losers_raw, 'losers')]:
+            by_round = {}
+            for entry in bracket_raw:
+                by_round.setdefault(entry['r'], []).append(entry)
+
+            for rnd, entries in sorted(by_round.items()):
+                week = playoff_week_start + rnd - 1
+                matches_df = AllMatchesDict.get(year, {}).get(week, pd.DataFrame())
+
+                for entry in entries:
+                    t1_id = entry.get('t1')
+                    t2_id = entry.get('t2')
+                    if t1_id is None or t2_id is None:
+                        continue  # in-progress / unresolved
+
+                    team1 = roster_map.get(int(t1_id), f"Roster {t1_id}")
+                    team2 = roster_map.get(int(t2_id), f"Roster {t2_id}")
+                    w_id  = entry.get('w')
+                    winner = roster_map.get(int(w_id)) if w_id else None
+                    is_placement = entry.get('p') is not None
+
+                    score1 = self._get_score(matches_df, team1)
+                    score2 = self._get_score(matches_df, team2)
+
+                    for team, score, opp, opp_score in [
+                        (team1, score1, team2, score2),
+                        (team2, score2, team1, score1),
+                    ]:
+                        year_games.append({
+                            'year': year, 'week': week, 'round': rnd,
+                            'match_id': entry['m'],
+                            'team': team, 'score': score,
+                            'opponent': opp, 'opp_score': opp_score,
+                            'won': winner == team,
+                            'bracket': bracket_name,
+                            'placement_game': is_placement,
+                        })
+
+        games_rows.extend(year_games)
+
+        # Collect all winners-bracket participants
+        winners_teams = set()
+        for entry in winners_raw:
+            for key in ('t1', 't2'):
+                rid = entry.get(key)
+                if rid is not None:
+                    winners_teams.add(roster_map.get(int(rid), str(rid)))
+
+        # Placement from placement-game entries (p=1 → 1st/2nd, p=3 → 3rd/4th, p=5 → 5th/6th)
+        placement_map = {}
+        for entry in winners_raw:
+            p   = entry.get('p')
+            w_id = entry.get('w')
+            l_id = entry.get('l')
+            if p is not None and w_id and l_id:
+                placement_map[roster_map.get(int(w_id))] = p
+                placement_map[roster_map.get(int(l_id))] = p + 1
+
+        # Per-team stats from this year's winners games
+        winner_year_games = [g for g in year_games if g['bracket'] == 'winners']
+        team_stats = {}
+        for g in winner_year_games:
+            t = g['team']
+            if t not in team_stats:
+                team_stats[t] = {'wins': 0, 'losses': 0, 'rounds': set()}
+            team_stats[t]['rounds'].add(g['round'])
+            if g['won']:
+                team_stats[t]['wins'] += 1
+            elif not g['placement_game']:
+                team_stats[t]['losses'] += 1
+
+        for team in winners_teams:
+            s = team_stats.get(team, {'wins': 0, 'losses': 0, 'rounds': set()})
+            results_rows.append({
+                'year': year,
+                'team': team,
+                'reg_season_rank': reg_rank.get(team, 999),
+                'round_exit': max(s['rounds']) if s.get('rounds') else 0,
+                'placement': placement_map.get(team),
+                'wins': s['wins'],
+                'losses': s['losses'],
+            })
+
+    def _build(self, dl):
+        results_rows, games_rows = [], []
+        for year in AVAILABLE_YEARS:
+            league_id = leagueNumbers_Dict.get(year)
+            if not league_id:
+                continue
+            try:
+                self._process_year(year, league_id, dl, results_rows, games_rows)
+            except Exception as e:
+                print(f"[AllTimePlayoffs] Skipping {year}: {e}")
+
+        _empty_results = pd.DataFrame(columns=[
+            'year', 'team', 'reg_season_rank', 'round_exit', 'placement', 'wins', 'losses'])
+        _empty_games = pd.DataFrame(columns=[
+            'year', 'week', 'round', 'match_id', 'team', 'score',
+            'opponent', 'opp_score', 'won', 'bracket', 'placement_game'])
+
+        self.playoff_results = pd.DataFrame(results_rows) if results_rows else _empty_results
+        self.playoff_games   = pd.DataFrame(games_rows)   if games_rows   else _empty_games
+
+    # ── 6B: Playoff Pedigree ──────────────────────────────────────────────────
+
+    def PlayoffPedigree(self):
+        """Horizontal overlay bar: appearances / semis / finals / championships."""
+        if self.playoff_results.empty:
+            return go.Figure()
+
+        df = self.playoff_results.copy()
+        teams_ordered = (df.groupby('team').size()
+                           .sort_values(ascending=True).index.tolist())
+
+        rows = []
+        for team in teams_ordered:
+            t = df[df['team'] == team]
+            rows.append({
+                'team': team,
+                'appearances': len(t),
+                'semis':  int((t['round_exit'] >= 2).sum()),
+                'finals': int((t['round_exit'] >= 3).sum()),
+                'champs': int((t['placement'] == 1).sum()),
+            })
+        stats = pd.DataFrame(rows)
+
+        fig = go.Figure([
+            go.Bar(name='Appearances',   y=stats['team'], x=stats['appearances'],
+                   orientation='h', marker_color='rgba(61,94,120,0.9)',   width=0.6),
+            go.Bar(name='Semifinals+',   y=stats['team'], x=stats['semis'],
+                   orientation='h', marker_color='rgba(84,162,229,0.85)', width=0.45),
+            go.Bar(name='Finals',        y=stats['team'], x=stats['finals'],
+                   orientation='h', marker_color='rgba(189,226,255,0.9)', width=0.3),
+            go.Bar(name='Championships', y=stats['team'], x=stats['champs'],
+                   orientation='h', marker_color='#FFC300',               width=0.15),
+        ])
+        fig.update_layout(
+            template='gridiron_ink', barmode='overlay',
+            height=420, margin=dict(t=20, b=20, l=150, r=60),
+            xaxis=dict(title='Count', dtick=1,
+                       range=[0, stats['appearances'].max() + 0.8]),
+            legend=dict(orientation='h', y=-0.08, x=0.5, xanchor='center'),
+        )
+        return fig
+
+    # ── 6C: Playoff Win Rate ──────────────────────────────────────────────────
+
+    def PlayoffWinRate(self):
+        """Horizontal bar: playoff win rate per manager (competitive rounds only)."""
+        if self.playoff_games.empty:
+            return go.Figure()
+
+        comp = self.playoff_games[
+            (self.playoff_games['bracket'] == 'winners') &
+            (~self.playoff_games['placement_game'])
+        ].copy()
+
+        stats = comp.groupby('team').agg(wins=('won', 'sum'), games=('won', 'count'))
+        stats = stats[stats['games'] >= 2].copy()
+        stats['rate']  = stats['wins'] / stats['games']
+        stats['label'] = stats.apply(
+            lambda r: f"{int(r['wins'])}-{int(r['games'] - r['wins'])}", axis=1)
+        stats = stats.sort_values('rate', ascending=True)
+
+        colors = ['#90BE6D' if r >= 0.60 else '#E6DB74' if r >= 0.40 else '#F94144'
+                  for r in stats['rate']]
+
+        fig = go.Figure(go.Bar(
+            y=stats.index, x=stats['rate'], orientation='h',
+            marker_color=colors,
+            text=stats['label'], textposition='outside',
+        ))
+        fig.update_layout(
+            template='gridiron_ink',
+            height=380, margin=dict(t=20, b=40, l=150, r=90),
+            xaxis=dict(title='Win Rate', tickformat='.0%', range=[0, 1.2]),
+        )
+        return fig
+
+    # ── 6D: Seeding Scatter ───────────────────────────────────────────────────
+
+    def SeedingScatter(self):
+        """Scatter: regular season rank vs. playoff finish, all seasons."""
+        df = self.playoff_results.dropna(subset=['placement']).copy()
+        if df.empty:
+            return go.Figure()
+
+        at_colors = get_alltime_teamcolors()
+        fig = go.Figure()
+
+        # Reference diagonal — finishing exactly where seeded
+        fig.add_trace(go.Scatter(
+            x=[1, 6], y=[1, 6], mode='lines',
+            line=dict(color='rgba(61,94,120,0.5)', dash='dash', width=1),
+            showlegend=False, hoverinfo='skip',
+        ))
+
+        for team in sorted(df['team'].unique()):
+            t = df[df['team'] == team]
+            color = at_colors.get(team, '#BDE2FF')
+            fig.add_trace(go.Scatter(
+                x=t['reg_season_rank'], y=t['placement'],
+                mode='markers+text',
+                name=team,
+                marker=dict(color=color, size=11,
+                             line=dict(width=1, color='rgba(0,0,0,0.3)')),
+                text=t['year'].astype(str).str[-2:],
+                textposition='top center',
+                textfont=dict(size=8, color=color),
+                customdata=t['year'],
+                hovertemplate=(f'<b>{team}</b><br>Year: %{{customdata}}<br>'
+                               f'Reg rank: %{{x}}<br>Playoff finish: %{{y}}<extra></extra>'),
+            ))
+
+        fig.update_layout(
+            template='gridiron_ink',
+            height=480, margin=dict(t=20, b=60, l=60, r=40),
+            xaxis=dict(title='Regular Season Rank', dtick=1,
+                       range=[0.5, 12.5], autorange=False),
+            yaxis=dict(title='Playoff Finish (1 = Champion)', dtick=1,
+                       range=[6.8, 0.2], autorange=False),
+            legend=dict(orientation='h', y=-0.16, x=0.5, xanchor='center'),
+        )
+        return fig
+
+    # ── 6F: Path to Glory ────────────────────────────────────────────────────
+
+    def PathToGlory(self):
+        """Line chart: each champion's scores across their three playoff rounds."""
+        if self.playoff_results.empty or self.playoff_games.empty:
+            return go.Figure()
+
+        champs = (self.playoff_results[self.playoff_results['placement'] == 1]
+                  .set_index('year')['team'])
+        if champs.empty:
+            return go.Figure()
+
+        at_colors = get_alltime_teamcolors()
+        ROUND_LABELS = {1: 'Wild Card', 2: 'Semifinals', 3: 'Championship'}
+        w_games = self.playoff_games[self.playoff_games['bracket'] == 'winners']
+
+        fig = go.Figure()
+        for year in sorted(champs.index):
+            champion = champs[year]
+            color    = at_colors.get(champion, '#BDE2FF')
+
+            games = (w_games[(w_games['year'] == year) & (w_games['team'] == champion)]
+                     .sort_values('round'))
+            if games.empty:
+                continue
+
+            rounds       = [ROUND_LABELS.get(r, f'R{r}') for r in games['round']]
+            champ_scores = games['score'].tolist()
+            opp_scores   = games['opp_score'].tolist()
+            opponents    = games['opponent'].tolist()
+
+            fig.add_trace(go.Scatter(
+                x=rounds, y=champ_scores,
+                mode='lines+markers',
+                name=f'{champion} ({year})',
+                line=dict(color=color, width=2),
+                marker=dict(color=color, size=9),
+                customdata=list(zip([year]*len(rounds), opponents, opp_scores)),
+                hovertemplate=(
+                    f'<b>{champion} {year}</b><br>%{{x}}: %{{y:.1f}} pts'
+                    '<br>vs %{customdata[1]} (%{customdata[2]:.1f})<extra></extra>'
+                ),
+            ))
+
+        fig.update_layout(
+            template='gridiron_ink',
+            height=440, margin=dict(t=20, b=80, l=60, r=40),
+            xaxis=dict(title='Playoff Round',
+                       categoryorder='array',
+                       categoryarray=['Wild Card', 'Semifinals', 'Championship']),
+            yaxis=dict(title='Points Scored'),
+            legend=dict(orientation='h', y=-0.2, x=0.5, xanchor='center'),
+        )
+        return fig
+
+
 class AllTime:
     def __init__(self):
                

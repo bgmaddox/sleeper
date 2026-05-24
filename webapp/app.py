@@ -530,6 +530,116 @@ def _power_rankings_native(sf, week_obj):
     ], className='chart-card chart-col-full')
 
 
+def _playoff_records_card(atp):
+    """Native HTML card surfacing all-time playoff records (6E)."""
+    gdf = atp.playoff_games
+    rdf = atp.playoff_results
+
+    if gdf.empty or rdf.empty:
+        return html.Div()
+
+    at_colors = core.get_alltime_teamcolors()
+
+    def _team(name):
+        return html.Span(name, style={'color': at_colors.get(name, '#BDE2FF'),
+                                      'fontWeight': 'bold'})
+
+    def _pill(label, value_el, extra=''):
+        return html.Div([
+            html.Div(label, className='pr-rec-label'),
+            html.Div([value_el] + ([html.Span(extra, className='pr-rec-extra')] if extra else []),
+                     className='pr-rec-value'),
+        ], className='pr-rec-pill')
+
+    # ── Compute records ───────────────────────────────────────────────────────
+    settled = gdf[gdf['score'] > 0]
+    winners_comp = settled[settled['bracket'] == 'winners']
+
+    # Highest single-game score
+    if not settled.empty:
+        hi_idx  = settled['score'].idxmax()
+        hi_row  = settled.loc[hi_idx]
+        hi_val  = f"{hi_row['score']:.1f} pts"
+        hi_ctx  = f"Wk {hi_row['week']} {hi_row['year']}"
+        hi_el   = [_team(hi_row['team']), html.Span(f" · {hi_val}", style={'color': '#90BE6D'})]
+    else:
+        hi_el, hi_ctx = ['—'], ''
+
+    # Lowest score in a playoff win
+    wins_only = settled[settled['won'] & (settled['score'] > 0)]
+    if not wins_only.empty:
+        lo_idx = wins_only['score'].idxmin()
+        lo_row = wins_only.loc[lo_idx]
+        lo_val = f"{lo_row['score']:.1f} pts"
+        lo_ctx = f"Wk {lo_row['week']} {lo_row['year']}"
+        lo_el  = [_team(lo_row['team']), html.Span(f" · {lo_val}", style={'color': '#F94144'})]
+    else:
+        lo_el, lo_ctx = ['—'], ''
+
+    # Biggest blowout (winner's margin)
+    if not wins_only.empty:
+        wins_only = wins_only.copy()
+        wins_only['margin'] = wins_only['score'] - wins_only['opp_score']
+        bl_idx = wins_only['margin'].idxmax()
+        bl_row = wins_only.loc[bl_idx]
+        bl_el  = [_team(bl_row['team']),
+                  html.Span(f" +{bl_row['margin']:.1f} vs ", style={'color': '#90BE6D'}),
+                  _team(bl_row['opponent'])]
+        bl_ctx = f"Wk {bl_row['week']} {bl_row['year']}"
+    else:
+        bl_el, bl_ctx = ['—'], ''
+
+    # Closest win
+    if not wins_only.empty:
+        cl_idx = wins_only['margin'].idxmin()
+        cl_row = wins_only.loc[cl_idx]
+        cl_el  = [_team(cl_row['team']),
+                  html.Span(f" +{cl_row['margin']:.1f} vs ", style={'color': '#E6DB74'}),
+                  _team(cl_row['opponent'])]
+        cl_ctx = f"Wk {cl_row['week']} {cl_row['year']}"
+    else:
+        cl_el, cl_ctx = ['—'], ''
+
+    # Most playoff wins all-time
+    win_totals = (rdf.groupby('team')['wins'].sum().sort_values(ascending=False))
+    if not win_totals.empty:
+        top_wins_team = win_totals.index[0]
+        top_wins_val  = int(win_totals.iloc[0])
+        mw_el  = [_team(top_wins_team), html.Span(f" · {top_wins_val} wins")]
+        mw_ctx = f"{len(rdf[rdf['team'] == top_wins_team])} appearances"
+    else:
+        mw_el, mw_ctx = ['—'], ''
+
+    # Most championships
+    champ_counts = (rdf[rdf['placement'] == 1]
+                    .groupby('team').size().sort_values(ascending=False))
+    if not champ_counts.empty:
+        top_champ      = champ_counts.index[0]
+        top_champ_val  = int(champ_counts.iloc[0])
+        mc_el  = [_team(top_champ),
+                  html.Span(f" · {top_champ_val}×", style={'color': '#FFC300'})]
+        mc_ctx = ', '.join(
+            str(y) for y in rdf[(rdf['team'] == top_champ) & (rdf['placement'] == 1)]['year']
+        )
+    else:
+        mc_el, mc_ctx = ['—'], ''
+
+    pills = [
+        _pill('Most Championships',    html.Span(mc_el),  mc_ctx),
+        _pill('Most Playoff Wins',     html.Span(mw_el),  mw_ctx),
+        _pill('Highest Playoff Score', html.Span(hi_el),  hi_ctx),
+        _pill('Lowest Winning Score',  html.Span(lo_el),  lo_ctx),
+        _pill('Biggest Blowout',       html.Span(bl_el),  bl_ctx),
+        _pill('Closest Win',           html.Span(cl_el),  cl_ctx),
+    ]
+
+    return html.Div([
+        html.Div('Playoff Records', className='chart-title'),
+        html.Div('All-time bests and notables from every playoff bracket', className='chart-subtitle'),
+        html.Div(pills, className='pr-rec-grid'),
+    ], className='chart-card chart-col-full')
+
+
 def _loading_placeholder():
     return html.Div([
         html.Div(className='loading-spinner'),
@@ -1484,6 +1594,39 @@ def _tab_alltime(teams, year=None):
         html.Div('Chord diagram showing the distribution of all-time points from each NFL team to each fantasy owner', className='chart-subtitle'),
         html.Div(id='d3-chord-container', style={'width': '100%', 'height': '700px'}),
     ], className='chart-card chart-col-full'))
+
+    # ── Phase 6: All-Time Playoff Analytics ───────────────────────────────────
+    cards.append(html.Div(
+        html.Div('Playoff History', className='section-divider-label'),
+        className='section-divider',
+    ))
+
+    try:
+        atp = core.AllTimePlayoffs()
+
+        cards.append(_playoff_records_card(atp))
+
+        _playoff_chart_meta = [
+            ('PlayoffPedigree', 'Playoff Pedigree',         True,
+             'Appearances, semifinal runs, finals, and championships — nested bars show depth of playoff success'),
+            ('PlayoffWinRate',  'Playoff Win Rate',          True,
+             'Win rate in competitive playoff rounds (placement games excluded) — min. 2 games'),
+            ('SeedingScatter',  'Does Seeding Matter?',      False,
+             'Regular season rank vs. playoff finish for every team in every season — dots above the diagonal are upsets'),
+            ('PathToGlory',     'Path to Glory',             False,
+             'Each champion\'s scoring trajectory across their three playoff rounds'),
+        ]
+        for fn, title, half, sub in _playoff_chart_meta:
+            try:
+                fig = getattr(atp, fn)()
+                cards.append(_card(fig, title, half=half, subtitle=sub))
+            except Exception as e:
+                traceback.print_exc()
+                cards.append(_card(_err(str(e)), title, half=half))
+
+    except Exception as e:
+        traceback.print_exc()
+        cards.append(_card(_err(f'Playoff data unavailable: {e}'), 'Playoff History'))
 
     return html.Div(cards, className='charts-row')
 

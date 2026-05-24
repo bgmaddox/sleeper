@@ -1173,3 +1173,52 @@ html, body {
   .playoff-wrapper { flex-direction: column; }
   .playoff-column--losers { flex: unset; width: 100%; }
 }
+
+/* ── All-Time Playoff Records card (6E) ─────────────────────────────────── */
+.section-divider {
+  width: 100%;
+  padding: 24px 0 4px;
+}
+.section-divider-label {
+  font-family: var(--font-main);
+  font-size: 0.6rem;
+  letter-spacing: 3px;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 8px;
+}
+.pr-rec-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+  margin-top: 12px;
+}
+.pr-rec-pill {
+  background: rgba(255,255,255,0.04);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 12px 14px;
+}
+.pr-rec-label {
+  font-family: var(--font-main);
+  font-size: 0.55rem;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin-bottom: 6px;
+}
+.pr-rec-value {
+  font-family: var(--font-display);
+  font-size: 0.9rem;
+  color: var(--text-main);
+}
+.pr-rec-extra {
+  display: block;
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  margin-top: 2px;
+}
+@media (max-width: 768px) {
+  .pr-rec-grid { grid-template-columns: repeat(2, 1fr); }
+}
