@@ -2,7 +2,7 @@
 
 **Created:** 2026-05-21  
 **Last updated:** 2026-05-24  
-**Status:** Active — Phases 1–4, 6–7 complete; Phase 3 partially done; 7C/7D deferred; Phase 8 TBD  
+**Status:** Active — Phases 1–4, 6–7 complete; Phase 3 complete (3E deferred to 2026); Phase 8 TBD  
 **Supersedes:** `design/fix-plan.md` (all tasks complete as of commit `41094a3`)
 
 This document is the single source of truth for planned work. Update status inline as tasks complete.
@@ -26,7 +26,7 @@ The following changes are staged but uncommitted:
 `pytest tests/ -m "not slow"` → **55 passed, 0 failed, 0 xfailed**
 
 ### Test suite status (as of 2026-05-24)
-`pytest tests/ -m "not slow"` → **139 passed, 0 failed, 2 xfailed** (Week11 + Week14 intentionally xfail)
+`pytest tests/ -m "not slow"` → **141 passed, 0 failed, 0 xfailed**
 
 ---
 
@@ -322,7 +322,7 @@ The All-Time tab aggregates all years — if it's broken on historical position 
 
 ---
 
-### Task 3C — Use fetch_state_json() to auto-detect current week in app
+### Task 3C — Use fetch_state_json() to auto-detect current week in app ✅ DONE
 
 **File:** `webapp/app.py`
 
@@ -636,9 +636,9 @@ Add a section header ("Playoff History") dividing the existing records cards fro
 
 ---
 
-## Phase 7 — Side Bets Tab ✅ LARGELY COMPLETE (commit `c9af1b3`)
+## Phase 7 — Side Bets Tab ✅ COMPLETE (commit `c9af1b3`)
 
-Tasks 7A, 7B, 7E, 7F, 7G, 7H done. Tasks 7C (Week11 transactions) and 7D (Week14 placeholder) remain deferred — both marked `xfail(strict=True)` in the test suite.
+Tasks 7A–7H all complete. Test suite: 141 passed, 0 xfailed.
 
 **Goal:** Surface the weekly side bet game as a first-class feature — a dedicated "Side Bets" tab showing all week challenges with their charts and results, plus a "Side Bet of the Week" card on the existing This Week tab.
 
@@ -725,7 +725,7 @@ Update `Scoreboard()` to derive its table and tally from `SIDE_BET_SEASONS[year]
 
 ---
 
-### Task 7C — Add Week11 chart method (transaction data) ⏸️ DEFERRED
+### Task 7C — Add Week11 chart method (transaction data) ✅ DONE
 
 **File:** `sleeper_core.py` — `SideBet.Week11()`
 
@@ -747,7 +747,7 @@ Update `Scoreboard()` to derive its table and tally from `SIDE_BET_SEASONS[year]
 
 ---
 
-### Task 7D — Add Week14 placeholder method ⏸️ DEFERRED
+### Task 7D — Add Week14 placeholder method ✅ DONE
 
 **File:** `sleeper_core.py` — `SideBet.Week14()`
 

@@ -1715,7 +1715,7 @@ class Season:
             )
         row_ys = {1: 1, 2: 0.83, 3: 0.66, 4: 0.49, 5: 0.32, 6: 0.15}  # Adjust as needed
         
-        OppWinPercentageTable_Current = All_Time.OppWinPercentageTable()
+        OppWinPercentageTable_Current = self.OppWinPercentageTable()
         for i in range(1,7):
             
             testgroup = grouped.get_group(i)
@@ -3723,10 +3723,11 @@ class AllTime:
         return result
     
     def OppWinPercentageTable(self):
-        all_teams = list(roster_ids_2025.values())
+        year_roster = roster_ids.get(self.year, roster_ids_2025)
+        all_teams = list(year_roster.values())
         result = pd.pivot_table(self.Matches, values='Won',index='Team',columns='Opp_team',aggfunc='mean').round(2).fillna('')
-        result = result[result.columns.intersection(roster_ids_2025.values())].reset_index()
-        result = result[result['Team'].isin(roster_ids_2025.values())].set_index('Team')
+        result = result[result.columns.intersection(year_roster.values())].reset_index()
+        result = result[result['Team'].isin(year_roster.values())].set_index('Team')
         result = result.reindex(index=all_teams, columns=all_teams)
         result = result.fillna(0.50)
         
@@ -5177,6 +5178,123 @@ class SideBet:
 
         return figQBComplete
     
+    def Week11(self, WeekObj):
+        import data_loader as dl
+        league_id = self.League.id
+        year = self.League.year
+        roster_map = {int(k): v for k, v in roster_ids.get(year, {}).items()}
+
+        trade_counts = {name: 0 for name in roster_map.values()}
+        warnings = []
+
+        for wk in range(1, 12):
+            try:
+                txns = dl.fetch_transactions_json(league_id, wk)
+                if txns is None:
+                    warnings.append(f"Week {wk}: no data")
+                    continue
+                for t in txns:
+                    if t.get("type") == "trade" and t.get("status") == "complete":
+                        for rid in (t.get("roster_ids") or []):
+                            name = roster_map.get(int(rid))
+                            if name and name in trade_counts:
+                                trade_counts[name] += 1
+            except Exception as e:
+                warnings.append(f"Week {wk}: {e}")
+
+        df11 = pd.DataFrame(
+            sorted(trade_counts.items(), key=lambda x: x[1]),
+            columns=["team", "trades"]
+        )
+        df11["color"] = df11["team"].map(WeekObj.teamcolors)
+
+        subtitle = "Total completed trades, Weeks 1–11"
+        if warnings:
+            subtitle += f"<br><sup style='color:orange'>Data gaps: {', '.join(warnings)}</sup>"
+
+        fig11 = px.bar(
+            df11,
+            x="trades",
+            y="team",
+            orientation="h",
+            template="gridiron_ink",
+            title=f"<b>Week {WeekObj.week} Side Bet</b><br><sup>{subtitle}</sup>",
+            text="trades",
+        )
+        fig11.update_traces(
+            marker_color=df11["color"],
+            textposition="outside",
+            textfont=dict(size=20),
+            marker_line_width=1.5,
+            marker_line_color="rgba(0,0,0,0.25)",
+        )
+        fig11.update_layout(
+            showlegend=False,
+            xaxis_title=None,
+            yaxis_title=None,
+            margin=dict(t=140, l=220, r=80),
+            title={"y": 0.93},
+        )
+        fig11.update_xaxes(dtick=1, tickfont=dict(size=16))
+        fig11.update_yaxes(tickfont=dict(size=20))
+        self.UpdateColors2(WeekObj, fig11)
+        apply_logo_to_fig(fig11, xval=0.43)
+        return fig11
+
+    def Week14(self, WeekObj):
+        df = WeekObj.WeeklyNoMatches
+        df = df.sort_values("Total", ascending=False)
+
+        points = df.map(lambda x: float(list(x.values())[0]) if isinstance(x, dict) else x)
+        points = points.round(1).reset_index()
+
+        _non_pos = {"Total", "Won", "Week", "Opp", "Matchup", "Margin", "Opp_team",
+                    "Season", "Week Index", "Year", "LeagueTotal", "PercentTotal", "Team"}
+        position_list = [c for c in points.columns if c not in _non_pos]
+
+        team_list = df.sort_values("Total", ascending=True).index.tolist()
+        colors = {team_list[-1]: "#FFC300"}
+        color_discrete_map = {c: colors.get(c, "#F94144") for c in team_list}
+
+        fig14 = px.bar(
+            points,
+            y="Team",
+            x=position_list,
+            template="gridiron_ink",
+            color="Team",
+            text_auto=True,
+            title=f"<b>Week {WeekObj.week} Side Bet — Tiebreaker</b><br><sup>Choose 3 non-QB starters; highest combined total wins</sup>",
+            orientation="h",
+            color_discrete_map=color_discrete_map,
+        )
+        fig14.update(layout_coloraxis_showscale=False)
+        fig14.update_layout(showlegend=False)
+        fig14.update_traces(
+            textfont_size=12,
+            textangle=0,
+            cliponaxis=True,
+            textposition="auto",
+            insidetextanchor="middle",
+            marker_line_width=1.5,
+            marker_line_color="rgba(0,0,0,0.25)",
+        )
+        fig14.update_xaxes(tickfont=dict(size=16), title=None)
+        fig14.update_yaxes(tickfont=dict(size=18), title=None)
+        fig14.update_layout(
+            uniformtext_minsize=12,
+            uniformtext_mode="hide",
+            margin=dict(t=140, l=220, r=40),
+            title={"y": 0.93},
+        )
+        fig14.add_annotation(
+            text="Bar Order: QB ------------> DEF",
+            xref="paper", yref="paper",
+            x=0.05, y=-0.06,
+            showarrow=False,
+            font=dict(size=15),
+        )
+        return fig14
+
     def Week13(self, WeekObj):
         dfWeek13 = WeekObj.WeeklyNoMatches.reset_index()
         dfWeek13 =dfWeek13[dfWeek13['Won'] == 1]

@@ -59,14 +59,9 @@ def fetch_league_json(league_id: int) -> dict:
 
 def fetch_state_json() -> dict:
     """Current NFL season state: week (leg), season_type, season year.
-    Returns keys: season, season_type, leg, display_week, season_start_date."""
-    key = "nfl_state"
-    cached = _load_cache(key)
-    if cached is not None:
-        return cached
-    data = requests.get("https://api.sleeper.app/v1/state/nfl").json()
-    _save_cache(key, data)
-    return data
+    Returns keys: season, season_type, leg, display_week, season_start_date.
+    Not cached — always fetches fresh so leg reflects the actual current week."""
+    return requests.get("https://api.sleeper.app/v1/state/nfl").json()
 
 
 def fetch_winners_bracket(league_id: int) -> list:

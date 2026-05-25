@@ -841,6 +841,12 @@ app.layout = html.Div([
             dcc.Slider(id='week-slider', min=1, max=18, step=1, value=1,
                        marks={}, tooltip={'always_visible': False},
                        className='hidden-slider'),
+            *([html.Div(
+                {'off': 'Off-season', 'pre': 'Pre-season'}.get(
+                    _nfl_state.get('season_type', ''), ''
+                ),
+                className='season-state-badge',
+            )] if _nfl_state.get('season_type') not in ('regular', 'post') else []),
         ], className='ctrl-group ctrl-group--week'),
 
         html.Div(className='ctrl-divider'),
@@ -1218,7 +1224,7 @@ def _parse_url(search):
 _SIDEBET_WEEK_METHODS = {
     1: 'Week1', 2: 'Week2', 3: 'Week3', 4: 'Week4', 5: 'Week5',
     6: 'Week6', 7: 'Week7', 8: 'Week8', 9: 'Week9', 10: 'Week10',
-    12: 'Week12', 13: 'Week13',
+    11: 'Week11', 12: 'Week12', 13: 'Week13', 14: 'Week14',
 }
 
 

@@ -133,10 +133,9 @@ class TestWeekChartMethods:
         fig = sidebet_2025.Week10(week8_2025)
         assert _is_valid_fig(fig), "Week10 returned empty or invalid figure"
 
-    @pytest.mark.xfail(strict=True, reason="Week11 not yet implemented")
     def test_week11_returns_figure(self, sidebet_2025, week8_2025):
         fig = sidebet_2025.Week11(week8_2025)
-        assert _is_valid_fig(fig)
+        assert _is_valid_fig(fig), "Week11 returned empty or invalid figure"
 
     def test_week12_returns_figure(self, sidebet_2025, week8_2025):
         fig = sidebet_2025.Week12(week8_2025)
@@ -146,10 +145,9 @@ class TestWeekChartMethods:
         fig = sidebet_2025.Week13(week13_2025)
         assert _is_valid_fig(fig), "Week13 returned empty or invalid figure"
 
-    @pytest.mark.xfail(strict=True, reason="Week14 not yet implemented")
     def test_week14_returns_figure(self, sidebet_2025, week8_2025):
         fig = sidebet_2025.Week14(week8_2025)
-        assert _is_valid_fig(fig)
+        assert _is_valid_fig(fig), "Week14 returned empty or invalid figure"
 
 
 # ── Scoreboard ────────────────────────────────────────────────────────────────
