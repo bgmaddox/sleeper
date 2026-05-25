@@ -11,6 +11,18 @@ Write tests before or during implementation — not after. For any new class, me
 
 All tests load from `.cache/` — no API calls during test runs. If a cache file is missing, fixtures use `pytest.skip` rather than failing.
 
+## Browser Verification (Playwright)
+
+Screenshots are expensive — each image costs ~1,000–4,000 tokens and burns quota fast. Use this hierarchy:
+
+1. **pytest** — covers logic correctness; use this first and most often
+2. **`browser_snapshot`** — returns a text accessibility tree (rendered content, visible elements) at ~200–400 tokens; use for "did the tab load, is the chart present, any error panels"
+3. **`browser_console_messages`** — catches React/JS errors after page load with no visual cost
+4. **`browser_evaluate`** — run JS to check DOM state programmatically (e.g., count chart cards, read a value) instead of looking at a picture
+5. **`browser_take_screenshot`** — only when the issue is explicitly visual (layout, CSS, sizing)
+
+Default to steps 1–4. Only reach for a screenshot when a text-based check genuinely can't answer the question.
+
 ## Keeping Docs Current
 
 After any edit to `webapp/app.py`:
