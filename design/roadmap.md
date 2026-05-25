@@ -907,7 +907,6 @@ Use `pytest.skip` if week cache is missing (same pattern as existing tests). Mar
 
 | Item | Notes |
 |------|-------|
-| Route `League.UsersJSONtoDF` through data_loader | Minor — direct `requests.get` calls in League.__init__ are only made once per year (season pickle captures everything). Low urgency. |
-| Vectorize Pandas loops in `WeeklyDataframe`, `WeeklyWins`, `PlayerBreakout` | Performance impact negligible for 12-team 18-week dataset. Not worth the risk/effort. |
-| Crosswalk Sleeper player IDs to GSIS IDs for ID-based stats join | Requires confirming nfl_data_py roster `espn_id` matches Sleeper's `espn_id`. Exploratory work needed first (see Task 3B). |
+| Route `League.UsersJSONtoDF` through data_loader | ✅ Done — `SettingsJSONtoDF` and `UsersJSONtoDF` now use `fetch_league_json` / `fetch_league_users_json`. |
+| Crosswalk Sleeper player IDs to GSIS IDs for ID-based stats join | ✅ Done — `nfl_data_py` rosters carry a `sleeper_id` column (no `espn_id` needed). `fetch_sleeper_gsis_crosswalk(year)` added to data_loader; `PlayerBreakout` now joins on GSIS ID + week instead of display name + week. 100% coverage for fantasy skill positions. |
 | `previous_league_id` auto-discovery | No urgency until 2026 season is created. See Task 3E. |

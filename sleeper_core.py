@@ -406,17 +406,16 @@ class League:
         print(f'League for {self.year} created.')
 
     def SettingsJSONtoDF(self):
-        league_settings_request = requests.get(f'https://api.sleeper.app/v1/league/{self.id}')
-        league_settings_json = league_settings_request.json()
+        import data_loader as dl
+        league_settings_json = dl.fetch_league_json(self.id)
         league_settings_json_normal = json_normalize(league_settings_json)
         self.league_settings = league_settings_json_normal.T.set_axis(['league_setting'], axis=1).to_dict()['league_setting']
-    
-    def UsersJSONtoDF(self):
-        league_user_response = requests.get(f'https://api.sleeper.app/v1/league/{self.id}/users')
-        league_user_json = league_user_response.json()
 
+    def UsersJSONtoDF(self):
+        import data_loader as dl
+        league_user_json = dl.fetch_league_users_json(self.id)
         self.Members = json_normalize(league_user_json)
-        self.OwnerIDDict = dict(zip(self.Members.user_id , self.Members.display_name))
+        self.OwnerIDDict = dict(zip(self.Members.user_id, self.Members.display_name))
 
     def StructureWeekIDs(self):
         self.schedule['teams'] = self.schedule[['home_team','away_team']].values.tolist()
@@ -640,19 +639,18 @@ class Week:
         elif self.week in Playoff:
             dfBreakout['Season'] = 'Playoff'
 
-        dfBreakout['player_week_id'] = dfBreakout['player'] + ' - ' + dfBreakout['week'].astype(str)
-        WeeklyNFLData['player_display_name'] = WeeklyNFLData['player_display_name'].replace(' Jr.','', regex=True).replace(' Sr.','', regex=True) \
-                                                .replace(' III','',regex=True).replace('Bam Knight','Zonovan Knight', regex=True).replace(' II','',regex=True)
-        WeeklyNFLData['player_week_id'] = WeeklyNFLData['player_display_name'] + ' - ' + WeeklyNFLData['week'].astype(str)
-        
-        
+        import data_loader as dl
+        sleeper_to_gsis = dl.fetch_sleeper_gsis_crosswalk(self.year)
+        dfBreakout['gsis_id'] = dfBreakout['player_id'].map(sleeper_to_gsis)
+        # ID-based join: Sleeper player_id → GSIS player_id → nflverse stats row.
+        # DEF and any unmatched players get gsis_id=NaN and won't match stats (same as before).
+        dfBreakout['gsis_week_id'] = dfBreakout['gsis_id'].fillna('') + ' - ' + dfBreakout['week'].astype(str)
+        WeeklyNFLData['gsis_week_id'] = WeeklyNFLData['player_id'] + ' - ' + WeeklyNFLData['week'].astype(str)
+
         dfBreakout = dfBreakout.merge(schedule, on = 'week_id', how = 'left')
         # suffixes=('','_roster') preserves 'position' as the Sleeper fantasy position (QB/RB/WR/TE/K/DEF)
         dfBreakout = dfBreakout.merge(self.league.Rosters, on='player_name', how='left', suffixes=('', '_roster'))
-
-        dfBreakout = dfBreakout.merge(WeeklyNFLData, on = 'player_week_id', how = 'left', suffixes=('','_NFL'))
-        # Drop rows duplicated by name collisions in nflverse (e.g., two NFL players sharing a display name)
-        dfBreakout = dfBreakout.drop_duplicates(subset=['team_x', 'player', 'week'])
+        dfBreakout = dfBreakout.merge(WeeklyNFLData, on='gsis_week_id', how='left', suffixes=('','_NFL'))
         dfBreakout['gametime'] = pd.to_datetime(dfBreakout['gametime'], format='mixed').dt.strftime('%I %p')
         dfBreakout['Game_date_time'] = dfBreakout['weekday'] + ' ' + dfBreakout['gametime'].astype(str).replace(r'0', "", regex=True)
         dfBreakout = dfBreakout.rename(columns={'team_x':'team','team_y':'recent_teams'})

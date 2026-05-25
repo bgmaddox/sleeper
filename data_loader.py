@@ -57,6 +57,35 @@ def fetch_league_json(league_id: int) -> dict:
     _save_cache(key, data)
     return data
 
+def fetch_sleeper_gsis_crosswalk(year: int) -> dict:
+    """Returns {sleeper_player_id: gsis_id} for all players with a known mapping.
+    Built from nfl_data_py rosters which carry a sleeper_id column alongside
+    the GSIS player_id used in the stats CSV. Cached per season year."""
+    import nfl_data_py as nfl
+    key = f"sleeper_gsis_xwalk_{year}"
+    cached = _load_cache(key)
+    if cached is not None:
+        return cached
+    rosters = nfl.import_rosters([year])
+    xwalk = (
+        rosters[rosters['sleeper_id'].notna()]
+        [['sleeper_id', 'player_id']]
+        .drop_duplicates(subset=['sleeper_id'])
+    )
+    result = dict(zip(xwalk['sleeper_id'].astype(str), xwalk['player_id']))
+    _save_cache(key, result)
+    return result
+
+def fetch_league_users_json(league_id: int) -> list:
+    """League member users (display_name, user_id, metadata) for a given league."""
+    key = f"league_users_{league_id}"
+    cached = _load_cache(key)
+    if cached is not None:
+        return cached
+    data = requests.get(f"https://api.sleeper.app/v1/league/{league_id}/users").json()
+    _save_cache(key, data)
+    return data
+
 def fetch_state_json() -> dict:
     """Current NFL season state: week (leg), season_type, season year.
     Returns keys: season, season_type, leg, display_week, season_start_date.
