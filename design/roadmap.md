@@ -1,8 +1,8 @@
 # Legacy League Webapp — Development Roadmap
 
 **Created:** 2026-05-21  
-**Last updated:** 2026-05-23  
-**Status:** Active — Phase 4 complete; Phase 6 planned next; Phase 3/5 deferred  
+**Last updated:** 2026-05-24  
+**Status:** Active — Phase 4 complete; Phase 7 (SideBet) planned next; Phase 3/5/6 deferred  
 **Supersedes:** `design/fix-plan.md` (all tasks complete as of commit `41094a3`)
 
 This document is the single source of truth for planned work. Update status inline as tasks complete.
@@ -481,39 +481,7 @@ All columns except the change indicator (↑/↓) and Streak now have click-to-s
 
 ## Phase 5 — SideBet Feature
 
-*Future phase. The `SideBet` class in `sleeper_core.py` (~lines 3728–4791) is the starting point.*
-
-**Goal:** Surface side bet tracking, waiver/trade activity, and engagement metrics as a dedicated tab or modal.
-
-**API endpoints needed:**
-- `GET /v1/league/<league_id>/transactions/<round>` — per-week trades, waivers, FA pickups (Task 3D fetcher covers this)
-- `GET /v1/league/<league_id>/traded_picks` — historical traded pick chain (Task 3D covers this)
-- Draft data already fetched via `fetch_draft_picks_json()`
-
-**Key transaction fields:**
-```json
-{
-  "type": "trade",            // or "free_agent" or "waiver"
-  "status": "complete",
-  "adds": { "player_id": roster_id },
-  "drops": { "player_id": roster_id },
-  "draft_picks": [...],       // picks exchanged in trades
-  "waiver_budget": [{ "sender": 2, "receiver": 3, "amount": 55 }],
-  "settings": { "waiver_bid": 44 }   // FAAB bid amount
-}
-```
-
-**Potential SideBet charts/features:**
-- FAAB spend tracker (cumulative waiver budget spent per team, per season)
-- Trade frequency heatmap (who trades with whom, how often)
-- Waiver wire add/drop history per team
-- "Most active" manager leaderboard
-- Trade value analysis (points scored by traded players, pre/post trade)
-
-**Pre-work before implementation:**
-- Review and update the existing `SideBet` class — much of it may be out of date with the current data schema
-- Confirm `leagueNumbers_Dict` has all years needed for transaction history pull
-- Transaction data must be fetched for all 18 weeks × 7 seasons = 126 API calls on first load (all cached after that)
+*Superseded by Phase 7, which replaces the original Phase 5 scope. Phase 7 focuses on the weekly side bet game and a dedicated tab; FAAB/trade analytics remain as backlog items below.*
 
 ---
 
@@ -665,7 +633,272 @@ Add a section header ("Playoff History") dividing the existing records cards fro
 
 ---
 
-## Deferred / Backlog
+## Phase 7 — Side Bets Tab
+
+**Goal:** Surface the weekly side bet game as a first-class feature — a dedicated "Side Bets" tab showing all week challenges with their charts and results, plus a "Side Bet of the Week" card on the existing This Week tab.
+
+**What the side bet game is:** Each week has a unique challenge (e.g., "team with the most offensive TDs," "best DEF/K combo," "starter closest to 21 pts without going over"). The winner gets $20 from the prize pool. The player with the most weekly wins at the end of the year wins the Side Bet Championship.
+
+**Current state of the `SideBet` class (`sleeper_core.py` ~line 4224):**
+- Methods exist for Weeks 1–10, 12, 13 (Week11 and Week14 are missing entirely)
+- The `Scoreboard()` method has the challenge definitions and season tally hardcoded as literal strings — this needs to move to a structured config
+- **6 bugs** must be fixed before any method can be safely called from the webapp (see Task 7A)
+- None of it is wired into `app.py` at all
+
+---
+
+### Task 7A — Fix `SideBet` class bugs and make all methods webapp-safe
+
+**File:** `sleeper_core.py` — `SideBet` class (~line 4224)
+
+This is the prerequisite for everything else. Fix all methods to be callable from the Dash webapp without side effects.
+
+**Bug 1 — `Week2` and `Week3` call `fig.show()` instead of returning**
+Both methods display the figure to a notebook and return `None`. Change both to `return fig` (remove `fig.show()`).
+
+**Bug 2 — `Week1` uses undefined globals**
+`Week1` references a global `Week` variable (should be `WeekObj.week`) and `position_list` (a global list defined elsewhere in the notebook context but not in the webapp). Fix by using `WeekObj.week` for the title and replacing `position_list` with the actual column list derived from `WeekObj.WeeklyNoMatches` (drop non-position columns like `Total`, `Won`, `Week`, `Opp`, `Matchup`).
+
+**Bug 3 — `Week10` hardcodes `roster_ids_2025`**
+Line 5045: `person = roster_ids_2025[i]` — hard-coded to 2025. Replace with `self.League.roster_ids[self.League.year]` (same pattern used elsewhere in the codebase). Also fix the annotation on line 5077 for the same reason.
+
+**Bug 4 — `Week12` wrong column name**
+Line 5139: `cols = ['team','player','completions', 'attempts', 'recent_teams']` — `recent_teams` (plural) doesn't exist; the correct column is `recent_team`. Fix the column reference.
+
+**Bug 5 — `Week5Graph` is dead duplicate code**
+`Week5Graph` (line 4788) is a leftover notebook prototype that duplicates `Week1`'s logic, references undefined globals, and calls `fig.show()`. Delete the entire method.
+
+**Bug 6 — `gridiron_ink` template missing from several methods**
+`Week1`, `Week6`, `Week9` use default Plotly styling instead of `template='gridiron_ink'`. Add `template='gridiron_ink'` to their `px.bar()` / `go.Figure()` calls to match the app's visual theme. Also remove the hardcoded non-theme colors in `Week5` (`xaxis title color='red'`, `yaxis title color='green'`).
+
+**Verify:** Each `WeekN()` method returns a Plotly figure object. No method calls `fig.show()`. Calling `SideBet(league, season).Week5(week_obj)` from a Python shell returns a figure with no exceptions.
+
+
+---
+
+### Task 7B — Move side bet config out of `Scoreboard()` into a structured dict
+
+**File:** `sleeper_core.py` — new module-level constant `SIDE_BET_SEASONS`
+
+**Problem:** The challenge definitions (names, descriptions, winners) are hardcoded strings inside `Scoreboard()`. This makes them impossible to access by week number or year, and requires editing method internals to update each season.
+
+**Fix:** Define a `SIDE_BET_SEASONS` dict near the top of `sleeper_core.py` (alongside `leagueNumbers_Dict` and `roster_ids`). Structure:
+
+```python
+SIDE_BET_SEASONS = {
+    2025: {
+        1:  {"name": "I'm Flying, Jack!",         "desc": "Team with the highest score (starters only)",                                                  "winner": "cosmodromedary"},
+        2:  {"name": "Look At These TDs",          "desc": "Team with the most offensive touchdowns scored",                                               "winner": "DirtyCommie"},
+        3:  {"name": "Big Helpers, Too",           "desc": "Most combined points with starting D/ST & Kicker",                                            "winner": "jhuntmadd"},
+        4:  {"name": "Blackjack",                  "desc": "Team with a starter closest to 21 points without going over",                                 "winner": "sgmaddox & jhuntmadd"},
+        5:  {"name": "The Replacements",           "desc": "Team with the highest total points for their bench",                                           "winner": "DirtyCommie"},
+        6:  {"name": "The Boom & Bust",            "desc": "Largest point differential between single highest and lowest-scoring starter",                 "winner": "eegrady"},
+        7:  {"name": "Campus Rush Week",           "desc": "Highest total rush yards for team (active or bench)",                                          "winner": "bgmaddox"},
+        8:  {"name": "All Hands on Deck",          "desc": "Team with the most starting players who score over 15 points",                                 "winner": "bgmaddox"},
+        9:  {"name": "The Old Man & Young Buck",   "desc": "Best combined score from a starting player over 30 and a rookie",                             "winner": "JTizzzzle"},
+        10: {"name": "NFL Franchise Week",         "desc": "Team with highest point total of players from the same NFL franchise (active or bench)",       "winner": "DirtyCommie"},
+        11: {"name": "Please Not the Jets",        "desc": "Trade Deadline Week — team with the most trades this season wins",                             "winner": "jhuntmadd & BMoreBallers88"},
+        12: {"name": "Go Long",                    "desc": "Starting QB with the highest completion % (over 10 throws)",                                   "winner": "bgmaddox"},
+        13: {"name": "Coffee's For Closers",       "desc": "Team that beats its opponent by the smallest margin of victory",                               "winner": ""},
+        14: {"name": "Breaking of the Tie",        "desc": "If needed — choose 3 non-QB players; highest combined total wins",                            "winner": ""},
+    }
+}
+```
+
+Add a helper method to `SideBet`:
+```python
+def get_week_config(self, week: int) -> dict:
+    """Returns {"name": ..., "desc": ..., "winner": ...} for the given week, or empty defaults."""
+    return SIDE_BET_SEASONS.get(self.League.year, {}).get(week, {"name": f"Week {week}", "desc": "", "winner": ""})
+```
+
+Update `Scoreboard()` to derive its table and tally from `SIDE_BET_SEASONS[year]` instead of hardcoded lists.
+
+**Historical data note:** Only 2025 data is in `SIDE_BET_SEASONS` at launch. Back-filling prior years (2019–2024) is a future update once that data is gathered — add each year as a new key when ready. The tab gracefully handles missing years (see Task 7G).
+
+**Verify:** `SideBet(league, season).get_week_config(5)` returns the correct dict for Week 5. `Scoreboard()` produces the same visual output as before using the new config source.
+
+---
+
+### Task 7C — Add Week11 chart method (transaction data)
+
+**File:** `sleeper_core.py` — `SideBet.Week11()`
+
+**Challenge:** "Please Not the Jets" — team with the most trades this season wins.
+
+**Data source:** Transaction data from `data_loader.fetch_transactions_json()` (already implemented in Phase 3D). Trades have `"type": "trade"` and `"status": "complete"`.
+
+**Method logic:**
+1. Fetch transactions for all weeks 1–11 for the current league year using `fetch_transactions_json(league_id, week)` — the league_id is `self.League.league_id`
+2. Filter to `type == "trade"` and `status == "complete"`
+3. Count trades per roster_id (each trade JSON has a `roster_ids` list) — map roster IDs to team names via `self.League.roster_ids[year]`
+4. Return a horizontal bar chart (Plotly, `template='gridiron_ink'`) showing trade count per team, sorted descending, with the winner highlighted
+
+**Winner determination:** The app's computed trade count is the authoritative result — no manual override field. Because of this, data quality matters: before marking a winner, verify that the transaction fetch returns complete data for all 12 teams and all weeks 1–11 (check for any `None` or empty responses). Add a data completeness check in the method — if any week returns an error response, log a warning and surface it in the chart subtitle rather than silently producing a wrong result.
+
+**Note:** If `fetch_transactions_json` returns empty or errors for a week (no transactions that week), handle gracefully — just treat as 0 trades for that week.
+
+**Verify:** `Week11(week_obj)` returns a figure. Trade counts match what's actually in the league.
+
+---
+
+### Task 7D — Add Week14 placeholder method
+
+**File:** `sleeper_core.py` — `SideBet.Week14()`
+
+Week 14 is a manual tiebreaker — "choose 3 non-QB players; highest combined total wins." There's no programmatic winner determination. Add a method that returns a simple informational chart:
+- A horizontal bar chart showing all starters' points for Week 14 (same data as Week 1's layout — total score per team, starters only), so the winner can be found visually
+- Subtitle: "Tiebreaker — top combined score from 3 non-QB starters"
+
+This gives the tab something to display for Week 14 without pretending there's an automated result.
+
+---
+
+### Task 7E — Wire SideBet into data loading
+
+**File:** `webapp/app.py` — data initialization block (~line 300) and helper functions
+
+**Currently:** `_data[year]` stores `{'league': ..., 'season': ..., 'weeks': ...}`. `SideBet` is never instantiated.
+
+**Fix:** After building `season` and `weeks`, instantiate `SideBet` and store it:
+```python
+from sleeper_core import SideBet
+sb = SideBet(league, season, DictofWeeks=weeks)
+_data[year]['sidebet'] = sb
+```
+
+Add a helper (alongside existing `_season()` and `_week()`):
+```python
+def _sidebet(year):
+    d = _data.get(year)
+    return d['sidebet'] if d and 'sidebet' in d else None
+```
+
+**Verify:** After app startup, `_sidebet(2025)` returns a `SideBet` instance. No existing tabs are affected.
+
+---
+
+### Task 7F — Add "Side Bet of the Week" card to This Week tab
+
+**File:** `webapp/app.py` — `_tab_week()`
+
+Add a card at the bottom of the This Week tab showing the current week's side bet challenge. This is a lightweight addition — no new callbacks needed.
+
+**Layout (native Dash HTML, no new chart initially):**
+```
+┌─────────────────────────────────────────────────────────┐
+│  SIDE BET · WEEK 7                                      │
+│  Campus Rush Week                                       │
+│  Highest total rush yards for team (active or bench)    │
+│                                                         │
+│  [chart for that week's side bet]                       │
+│                                                         │
+│  Winner: bgmaddox                    [trophy icon]      │
+└─────────────────────────────────────────────────────────┘
+```
+
+**Implementation:**
+1. Call `_sidebet(year)` — if None, show a loading placeholder
+2. Get the week's config via `sb.get_week_config(week)`
+3. Call the appropriate chart method (`sb.Week1(week_obj)`, `sb.Week2(week_obj)`, etc.) via a dispatch dict:
+   ```python
+   WEEK_METHODS = {1: 'Week1', 2: 'Week2', ..., 13: 'Week13', 14: 'Week14'}
+   method_name = WEEK_METHODS.get(week)
+   fig = getattr(sb, method_name)(week_obj) if method_name else None
+   ```
+4. Wrap in a `chart-card chart-col-full` div with the challenge name as the card title and the description as the subtitle
+5. If a winner exists in the config, append a small winner badge below the chart using the existing SVG trophy icon pattern
+
+**Edge case:** Week 11 `Week11()` needs transaction data which is fetched separately from `WeekObj`. Pass `week_obj` plus the league_id so the method can look up transactions internally (it already has `self.League.league_id`).
+
+**Verify:** This Week tab for any week 1–13 shows a side bet card with the correct challenge and chart.
+
+---
+
+### Task 7G — New "Side Bets" tab
+
+**File:** `webapp/app.py` — add `tab-sidebets` to the tabs list and implement `_tab_sidebets()`
+
+**Year selector behavior:** The Side Bets tab always displays 2025 data regardless of which year is selected in the sidebar — until historical configs are added to `SIDE_BET_SEASONS`. If the selected year has no config entry, show the 2025 data with a small banner: "Showing 2025 — historical data for [year] not yet available." Once prior-year configs are added, the tab becomes year-aware automatically (no code changes needed beyond the config dict).
+
+**Tab header:** Add after "All-Time" and before "Head-to-Head":
+```python
+dcc.Tab(label='Side Bets', value='tab-sidebets', className='tab tab--sidebets', selected_className='tab--selected'),
+```
+Wire into the main tab callback: `if tab == 'tab-sidebets': return _tab_sidebets(year, week)`
+
+**Tab layout — top to bottom:**
+
+**Section 1: Championship Scoreboard (full width)**
+
+A D3-rendered leaderboard showing each team's win tally and prize earnings for the season. This is the one place D3 adds clear value over Plotly — we want custom styling with inline prize amounts, medal colors, and animated bar transitions.
+
+- Deliver the tally data as a Dash `dcc.Store` (JSON) and render via a new `d3charts.js` function `renderSideBetLeaderboard(storeId, containerId)`
+- Each row: team name (colored) | win-count bar (gold fill, animated width) | wins label | prize total
+- Sort descending by wins; top 3 get gold/silver/bronze accent colors
+- If two teams are tied, show them at equal width
+
+**Section 2: Week navigator (dedicated slider)**
+
+A week scrubber row styled identically to the existing `week-scrubber` at the top of the app, but scoped to this tab. Clicking a week button scrolls the page to that week's card (via a `window.location.hash` or `scrollIntoView` approach in a small clientside callback — no server round-trip needed).
+
+- Button labels: "W1" through "W14" (or actual week numbers matching `SIDE_BET_SEASONS`)
+- Highlight the button for the currently selected year's last completed week
+- The week with no winner yet gets a subtle "upcoming" style
+
+**Section 3: Week cards (all weeks, in order)**
+
+One card per week, rendered in a single pass (no lazy loading — 14 charts is acceptable, and users will want to scroll through them). Each card:
+
+```
+┌──────────────────────────────────────────────────────┐
+│  WEEK 5  ·  The Replacements              [anchor id]│
+│  Team with the highest total bench points            │
+│                                                      │
+│  [Plotly chart]                                      │
+│                                                      │
+│  Winner: DirtyCommie  🏆                             │
+└──────────────────────────────────────────────────────┘
+```
+
+- Card has an `id=f'sidebet-week-{week}'` anchor for the scroll-to behavior
+- Winner row uses the existing SVG trophy icon if a winner is set; shows "TBD" in muted text if empty
+- Cards where no chart method exists yet (e.g., if a week is still in progress) show a placeholder message instead of erroring
+
+**CSS additions needed (`style.css`):**
+- `.sidebet-leaderboard` — container for the D3 leaderboard
+- `.sidebet-week-nav` — the week button row (can reuse `week-scrubber` styles with minor tweaks)
+- `.sidebet-winner-badge` — winner row styling (team color accent, trophy icon)
+- `.sidebet-tbd` — muted "TBD" styling for incomplete weeks
+
+**Verify:** Tab loads for 2025. All 13 available charts render. The week navigator scrolls to the correct card. The leaderboard shows accurate win counts and prize totals. Tab gracefully handles weeks with no chart method.
+
+---
+
+### Task 7H — Tests
+
+**File:** `tests/test_sidebet.py` (new file)
+
+**Tests to write:**
+- `test_sidebet_instantiation` — `SideBet(league, season, weeks)` creates successfully, `teamcolors` is populated
+- `test_get_week_config` — returns correct dict for a known week; returns default for an unknown week
+- `test_week_methods_return_figures` — parametrized over weeks 1–14 (skip Week11 if transactions not cached); each returns a Plotly `go.Figure`, not None
+- `test_scoreboard_returns_figure` — `Scoreboard()` returns a figure without raising
+- `test_no_fig_show_called` — (code inspection) grep `sleeper_core.py` for `fig.show()` inside the `SideBet` class block and assert count == 0
+
+Use `pytest.skip` if week cache is missing (same pattern as existing tests). Mark Week11 and Week14 as `@pytest.mark.xfail(strict=True)` until those methods are implemented.
+
+---
+
+### Implementation order
+
+1. **7A** (bug fixes) → **7B** (config) → **7E** (wire into data loading) — these three are sequential prerequisites
+2. **7C** and **7D** (missing week methods) — can be done alongside 7B
+3. **7H** (tests) — write alongside 7A/7B so bugs are caught before wiring up
+4. **7F** (This Week card) — once 7A/7B/7E are done
+5. **7G** (new tab) — last, builds on everything above
+
+---
 
 | Item | Notes |
 |------|-------|

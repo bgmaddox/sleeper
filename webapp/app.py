@@ -298,7 +298,8 @@ def _load_bg(year: int):
         _loading_years.add(year)
     try:
         league, season, weeks = dl.load_data_for_year(year, max_week=18, verbose=True)
-        _data[year] = {'league': league, 'season': season, 'weeks': weeks}
+        sb = core.SideBet(league, season, DictofWeeks=weeks)
+        _data[year] = {'league': league, 'season': season, 'weeks': weeks, 'sidebet': sb}
         _failed_years.discard(year)
     except Exception as e:
         print(f'[data] Error loading {year}: {e}')
@@ -324,6 +325,11 @@ def _weeks(year):
 
 def _week(year, w):
     return _weeks(year).get(w)
+
+
+def _sidebet(year):
+    _ensure(year)
+    return _data.get(year, {}).get('sidebet')
 
 
 # Pre-load current year in background at startup
@@ -873,7 +879,8 @@ app.layout = html.Div([
             dcc.Tab(label='Players',     value='tab-players', className='tab tab--players', selected_className='tab--selected'),
             dcc.Tab(label='All-Time',    value='tab-alltime', className='tab tab--alltime', selected_className='tab--selected'),
             dcc.Tab(label='Head-to-Head', value='tab-h2h',      className='tab tab--h2h',      selected_className='tab--selected'),
-            dcc.Tab(label='Playoffs',     value='tab-playoffs', className='tab tab--playoffs', selected_className='tab--selected'),
+            dcc.Tab(label='Playoffs',     value='tab-playoffs',  className='tab tab--playoffs',  selected_className='tab--selected'),
+            dcc.Tab(label='Side Bets',    value='tab-sidebets',  className='tab tab--sidebets',  selected_className='tab--selected'),
         ]),
 
         dcc.Loading(
@@ -1173,6 +1180,7 @@ def _render_tab(tab, year, week, teams):
     if tab == 'tab-alltime': return _tab_alltime(teams, year)
     if tab == 'tab-h2h':       return _tab_h2h_shell()
     if tab == 'tab-playoffs':  return _tab_playoffs(year)
+    if tab == 'tab-sidebets': return _tab_sidebets(year)
     return html.Div('Unknown tab')
 
 
@@ -1198,13 +1206,70 @@ def _parse_url(search):
             year = no_update
     tab_map = {'week': 'tab-week', 'season': 'tab-season',
                'players': 'tab-players', 'alltime': 'tab-alltime',
-               'h2h': 'tab-h2h', 'playoffs': 'tab-playoffs'}
+               'h2h': 'tab-h2h', 'playoffs': 'tab-playoffs',
+               'sidebets': 'tab-sidebets'}
     if tab is not no_update:
         tab = tab_map.get(tab, no_update)
     return tab, year
 
 
 # ── Tab: This Week ────────────────────────────────────────────────────────────
+
+_SIDEBET_WEEK_METHODS = {
+    1: 'Week1', 2: 'Week2', 3: 'Week3', 4: 'Week4', 5: 'Week5',
+    6: 'Week6', 7: 'Week7', 8: 'Week8', 9: 'Week9', 10: 'Week10',
+    12: 'Week12', 13: 'Week13',
+}
+
+
+def _sidebet_card(year, week, week_obj):
+    """Side Bet of the Week card for the bottom of the This Week tab."""
+    sb = _sidebet(year)
+    if sb is None:
+        return None
+
+    cfg = sb.get_week_config(week)
+    method_name = _SIDEBET_WEEK_METHODS.get(week)
+
+    # Build the chart
+    chart_el = None
+    if method_name:
+        try:
+            if week == 1:
+                fig = getattr(sb, method_name)(week_obj, top=None)
+            else:
+                fig = getattr(sb, method_name)(week_obj)
+            fig.update_layout(title=None, width=None, height=560,
+                              margin=dict(t=20, b=80, l=220, r=40))
+            chart_el = dcc.Graph(figure=fig, config={'displayModeBar': False, 'responsive': True},
+                                 style={'width': '100%'})
+        except Exception as e:
+            chart_el = dcc.Graph(figure=_err(str(e)), config={'displayModeBar': False, 'responsive': True}, style={'width': '100%'})
+    else:
+        chart_el = html.Div(f'Chart not yet available for Week {week}.',
+                            className='chart-subtitle', style={'padding': '24px 0'})
+
+    # Winner badge
+    winner = cfg.get('winner', '')
+    winner_el = None
+    if winner:
+        trophy = html.Span(className='playoff-icon playoff-icon--trophy',
+                           style={'display': 'inline-block', 'verticalAlign': 'middle',
+                                  'marginRight': '6px'})
+        winner_el = html.Div([trophy, html.Span(f'Winner: {winner}')],
+                             className='sidebet-winner-badge')
+    else:
+        winner_el = html.Div('Winner: TBD', className='sidebet-tbd')
+
+    kids = [
+        html.Div(f'SIDE BET · WEEK {week}', className='chart-eyebrow'),
+        html.Div(cfg['name'], className='chart-title'),
+        html.Div(cfg['desc'], className='chart-subtitle'),
+        chart_el,
+        winner_el,
+    ]
+    return html.Div([k for k in kids if k is not None], className='chart-card chart-col-full')
+
 
 def _tab_week(year, week, teams):
     season   = _season(year)
@@ -1275,6 +1340,10 @@ def _tab_week(year, week, teams):
         html.Button('▶  Load Chart', id='load-bubble', n_clicks=0, className='btn', style={'margin': '12px 0'}),
         html.Div(id='d3-bubble-container', style={'width': '100%', 'height': '860px'}),
     ], className='chart-card chart-col-full'))
+
+    sb_card = _sidebet_card(year, week, week_obj)
+    if sb_card is not None:
+        cards.append(sb_card)
 
     return html.Div(cards, className='charts-row')
 
@@ -1771,6 +1840,129 @@ def _tab_playoffs(year):
         *analytics,
         *alltime_section,
     ], className='charts-row')
+
+
+# ── Tab: Side Bets ────────────────────────────────────────────────────────────
+
+def _tab_sidebets(year):
+    # Fall back to 2025 if selected year has no config
+    config_year = year if year in core.SIDE_BET_SEASONS else 2025
+    sb = _sidebet(config_year)
+    if sb is None:
+        return _loading_placeholder()
+
+    year_config = core.SIDE_BET_SEASONS[config_year]
+    teamcolors  = sb.teamcolors
+
+    sections = []
+
+    # ── Fallback banner ───────────────────────────────────────────────────────
+    if config_year != year:
+        sections.append(html.Div(
+            f'Showing {config_year} — historical data for {year} not yet available.',
+            className='sidebet-fallback-banner',
+        ))
+
+    # ── Section 1: Championship Scoreboard ───────────────────────────────────
+    winner_counts: dict = {}
+    for cfg in year_config.values():
+        for name in cfg['winner'].split(' & '):
+            name = name.strip()
+            if name:
+                winner_counts[name] = winner_counts.get(name, 0) + 1
+
+    all_teams  = list(core.roster_ids.get(config_year, {}).values())
+    tally      = sorted([(t, winner_counts.get(t, 0)) for t in all_teams], key=lambda x: -x[1])
+    max_wins   = max((w for _, w in tally), default=1) or 1
+    MEDAL_COLORS = {1: '#FFD700', 2: '#C0C0C0', 3: '#CD7F32'}
+
+    rows = []
+    rank = 0
+    prev_wins = None
+    for i, (team, wins) in enumerate(tally):
+        if wins != prev_wins:
+            rank = i + 1
+            prev_wins = wins
+        medal = MEDAL_COLORS.get(rank, 'var(--text-muted)')
+        color = teamcolors.get(team, 'var(--text-main)')
+        bar_pct = wins / max_wins * 100
+        prize   = wins * 20
+
+        rows.append(html.Div([
+            html.Span(f'#{rank}', className='sb-rank', style={'color': medal}),
+            html.Span(team,       className='sb-team',  style={'color': color}),
+            html.Div(
+                html.Div(className='sb-bar-fill',
+                         style={'width': f'{bar_pct:.0f}%',
+                                'background': '#FFD700' if wins > 0 else 'transparent'}),
+                className='sb-bar-track',
+            ),
+            html.Span(f'{wins} {"win" if wins == 1 else "wins"}', className='sb-wins'),
+            html.Span(f'${prize}', className='sb-prize',
+                      style={'color': '#FFD700' if prize > 0 else 'var(--text-muted)'}),
+        ], className='sb-row'))
+
+    sections.append(html.Div([
+        html.Div('Side Bet Championship', className='chart-title'),
+        html.Div(f'{config_year} season · $20 per weekly win', className='chart-subtitle'),
+        html.Div(rows, className='sb-leaderboard'),
+    ], className='chart-card chart-col-full'))
+
+    # ── Section 2: Week navigator ─────────────────────────────────────────────
+    nav_btns = [
+        html.A(f'W{wk}', href=f'#sidebet-week-{wk}', className='sidebet-nav-btn',
+               **({'data-tbd': 'true'} if not year_config[wk]['winner'] else {}))
+        for wk in sorted(year_config.keys())
+    ]
+    sections.append(html.Div(nav_btns, className='sidebet-week-nav'))
+
+    # ── Section 3: Week cards (all weeks) ─────────────────────────────────────
+    _ico = lambda name: html.Span(className=f'playoff-icon playoff-icon--{name}')
+
+    weeks_dict = _data.get(config_year, {}).get('weeks', {})
+
+    for wk in sorted(year_config.keys()):
+        cfg = year_config[wk]
+        week_obj = weeks_dict.get(wk)
+
+        # Chart
+        method_name = _SIDEBET_WEEK_METHODS.get(wk)
+        if week_obj is None:
+            chart_el = html.Div(f'Week {wk} data not cached.', className='chart-subtitle',
+                                style={'padding': '20px 0'})
+        elif method_name:
+            try:
+                if wk == 1:
+                    fig = getattr(sb, method_name)(week_obj, top=None)
+                else:
+                    fig = getattr(sb, method_name)(week_obj)
+                fig.update_layout(title=None, width=None, height=520,
+                                  margin=dict(t=20, b=80, l=220, r=40))
+                chart_el = dcc.Graph(figure=fig, config={'displayModeBar': False, 'responsive': True},
+                                     style={'width': '100%'})
+            except Exception as e:
+                chart_el = dcc.Graph(figure=_err(str(e)), config={'displayModeBar': False, 'responsive': True}, style={'width': '100%'})
+        else:
+            chart_el = html.Div(f'Chart not yet available for Week {wk}.',
+                                className='chart-subtitle', style={'padding': '20px 0'})
+
+        # Winner badge
+        winner = cfg.get('winner', '')
+        if winner:
+            winner_el = html.Div([_ico('trophy'), html.Span(f'Winner: {winner}')],
+                                 className='sidebet-winner-badge')
+        else:
+            winner_el = html.Div('Winner: TBD', className='sidebet-tbd')
+
+        sections.append(html.Div([
+            html.Div(f'SIDE BET · WEEK {wk}', className='chart-eyebrow'),
+            html.Div(cfg['name'],  className='chart-title'),
+            html.Div(cfg['desc'],  className='chart-subtitle'),
+            chart_el,
+            winner_el,
+        ], id=f'sidebet-week-{wk}', className='chart-card chart-col-full'))
+
+    return html.Div(sections, className='charts-row')
 
 
 @app.callback(

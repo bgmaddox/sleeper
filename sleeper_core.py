@@ -328,6 +328,25 @@ leagueNumbers_Dict = {
 
 AVAILABLE_YEARS = [2019, 2020, 2021, 2022, 2023, 2024, 2025]
 
+SIDE_BET_SEASONS = {
+    2025: {
+        1:  {"name": "I'm Flying, Jack!",         "desc": "Team with the highest score (starters only)",                                                  "winner": "cosmodromedary"},
+        2:  {"name": "Look At These TDs",          "desc": "Team with the most offensive touchdowns scored",                                               "winner": "DirtyCommie"},
+        3:  {"name": "Big Helpers, Too",           "desc": "Most combined points with starting D/ST & Kicker",                                            "winner": "jhuntmadd"},
+        4:  {"name": "Blackjack",                  "desc": "Team with a starter closest to 21 points without going over",                                 "winner": "sgmaddox & jhuntmadd"},
+        5:  {"name": "The Replacements",           "desc": "Team with the highest total points for their bench",                                           "winner": "DirtyCommie"},
+        6:  {"name": "The Boom & Bust",            "desc": "Largest point differential between single highest and lowest-scoring starter",                 "winner": "eegrady"},
+        7:  {"name": "Campus Rush Week",           "desc": "Highest total rush yards for team (active or bench)",                                          "winner": "bgmaddox"},
+        8:  {"name": "All Hands on Deck",          "desc": "Team with the most starting players who score over 15 points",                                 "winner": "bgmaddox"},
+        9:  {"name": "The Old Man & Young Buck",   "desc": "Best combined score from a starting player over 30 and a rookie",                             "winner": "JTizzzzle"},
+        10: {"name": "NFL Franchise Week",         "desc": "Team with highest point total of players from the same NFL franchise (active or bench)",       "winner": "DirtyCommie"},
+        11: {"name": "Please Not the Jets",        "desc": "Trade Deadline Week — team with the most trades this season wins",                             "winner": "jhuntmadd & BMoreBallers88"},
+        12: {"name": "Go Long",                    "desc": "Starting QB with the highest completion % (over 10 throws)",                                   "winner": "bgmaddox"},
+        13: {"name": "Coffee's For Closers",       "desc": "Team that beats its opponent by the smallest margin of victory",                               "winner": ""},
+        14: {"name": "Breaking of the Tie",        "desc": "If needed — choose 3 non-QB players; highest combined total wins",                            "winner": ""},
+    }
+}
+
 # ── Global Match Dicts (populated as Week objects are created) ───────────────
 Matches_2019 = {}; Matches_2020 = {}; Matches_2021 = {}; Matches_2022 = {}
 Matches_2023 = {}; Matches_2024 = {}; Matches_2025 = {}
@@ -4268,6 +4287,12 @@ class SideBet:
         if color_dict is not None:
             self.teamcolors = color_dict
 
+    def get_week_config(self, week: int) -> dict:
+        """Returns {"name": ..., "desc": ..., "winner": ...} for the given week, or empty defaults."""
+        return SIDE_BET_SEASONS.get(self.League.year, {}).get(
+            week, {"name": f"Week {week}", "desc": "", "winner": ""}
+        )
+
     def Scoreboard(self, tally = None):
             
             def calc_table_height(df, base=208, height_per_row=20, char_limit=30, height_padding=16.5):
@@ -4282,43 +4307,31 @@ class SideBet:
                 for x in range(df.shape[0]):
                     total_height += height_per_row
                 for y in range(df.shape[1]):
-                    if len(str(df.iloc[x][y])) > char_limit:
+                    if len(str(df.iloc[x, y])) > char_limit:
                         total_height += height_padding
                 return total_height
 
+            year_config = SIDE_BET_SEASONS.get(self.League.year, {})
+
             if tally != None:
-                 tally_list = tally
+                tally_list = tally
             else:
-                tally_list = [['JTizzzzle',1],
-                ['eegrady',1],
-                ['cosmodromedary',1],
-                ['bgmaddox',3],
-                ['sgmaddox',1],
-                ['jhuntmadd',3],
-                ['RascalHazard',0],
-                ['InfiniteJesse',0],
-                ['BMoreBallers88',1],
-                ['RossLikeSauce',0],
-                ['DirtyCommie',3],
-                ['jlglover',0]]
+                winner_counts = {}
+                for cfg in year_config.values():
+                    for name in cfg["winner"].split(" & "):
+                        name = name.strip()
+                        if name:
+                            winner_counts[name] = winner_counts.get(name, 0) + 1
+                all_teams = list(roster_ids.get(self.League.year, {}).values())
+                tally_list = [[team, winner_counts.get(team, 0)] for team in all_teams]
 
             tallyDF = pd.DataFrame(tally_list, columns=['Team','Wins'])
             tallyDF['Prize $'] = '$' + (tallyDF.Wins * 20).astype(str)
 
-            SideBetWeeklyWins_list = [["<b>WEEK 1:</b> I'm flying, Jack! - Team with the highest score (starters only)",'cosmodromedary'],
-            ['<b>WEEK 2:</b> Look At These TDs - Team with the most offensive touchdowns scored','DirtyCommie'],
-            ['<b>WEEK 3:</b> Big Helpers, too (just ask my mom): Most combined points with starting D/ST & Kicker','jhuntmadd'],
-            ['<b>WEEK 4:</b> Blackjack - Team with a starter closest to 21 points without going over','sgmaddox & jhuntmadd'],
-            ['<b>WEEK 5:</b> The Replacements - Team with the highest total points for their bench','DirtyCommie'],
-            ['<b>WEEK 6:</b> The Boom & Bust: Team with the largest point differential between their single highest-scoring starter and their single lowest-scoring starter.','eegrady'],
-            ['<b>WEEK 7:</b> Campus Rush Week - Total rush yards for team (active or bench)','bgmaddox'],
-            ['<b>WEEK 8:</b> All Hands on Deck: Team with the most starting players who score over 15 points','bgmaddox'],
-            ['<b>WEEK 9:</b> The Old Man & Young Buck: Best combined score from a starting player over 30 and a rookie','JTizzzzle'],
-            ['<b>WEEK 10:</b> NFL Franchise Week - Team with the highest point total of players from the same franchise (active or bench)','DirtyCommie'],
-            ['<b>WEEK 11:</b> Please not the Jets (Trade Deadline Week) - Team with the most trades this seasons wins','jhmadd & BMoreBallers88'],
-            ['<b>WEEK 12:</b> Go Long - Team with the Starting QB with the highest completion % (over 10 throws)','bgmaddox'],
-            ["<b>WEEK 13:</b> Coffee's For Closers - Team that beats its opponent by the smallest margin of victory",''],
-            ['<b>WEEK 14:</b> Breaking of the Tie (if needed) - Choose 3 non-QB players. Highest combined total wins.','']]
+            SideBetWeeklyWins_list = [
+                [f"<b>WEEK {wk}:</b> {cfg['name']} - {cfg['desc']}", cfg["winner"]]
+                for wk, cfg in sorted(year_config.items())
+            ]
 
             SideBetWeeklyWins = pd.DataFrame(SideBetWeeklyWins_list, columns=['Side Bet','Winner'])
 
@@ -4393,29 +4406,29 @@ class SideBet:
         
         df = WeekObj.WeeklyNoMatches
         df = df.sort_values('Total', ascending = False)
-        top = df['Team'][0]
-        
-        #points = df.drop(columns=['Total','Won','Week','Opp','Matchup']).map(lambda x: float(list(x.values())[0]))
+        top = df.index[0]
+
         points = df.map(lambda x: float(list(x.values())[0]) if isinstance(x, dict) else x)
         points = points.round(1).reset_index()
-        
+
+        _non_pos = {'Total', 'Won', 'Week', 'Opp', 'Matchup', 'Margin', 'Opp_team',
+                    'Season', 'Week Index', 'Year', 'LeagueTotal', 'PercentTotal', 'Team'}
+        position_list = [c for c in points.columns if c not in _non_pos]
+
         default_color = '#F94144'
-    
+
         colors = {top: "#17BECF"}
-        
-        #points = df.sort_values('Total', ascending = False)
+
         team_list = df.sort_values('Total', ascending = True).index.tolist()
-        
-        #Ranked = df.index.sort_values('Total', ascending = True).unique()
+
         SizeZip = dict(zip(team_list,range(12,30)))
-        print(SizeZip)
 
         color_discrete_map = {
-            c: colors.get(c, default_color) 
+            c: colors.get(c, default_color)
             for c in team_list}
 
 
-        fig1 = px.bar(points, y='Team',x=position_list,template = 'gridiron_ink',color = "Team", text_auto=True, title = f'Week {Week} Side Bet', orientation='h',color_discrete_map=color_discrete_map)
+        fig1 = px.bar(points, y='Team',x=position_list,template = 'gridiron_ink',color = "Team", text_auto=True, title = f'Week {WeekObj.week} Side Bet', orientation='h',color_discrete_map=color_discrete_map)
         
         #Update the layout to hide the legend:
         fig1.update(layout_coloraxis_showscale=False)
@@ -4505,8 +4518,7 @@ class SideBet:
         #Week2Data = week2Breakout2024.merge(Week2filtered,left_on='player', right_on='player_display_name')
         Week2Data = Week2[Week2['starter']==1]
         Week2Data = Week2Data[df_cols]
-        Week2Data.loc[94,'receiving_tds'] = 1.0
-        Week2Data.fillna(0, inplace=True)
+        Week2Data[td_cols] = Week2Data[td_cols].fillna(0)
 
         Week2Data['Total']= Week2Data['passing_tds'] + Week2Data['rushing_tds'] + Week2Data['receiving_tds'] + Week2Data['special_teams_tds']
 
@@ -4524,7 +4536,7 @@ class SideBet:
         
         # Graph
 
-        fig = px.bar(Week2Totals,y='team',x='Total',color='position' ,title = f'Week {WeekObj.week} Side Bet', orientation='h',text=f'Total')
+        fig = px.bar(Week2Totals,y='team',x='Total',color='position', template='gridiron_ink', title = f'Week {WeekObj.week} Side Bet', orientation='h',text=f'Total')
 
         fig.update_traces(insidetextanchor= 'middle',textfont=dict(
                 size=35, weight = 'bold'))
@@ -4574,7 +4586,7 @@ class SideBet:
         self.Week2Data = Week2Data
         self.Week2Totals = Week2Totals
 
-        fig.show()
+        return fig
 
     def Week3(self, WeekObj):
 
@@ -4590,7 +4602,7 @@ class SideBet:
 
         ## GRAPH
 
-        fig = px.bar(df,y='team',x='points',color='position' ,title = f'<b>Week {WeekObj.week} Side Bet</b><br><sup>Best DEF/K Combo</sup>', orientation='h',text='display_text', barmode='relative')
+        fig = px.bar(df,y='team',x='points',color='position', template='gridiron_ink', title = f'<b>Week {WeekObj.week} Side Bet</b><br><sup>Best DEF/K Combo</sup>', orientation='h',text='display_text', barmode='relative')
 
         fig.update_layout(
                 xaxis_title="",  # Set x-axis title
@@ -4639,9 +4651,8 @@ class SideBet:
             )
         self.UpdateColors2(WeekObj,fig)
         self.Week3df = df
-        
 
-        fig.show()
+        return fig
 
     def Week4(self, WeekObj):
 
@@ -4731,22 +4742,10 @@ class SideBet:
                 ))
         # Update the line thickness
         figWeek5.update_layout(
-                xaxis_title="Points",  # Set x-axis title
-                yaxis_title="Teams",   # Set y-axis title
-                xaxis=dict(
-                    title_font=dict(
-                        size=30,          # Set font size for x-axis title
-                        color ='red',
-                        weight = 'bold'
-                    )
-                ),
-                yaxis=dict(
-                    title_font=dict(
-                        size=30,          # Set font size for y-axis title
-                        color = 'green',
-                        weight = 'bold'
-                    )
-                )
+                xaxis_title="Points",
+                yaxis_title="Teams",
+                xaxis=dict(title_font=dict(size=30, weight='bold')),
+                yaxis=dict(title_font=dict(size=30, weight='bold')),
             )
         figWeek5.update_layout(
             legend=dict(
@@ -4784,69 +4783,6 @@ class SideBet:
 
         
         return figWeek5
-
-    def Week5Graph(self, df, WeekObj,top):
-        df = WeekObj.Match
-        df = df.sort_values('Total', ascending = False)
-        points = df.drop(columns=['Total','Won','Week','Opp','Matchup']).map(lambda x: float(list(x.values())[0]))
-        points = points.round(2).reset_index()
-        
-        default_color = "blue"
-        colors = {top: "red"}
-
-        team_list = points['Team'].unique()
-
-        color_discrete_map = {
-            c: colors.get(c, default_color) 
-            for c in team_list}
-
-
-        fig1 = px.bar(points, y='Team',x=position_list,template = 'gridiron_ink',color = "Team", text_auto=True, title = f'Week {Week} Side Bet', orientation='h',color_discrete_map=color_discrete_map)
-        
-        #Update the layout to hide the legend:
-        fig1.update(layout_coloraxis_showscale=False)
-        
-        fig1.update_layout(barcornerradius=13)
-        # Adjust the figure size
-        fig1.update_layout(width=800, height=1200)
-        fig1.update_layout(title=dict(
-                font=dict(
-                    size=50,
-                    family="Courier New")))  # Set the width and height in pixels
-        fig1.update_traces(textfont_size=12, textangle=0, cliponaxis=True, textposition = 'auto', textfont=dict(weight='bold',  # Font family
-                size=12   # Font color
-            ))
-        
-        # Customize the x-axis labels
-        fig1.update_xaxes(
-            tickfont=dict(
-                size=16,         # Font size
-            ),
-            title = None
-        )
-
-        # Customize the y-axis labels
-        fig1.update_yaxes(
-            tickfont=dict(
-                size=18,         # Font size
-            ),
-            title=None
-        )
-
-        fig1.update(layout_coloraxis_showscale=False)
-        fig1.update_layout(showlegend=False)
-        # Adjust the figure size
-        fig1.update_layout(width=800, height=1200)
-        fig1.update_layout(title=dict(
-                ))  # Set the width and height in pixels
-        fig1.update_traces(textfont_size=12, textangle=0, cliponaxis=True, textposition = 'inside', textfont=dict(weight='bold',  
-                size=12   # Font color
-            ))
-        
-
-
-        fig1.show()
-        return fig1
 
     def Week6(self, WeekObj):
         df6 = WeekObj.Breakout
@@ -4978,7 +4914,17 @@ class SideBet:
     def Week9(self,WeekObj):
         Week9Setup = WeekObj.Breakout
         Week9Setup = Week9Setup[Week9Setup.starter == 1]
-        Week9Setup = Week9Setup[(Week9Setup['rookie_year'] == 2025.0) | (Week9Setup['age']>29.0)]
+        has_age = 'age' in Week9Setup.columns
+        has_rookie = 'rookie_year' in Week9Setup.columns
+        if not has_age and not has_rookie:
+            import plotly.graph_objects as _go
+            fig = _go.Figure()
+            fig.add_annotation(text="Week 9 data unavailable (age/rookie_year columns missing)",
+                               xref="paper", yref="paper", x=0.5, y=0.5, showarrow=False)
+            return fig
+        age_mask = Week9Setup['age'] > 29.0 if has_age else pd.Series(False, index=Week9Setup.index)
+        rookie_mask = Week9Setup['rookie_year'] == 2025.0 if has_rookie else pd.Series(False, index=Week9Setup.index)
+        Week9Setup = Week9Setup[rookie_mask | age_mask]
             
         Week9Setup['Type'] = np.where(Week9Setup['rookie_year'] == 2025.0, 'Young Buck', 'Old Man')
 
@@ -4988,7 +4934,7 @@ class SideBet:
 
         Week9['Player_Text'] = '<b>' + Week9['player'] + '</b><br><sup>' + Week9['Type'] + '</sup>'
 
-        figWeek9 = px.bar(Week9, x = 'points', y = 'team', orientation='h', color = 'Type', text = 'Player_Text', title = f'<b>Week {WeekObj.week} Side Bet</b><br><sup>The Old Man & Young Buck</sup>')
+        figWeek9 = px.bar(Week9, x = 'points', y = 'team', orientation='h', color = 'Type', text = 'Player_Text', template='gridiron_ink', title = f'<b>Week {WeekObj.week} Side Bet</b><br><sup>The Old Man & Young Buck</sup>')
         figWeek9.update_layout(yaxis={'categoryorder':'total ascending'})
 
         figWeek9.update_layout(
@@ -5042,7 +4988,7 @@ class SideBet:
                     #subplot_titles=['Matchup Schedule','Win History']# Specify the chart types
                 )
         for i in range(1,13):
-                person = roster_ids_2025[i]
+                person = roster_ids[self.League.year][i]
                 CurrentGraph = Week10SideBet.get_group(person)
                 rowlist = [1,1,2,2,3,3,4,4,5,5,6,6]
                 collist = [1,2,1,2,1,2,1,2,1,2,1,2]
@@ -5074,7 +5020,7 @@ class SideBet:
 
                 # Add the custom title as an annotation at the top of each subplot
                 figCombo2.add_annotation(
-                    text=roster_ids_2025[i], #,  # The HTML title
+                    text=roster_ids[self.League.year][i],
                     xref=f'x domain', yref=f'y domain',
                     x=.5, y=1.2,  # Position it above the subplot (y > 1)
                     xanchor='center',
@@ -5136,12 +5082,12 @@ class SideBet:
         Week12Graph = df[df['starter']==1]
         Week12Graph = Week12Graph[Week12Graph.position == 'QB']
 
-        cols = ['team','player','completions', 'attempts', 'recent_teams']
+        cols = ['team','player','completions', 'attempts', 'recent_team']
 
         Week12Simple = Week12Graph[cols]
         Week12Simple['CompletionPercent'] = round(Week12Simple['completions'] / Week12Simple['attempts'] * 100,1)
         Week12Simple = Week12Simple.sort_values('CompletionPercent', ascending=False)
-        Week12Simple['GraphText'] = Week12Simple.CompletionPercent.astype(str) + '% - ' + Week12Simple.player + ' (' + Week12Simple.recent_teams + ')'
+        Week12Simple['GraphText'] = Week12Simple.CompletionPercent.astype(str) + '% - ' + Week12Simple.player + ' (' + Week12Simple.recent_team + ')'
 
         Week12Simple['color'] = Week12Simple.team.map(WeekObj.teamcolors)
         
