@@ -2,7 +2,7 @@
 
 **Created:** 2026-05-21  
 **Last updated:** 2026-05-24  
-**Status:** Active — Phase 4 complete; Phase 7 (SideBet) planned next; Phase 3/5/6 deferred  
+**Status:** Active — Phases 1–4, 6–7 complete; Phase 3 partially done; 7C/7D deferred; Phase 8 TBD  
 **Supersedes:** `design/fix-plan.md` (all tasks complete as of commit `41094a3`)
 
 This document is the single source of truth for planned work. Update status inline as tasks complete.
@@ -22,8 +22,11 @@ The following changes are staged but uncommitted:
 - `PlayerBreakout` position column bug fix (see Bug Fix Log below)
 - `tests/test_charts.py` xfail marker removed from `test_position_strength_polar_renamed`
 
-### Test suite status
+### Test suite status (as of 2026-05-21)
 `pytest tests/ -m "not slow"` → **55 passed, 0 failed, 0 xfailed**
+
+### Test suite status (as of 2026-05-24)
+`pytest tests/ -m "not slow"` → **139 passed, 0 failed, 2 xfailed** (Week11 + Week14 intentionally xfail)
 
 ---
 
@@ -463,7 +466,7 @@ Three charts below bracket cards (winners bracket only):
 
 ---
 
-## This Week Tab — Power Rankings Enhancements ⚠️ UNCOMMITTED
+## This Week Tab — Power Rankings Enhancements ✅ COMPLETE (commits `eaccab8`, `7373411`)
 
 Work completed 2026-05-23. Changes in `webapp/app.py`, `webapp/assets/style.css`, and new `webapp/assets/tablesort.js`.
 
@@ -485,17 +488,17 @@ All columns except the change indicator (↑/↓) and Streak now have click-to-s
 
 ---
 
-## Phase 6 — All-Time Playoff Analytics
+## Phase 6 — All-Time Playoff Analytics ✅ COMPLETE (commits `fb08678`, `7cec76d`)
 
-**Goal:** Add five playoff-specific charts to the All-Time tab, aggregating bracket and score data across all seasons (2019–2025).
+**Goal:** Add five playoff-specific charts aggregating bracket and score data across all seasons (2019–2025).
 
-**Where they live:** Bottom of the All-Time tab, below the existing hall-of-fame / records cards. No new tab needed.
+**Final placement:** Charts moved to the Playoffs tab (bottom section) after initial build placed them on All-Time tab. `7cec76d` also fixed half-width chart layout CSS.
 
 **Data dependency:** Each year's bracket data is already fetchable via `data_loader.fetch_winners_bracket(league_id)` and `fetch_losers_bracket(league_id)` (Task 4A). Playoff week scores are in `AllMatchesDict[year][week]` for playoff weeks. The `Playoffs` class (Phase 4B) handles a single year — Phase 6 needs a multi-year aggregation layer.
 
 ---
 
-### Task 6A — AllTimePlayoffs aggregator in sleeper_core.py
+### Task 6A — AllTimePlayoffs aggregator in sleeper_core.py ✅ DONE
 
 **File:** `sleeper_core.py` — new method(s) on or alongside `AllTime`
 
@@ -529,7 +532,7 @@ year | week | round | match | team | score | opponent | opp_score | won | placem
 
 ---
 
-### Task 6B — Chart 1: Playoff Appearances Leaderboard
+### Task 6B — Chart 1: Playoff Appearances Leaderboard ✅ DONE
 
 **Type:** Horizontal grouped bar chart  
 **Data source:** `playoff_results` — group by `team`, count appearances / semifinal appearances (round_exit >= 2) / championship appearances (round_exit == 3) / wins (placement == 1)  
@@ -546,7 +549,7 @@ year | week | round | match | team | score | opponent | opp_score | won | placem
 
 ---
 
-### Task 6C — Chart 2: Playoff Win Rate
+### Task 6C — Chart 2: Playoff Win Rate ✅ DONE
 
 **Type:** Horizontal bar chart  
 **Data source:** `playoff_games` — for each team, `wins / (wins + losses)` in non-placement games (placement games skew the stat since both teams "lost" to get there)  
@@ -563,7 +566,7 @@ year | week | round | match | team | score | opponent | opp_score | won | placem
 
 ---
 
-### Task 6D — Chart 3: Regular Season Rank vs. Playoff Finish
+### Task 6D — Chart 3: Regular Season Rank vs. Playoff Finish ✅ DONE
 
 **Type:** Scatter plot  
 **Data source:** `playoff_results` — one dot per (year, team) pair  
@@ -582,7 +585,7 @@ year | week | round | match | team | score | opponent | opp_score | won | placem
 
 ---
 
-### Task 6E — Chart 4: Playoff Records Card
+### Task 6E — Chart 4: Playoff Records Card ✅ DONE
 
 **Type:** Native HTML card (same pattern as existing All-Time records cards)  
 **Data source:** `playoff_games`  
@@ -602,7 +605,7 @@ year | week | round | match | team | score | opponent | opp_score | won | placem
 
 ---
 
-### Task 6F — Chart 5: Championship Road Scores
+### Task 6F — Chart 5: Championship Road Scores ✅ DONE
 
 **Type:** Grouped bar chart  
 **Data source:** `playoff_results` filtered to `placement == 1`; scores from `playoff_games`  
@@ -633,7 +636,9 @@ Add a section header ("Playoff History") dividing the existing records cards fro
 
 ---
 
-## Phase 7 — Side Bets Tab
+## Phase 7 — Side Bets Tab ✅ LARGELY COMPLETE (commit `c9af1b3`)
+
+Tasks 7A, 7B, 7E, 7F, 7G, 7H done. Tasks 7C (Week11 transactions) and 7D (Week14 placeholder) remain deferred — both marked `xfail(strict=True)` in the test suite.
 
 **Goal:** Surface the weekly side bet game as a first-class feature — a dedicated "Side Bets" tab showing all week challenges with their charts and results, plus a "Side Bet of the Week" card on the existing This Week tab.
 
@@ -647,7 +652,7 @@ Add a section header ("Playoff History") dividing the existing records cards fro
 
 ---
 
-### Task 7A — Fix `SideBet` class bugs and make all methods webapp-safe
+### Task 7A — Fix `SideBet` class bugs and make all methods webapp-safe ✅ DONE
 
 **File:** `sleeper_core.py` — `SideBet` class (~line 4224)
 
@@ -676,7 +681,7 @@ Line 5139: `cols = ['team','player','completions', 'attempts', 'recent_teams']` 
 
 ---
 
-### Task 7B — Move side bet config out of `Scoreboard()` into a structured dict
+### Task 7B — Move side bet config out of `Scoreboard()` into a structured dict ✅ DONE
 
 **File:** `sleeper_core.py` — new module-level constant `SIDE_BET_SEASONS`
 
@@ -720,7 +725,7 @@ Update `Scoreboard()` to derive its table and tally from `SIDE_BET_SEASONS[year]
 
 ---
 
-### Task 7C — Add Week11 chart method (transaction data)
+### Task 7C — Add Week11 chart method (transaction data) ⏸️ DEFERRED
 
 **File:** `sleeper_core.py` — `SideBet.Week11()`
 
@@ -742,7 +747,7 @@ Update `Scoreboard()` to derive its table and tally from `SIDE_BET_SEASONS[year]
 
 ---
 
-### Task 7D — Add Week14 placeholder method
+### Task 7D — Add Week14 placeholder method ⏸️ DEFERRED
 
 **File:** `sleeper_core.py` — `SideBet.Week14()`
 
@@ -754,7 +759,7 @@ This gives the tab something to display for Week 14 without pretending there's a
 
 ---
 
-### Task 7E — Wire SideBet into data loading
+### Task 7E — Wire SideBet into data loading ✅ DONE
 
 **File:** `webapp/app.py` — data initialization block (~line 300) and helper functions
 
@@ -778,7 +783,7 @@ def _sidebet(year):
 
 ---
 
-### Task 7F — Add "Side Bet of the Week" card to This Week tab
+### Task 7F — Add "Side Bet of the Week" card to This Week tab ✅ DONE
 
 **File:** `webapp/app.py` — `_tab_week()`
 
@@ -815,7 +820,7 @@ Add a card at the bottom of the This Week tab showing the current week's side be
 
 ---
 
-### Task 7G — New "Side Bets" tab
+### Task 7G — New "Side Bets" tab ✅ DONE
 
 **File:** `webapp/app.py` — add `tab-sidebets` to the tabs list and implement `_tab_sidebets()`
 
@@ -875,7 +880,7 @@ One card per week, rendered in a single pass (no lazy loading — 14 charts is a
 
 ---
 
-### Task 7H — Tests
+### Task 7H — Tests ✅ DONE
 
 **File:** `tests/test_sidebet.py` (new file)
 
