@@ -38,7 +38,7 @@ After any directory reorganization:
 # Kill any existing server first — port 8050 lingers even after background tasks "fail"
 lsof -ti :8050 | xargs kill -9 2>/dev/null; sleep 1
 cd webapp && source ../.venv/bin/activate && python app.py
-# Open http://localhost:8050  (password: legacy)
+# Open http://localhost:8050  (password: LEAGUE_PASSWORD in the project-root .env)
 ```
 
 Always kill before restarting. Confirm with `curl -s -o /dev/null -w "%{http_code}" http://localhost:8050/login` (expect 200).

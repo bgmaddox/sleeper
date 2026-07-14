@@ -119,8 +119,29 @@ def _default_week(year: int, weeks_dict: dict) -> tuple:
         return available_max, min(leg, available_max)
     default = min(REGULAR_SEASON_WEEKS, available_max)
     return available_max, default
-SECRET_KEY    = os.environ.get('SECRET_KEY', 'dev-secret-change-in-production')
-LEAGUE_PASS   = os.environ.get('LEAGUE_PASSWORD', 'legacy')
+def _load_env_file():
+    """Load KEY=VALUE pairs from the project-root .env (gitignored) into
+    os.environ. Real environment variables take precedence."""
+    env_path = os.path.join(os.path.dirname(__file__), '..', '.env')
+    if not os.path.exists(env_path):
+        return
+    with open(env_path) as f:
+        for line in f:
+            line = line.strip()
+            if not line or line.startswith('#') or '=' not in line:
+                continue
+            key, _, value = line.partition('=')
+            os.environ.setdefault(key.strip(), value.strip())
+
+_load_env_file()
+
+SECRET_KEY  = os.environ.get('SECRET_KEY')
+LEAGUE_PASS = os.environ.get('LEAGUE_PASSWORD')
+if not SECRET_KEY or not LEAGUE_PASS:
+    raise RuntimeError(
+        'SECRET_KEY and LEAGUE_PASSWORD must be set — create a .env at the '
+        'project root (copy .env.example) or export them in the environment.'
+    )
 COOKIE_NAME   = 'll_auth'
 COOKIE_TTL    = 30 * 24 * 3600   # 30 days
 LOGO_URL      = 'https://raw.githubusercontent.com/bgmaddox/sleeper/master/LL%20logo.png'
@@ -275,7 +296,7 @@ def _debug_error():
 
 @server.before_request
 def _auth_gate():
-    bypass = (LOGIN_URL, URL_BASE + 'assets', '/_dash-component-suites', '/favicon.ico', '/manifest.json', '/_reload-hash', '/debug-error')
+    bypass = (LOGIN_URL, URL_BASE + 'assets', '/_dash-component-suites', '/favicon.ico', '/manifest.json', '/_reload-hash')
     if any(request.path.startswith(p) for p in bypass):
         return
     if not _valid_token(request.cookies.get(COOKIE_NAME)):
@@ -3316,4 +3337,5 @@ def _populate_chord_data(tab, _boot_done):
 # ── Run ───────────────────────────────────────────────────────────────────────
 
 if __name__ == '__main__':
-    app.run(debug=True, dev_tools_hot_reload=False, host='0.0.0.0', port=8050)
+    _debug = os.environ.get('DASH_DEBUG', '0') == '1'
+    app.run(debug=_debug, dev_tools_hot_reload=False, host='0.0.0.0', port=8050)
