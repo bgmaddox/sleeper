@@ -1,8 +1,8 @@
 # Legacy League Webapp — Development Roadmap
 
 **Created:** 2026-05-21  
-**Last updated:** 2026-05-24  
-**Status:** Active — Phases 1–4, 6–7 complete; Phase 3 complete (3E deferred to 2026); Phase 8 TBD  
+**Last updated:** 2026-05-28  
+**Status:** Active — Phases 1–4, 6–9 complete; Phase 3 complete (3E deferred to 2026); historical side bets (2019–2024) complete  
 **Supersedes:** `design/fix-plan.md` (all tasks complete as of commit `41094a3`)
 
 This document is the single source of truth for planned work. Update status inline as tasks complete.
@@ -910,3 +910,212 @@ Use `pytest.skip` if week cache is missing (same pattern as existing tests). Mar
 | Route `League.UsersJSONtoDF` through data_loader | ✅ Done — `SettingsJSONtoDF` and `UsersJSONtoDF` now use `fetch_league_json` / `fetch_league_users_json`. |
 | Crosswalk Sleeper player IDs to GSIS IDs for ID-based stats join | ✅ Done — `nfl_data_py` rosters carry a `sleeper_id` column (no `espn_id` needed). `fetch_sleeper_gsis_crosswalk(year)` added to data_loader; `PlayerBreakout` now joins on GSIS ID + week instead of display name + week. 100% coverage for fantasy skill positions. |
 | `previous_league_id` auto-discovery | No urgency until 2026 season is created. See Task 3E. |
+
+---
+
+## Historical Side Bets (2019–2024) ✅ COMPLETE (commit `0a87d03`)
+
+Backfilled `SIDE_BET_SEASONS` with challenge names, descriptions, and winners for all 6 prior seasons. Parser script at `scripts/parse_sidebet_xlsx.py` documents the extraction process. Permanent pytest invariant `test_sidebet_winners_match_rosters` validates all 7 years. No app code changes were required — the Side Bets tab is year-config-driven.
+
+**One post-migration fix:** 2019 weeks 3 and 11 used `RReclam` (parser output) but that person's 2019 Sleeper username was `GurlyGirls`; corrected in `sleeper_core.py`.
+
+---
+
+## Phase 8 — Playoff Probability Calculator ✅ COMPLETE
+
+Added a **Playoff Calculator** card to the **This Week** tab (after Power Rankings). Shows each team's probability of making the playoffs, week-over-week probability trend, and games to root for. Algorithm uses NumPy bitmask enumeration over all remaining-schedule outcomes. `PlayoffCalculator` class lives in `sleeper_core.py`.
+
+---
+
+## Phase 9 — Survivor Tab ✅ COMPLETE
+
+New **Survivor** tab surfacing the league's survivor pool pick history and elimination tracking. Data sourced from a separate Sleeper survivor league via `SURVIVOR_LEAGUE_IDS` (2024–2025). Fetchers added to `data_loader.py`; tab implemented in `webapp/app.py`.
+
+---
+
+## Phase 10 — Champion Badges
+
+**Goal:** Display a personalized SVG champion badge at the top of three tabs — Playoffs (League Champion), Side Bets (Side Bet Champion), and Survivor (Survivor Champion) — for the currently selected year. The badge uses a custom-designed SVG template; Python reads and modifies the template at runtime to inject the correct year and winner's team name before embedding it in the Dash layout.
+
+**Why this approach:** The badge is an Affinity Designer asset exported as SVG with real `<text>` elements (not path-converted). Python's `xml.etree.ElementTree` can parse it, find the right nodes, swap their text content, and re-serialize the SVG. The modified SVG is base64-encoded into a data URI for an `<img>` tag — no file writes at runtime, no static asset management, no Dash routing complexity.
+
+**Prerequisite:** User provides the 2019 template SVG (`Legacy League Winners Badge.svg` or equivalent). Save it to `webapp/assets/badges/champion_badge_template.svg`. This file is the single source of truth for all years and all three badge types — the template is champion-agnostic; only the year and team name `<text>` nodes change.
+
+---
+
+### Task 10A — Save the SVG template and confirm its text element structure
+
+**Action:** Copy the provided 2019 badge SVG to `webapp/assets/badges/champion_badge_template.svg`.
+
+Then confirm the SVG has the expected four `<text>` elements by running:
+```bash
+grep "<text" webapp/assets/badges/champion_badge_template.svg
+```
+
+**Expected structure (four `<text>` elements total):**
+1. `"C"` — oversized decorative first letter of CHAMPION; do not touch
+2. `"HAMPION"` — rest of the word CHAMPION; do not touch
+3. Year — a 4-digit number (e.g., `"2019"`); this is the year field
+4. Team name — the remaining element (not "C", not "HAMPION", not 4 digits); this is the winner field
+
+**Identification logic an agent must use:**
+- Year element: `<text>` whose text content matches `^\d{4}$` (exactly 4 digits, nothing else)
+- Team name element: `<text>` whose text content does NOT match `^\d{4}$` AND is not `"C"` AND does not contain `"AMPION"` (case-insensitive guard for both "HAMPION" and "CHAMPION" variants)
+- "C" and "HAMPION" elements are identified by exact content match — they must never be modified
+
+If the grep output shows a different structure (e.g., CHAMPION is a single `<text>` element, or team name is in a `<tspan>` child), adjust the parsing logic in Task 10B accordingly before writing any code. The structural check here must happen first.
+
+**Verify:** Four `<text>` elements present. Year and team name elements are unambiguously identifiable.
+
+---
+
+### Task 10B — Write `_render_badge(year, team_name)` helper in `webapp/app.py`
+
+**File:** `webapp/app.py` — add near the top of the file alongside other helper functions (after imports, before tab functions)
+
+**What this function does:**
+1. Reads `webapp/assets/badges/champion_badge_template.svg` once (consider module-level caching — read the file once at import time and store in a module variable `_BADGE_SVG_RAW`, so repeated tab renders don't re-read from disk)
+2. Parses the SVG with `xml.etree.ElementTree` — SVG uses the `http://www.w3.org/2000/svg` namespace, so all tag lookups must use the namespace prefix: `{http://www.w3.org/2000/svg}text`
+3. Iterates over all `<text>` elements and applies the identification logic from Task 10A to find the year node and the team name node
+4. Replaces `.text` on the year node with `str(year)` and `.text` on the team name node with `team_name`
+5. Re-serializes the modified tree to a string with `ET.tostring(root, encoding='unicode')`
+6. Base64-encodes it and returns an HTML `<img>` tag string as a `dash_html_components.Img` element:
+   ```python
+   import base64
+   encoded = base64.b64encode(svg_string.encode('utf-8')).decode('utf-8')
+   return html.Img(src=f"data:image/svg+xml;base64,{encoded}", className="champion-badge")
+   ```
+
+**Function signature:**
+```python
+def _render_badge(year: int, team_name: str) -> html.Img:
+    """Returns a Dash Img element with the champion badge SVG modified for the given year and team."""
+```
+
+**Edge case — no champion yet:** If `team_name` is empty or None (e.g., the current in-progress season), return `None` so the caller can conditionally omit the badge from the layout. Do not render a badge with a blank or "TBD" team name — the badge is a celebration asset, not a placeholder.
+
+**Note on ElementTree and SVG namespaces:** `ET.parse()` will register the SVG namespace automatically, but `ET.tostring()` may emit `ns0:` prefixes instead of the original `svg:` prefix if the namespace wasn't pre-registered. Fix this by calling `ET.register_namespace('', 'http://www.w3.org/2000/svg')` (and any other namespaces present in the file) before parsing. This preserves the original namespace prefixes and prevents the SVG from breaking in the browser.
+
+**Verify:** `_render_badge(2025, "bgmaddox")` returns a `html.Img` element whose `src` attribute decodes to a valid SVG string containing `2025` and `bgmaddox` in the correct `<text>` nodes. Confirm "C" and "HAMPION" elements are unchanged.
+
+---
+
+### Task 10C — Add champion data lookups for each tab
+
+Each tab needs to know who the champion was for the selected year before it can call `_render_badge`. The data already exists in the app — this task just documents where to find it.
+
+**Playoffs champion** (`_tab_playoffs`):
+- Source: `AllTimePlayoffs` data, specifically `playoff_results` dataframe already built during Phase 6
+- Lookup: `playoff_results[(playoff_results['year'] == year) & (playoff_results['placement'] == 1)]['team'].iloc[0]`
+- If the current season is in progress and `playoff_results` has no row with `placement == 1` for that year, return None (no badge)
+
+**Side Bet champion** (`_tab_sidebets`):
+- Source: `SIDE_BET_SEASONS[year]` dict (already in `sleeper_core.py`)
+- Logic: Count wins per team across all weeks (a "win" is any week where `"winner"` is non-empty). The team with the most wins is the champion. If there is a tie at season end, show both names joined with " & " (this already exists as a pattern in the data — e.g., `"sgmaddox & jhuntmadd"`)
+- If no year entry exists in `SIDE_BET_SEASONS`, return None
+- Implement as a helper: `_sidebet_champion(year: int) -> str | None` — keeps the tab function clean
+
+**Survivor champion** (`_tab_survivor`):
+- Source: Survivor tab data loaded from `SURVIVOR_LEAGUE_IDS` — the last surviving team for the given year
+- If survivor data for the year is unavailable or the pool is still in progress, return None
+
+---
+
+### Task 10D — Add badge to Playoffs tab
+
+**File:** `webapp/app.py` — `_tab_playoffs(year)`
+
+**Placement:** At the very top of the tab's returned layout, before the bracket cards. The badge should be visually prominent but not full-page-width.
+
+**Layout:**
+```
+┌──────────────────────────────────────────────┐
+│  [champion badge SVG — centered, ~300px tall] │
+│         2025 LEAGUE CHAMPION                  │
+└──────────────────────────────────────────────┘
+[existing bracket cards below]
+```
+
+**Implementation:**
+1. Look up the champion using the `playoff_results` approach from Task 10C
+2. If champion is found, call `_render_badge(year, team_name)`; wrap the result in a `html.Div` with `className="champion-badge-container"`
+3. If no champion (in-progress year or missing data), omit the container entirely — do not show an empty space or placeholder
+4. Prepend the badge container to the existing layout list returned by `_tab_playoffs`
+
+**CSS:** The badge container should center the image horizontally and constrain it so it doesn't overwhelm the page. Target `max-height: 320px; width: auto` on the `<img>` itself. The container adds `display: flex; justify-content: center; padding: 24px 0 16px 0`.
+
+---
+
+### Task 10E — Add badge to Side Bets tab
+
+**File:** `webapp/app.py` — `_tab_sidebets(year)`
+
+**Same pattern as Task 10D.** The Side Bet Champion is the team with the most weekly wins in the selected year. Use `_sidebet_champion(year)` from Task 10C.
+
+**Placement:** Above the championship scoreboard (D3 leaderboard), so the badge appears as the hero element when the tab loads. The scoreboard directly below it reinforces the win-tally context.
+
+**Constraint:** Only show the badge if the year is in `SIDE_BET_SEASONS` and at least one week has a winner recorded. A year with only empty `"winner"` fields (e.g., a future or in-progress season) gets no badge.
+
+---
+
+### Task 10F — Add badge to Survivor tab
+
+**File:** `webapp/app.py` — `_tab_survivor(year)`
+
+**Same pattern.** Survivor champion = last team standing. Look up from survivor data for the selected year.
+
+**Placement:** Top of the tab, above the pick history grid/table.
+
+**Constraint:** Only show for years where the survivor pool concluded (i.e., there is a single surviving team with all others eliminated). If the pool is still active, no badge.
+
+---
+
+### Task 10G — CSS additions
+
+**File:** `webapp/assets/style.css`
+
+Add the following classes:
+
+```css
+.champion-badge-container {
+    display: flex;
+    justify-content: center;
+    padding: 24px 0 16px 0;
+}
+
+.champion-badge {
+    max-height: 320px;
+    width: auto;
+    /* Prevent the SVG from stretching on wide viewports */
+    max-width: 600px;
+}
+```
+
+No other style changes needed — the SVG carries its own colors and typography from the original Affinity design.
+
+---
+
+### Task 10H — Tests
+
+**File:** `tests/test_charts.py` or a new `tests/test_badges.py`
+
+Tests to write:
+- `test_render_badge_returns_img` — `_render_badge(2025, "bgmaddox")` returns a `dash.html.Img` object (not None)
+- `test_render_badge_year_injected` — decode the `src` data URI and confirm the SVG string contains `"2025"` in a `<text>` element
+- `test_render_badge_team_injected` — confirm `"bgmaddox"` appears in the decoded SVG
+- `test_render_badge_champion_preserved` — confirm `"C"` and `"HAMPION"` (or `"CHAMPION"` if the template uses a single element) are unchanged
+- `test_render_badge_none_on_empty_name` — `_render_badge(2025, "")` and `_render_badge(2025, None)` both return `None`
+- `test_sidebet_champion_known_year` — `_sidebet_champion(2025)` returns a non-empty string for a year with complete data
+- `test_sidebet_champion_missing_year` — `_sidebet_champion(1999)` returns `None` gracefully
+
+---
+
+### Implementation order
+
+1. **10A** — Confirm SVG template structure before writing any code. If the structure differs from what's described here, update 10B's parsing logic before proceeding.
+2. **10B** — Write and unit-test `_render_badge()` in isolation before wiring it into any tab.
+3. **10C** — Identify and test the champion lookup logic for each tab type.
+4. **10D / 10E / 10F / 10G** — Wire badge into each tab; can be done in parallel once 10B and 10C are solid.
+5. **10H** — Tests should be written alongside 10B and 10C, not after.
+
+**Do not proceed past 10A if the SVG structure check fails or is ambiguous.** An incorrect parse that silently corrupts the "C"/"HAMPION" elements will produce a broken badge that's hard to debug visually.

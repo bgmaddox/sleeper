@@ -1,0 +1,468 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>GRIDIRON TERMINAL | PLAYOFF BRACKET</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Courier+Prime:wght@400;700&amp;family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "tertiary-fixed": "#cbe6ff",
+                        "surface-container": "#032236",
+                        "inverse-primary": "#785a00",
+                        "outline": "#9c8f78",
+                        "secondary-fixed": "#cce5ff",
+                        "secondary-container": "#2d4c65",
+                        "on-secondary-fixed": "#001e31",
+                        "surface": "#001525",
+                        "primary-container": "#ffc300",
+                        "surface-container-high": "#102c41",
+                        "surface-container-low": "#001d31",
+                        "outline-variant": "#3D5E78", /* Overridden for technical divider look */
+                        "surface-tint": "#f8be00",
+                        "on-surface-variant": "#d3c5ab",
+                        "surface-dim": "#001525",
+                        "inverse-on-surface": "#183348",
+                        "on-primary-fixed": "#251a00",
+                        "error": "#ffb4ab",
+                        "secondary-fixed-dim": "#abcae8",
+                        "primary-fixed-dim": "#f8be00",
+                        "on-primary-container": "#6d5200",
+                        "on-background": "#cde5ff",
+                        "on-tertiary-fixed-variant": "#284a63",
+                        "primary": "#ffe5b2",
+                        "on-error-container": "#ffdad6",
+                        "surface-variant": "#1d374c",
+                        "tertiary": "#d6ebff",
+                        "surface-bright": "#213b51",
+                        "on-secondary-container": "#9dbcd9",
+                        "background": "#001525",
+                        "inverse-surface": "#cde5ff",
+                        "on-error": "#690005",
+                        "tertiary-fixed-dim": "#a9cae8",
+                        "on-surface": "#cde5ff",
+                        "error-container": "#93000a",
+                        "on-primary-fixed-variant": "#5a4300",
+                        "surface-container-lowest": "#000f1d",
+                        "tertiary-container": "#aed0ee",
+                        "on-tertiary": "#0d334b",
+                        "on-tertiary-container": "#385973",
+                        "secondary": "#abcae8",
+                        "surface-container-highest": "#1d374c",
+                        "on-tertiary-fixed": "#001e30",
+                        "on-primary": "#3f2e00",
+                        "on-secondary": "#11334b",
+                        "primary-fixed": "#ffdf9a",
+                        "on-secondary-fixed-variant": "#2b4a62",
+                        "gold": "#FFC300",
+                        "steel-blue": "#BDE2FF",
+                        "border-navy": "#3D5E78",
+                        "card-bg": "#1C3C54"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.125rem",
+                        "lg": "0.25rem",
+                        "xl": "0.5rem",
+                        "full": "0.75rem"
+                    },
+                    "spacing": {
+                        "stack-xs": "4px",
+                        "stack-sm": "8px",
+                        "gutter": "16px",
+                        "unit": "4px",
+                        "margin-desktop": "32px",
+                        "stack-md": "16px",
+                        "stack-lg": "24px",
+                        "margin-mobile": "16px"
+                    },
+                    "fontFamily": {
+                        "label-md": ["Courier Prime", "monospace"],
+                        "label-lg": ["Courier Prime", "monospace"],
+                        "body-sm": ["Courier Prime", "monospace"],
+                        "body-md": ["Courier Prime", "monospace"],
+                        "body-lg": ["Courier Prime", "monospace"],
+                        "headline-sm": ["Courier Prime", "monospace"],
+                        "mono-data": ["Courier Prime", "monospace"],
+                        "headline-lg": ["Courier Prime", "monospace"],
+                        "headline-md": ["Courier Prime", "monospace"]
+                    },
+                    "fontSize": {
+                        "label-md": ["10px", {"lineHeight": "14px", "letterSpacing": "0.08em", "fontWeight": "700"}],
+                        "label-lg": ["12px", {"lineHeight": "16px", "letterSpacing": "0.05em", "fontWeight": "700"}],
+                        "body-sm": ["12px", {"lineHeight": "18px", "letterSpacing": "0.01em", "fontWeight": "400"}],
+                        "body-md": ["14px", {"lineHeight": "20px", "letterSpacing": "0em", "fontWeight": "400"}],
+                        "body-lg": ["16px", {"lineHeight": "24px", "letterSpacing": "0em", "fontWeight": "400"}],
+                        "headline-sm": ["18px", {"lineHeight": "24px", "letterSpacing": "0em", "fontWeight": "700"}],
+                        "mono-data": ["13px", {"lineHeight": "16px", "letterSpacing": "-0.01em", "fontWeight": "400"}],
+                        "headline-lg": ["30px", {"lineHeight": "36px", "letterSpacing": "-0.02em", "fontWeight": "700"}],
+                        "headline-md": ["24px", {"lineHeight": "32px", "letterSpacing": "-0.01em", "fontWeight": "700"}]
+                    }
+                },
+            },
+        }
+    </script>
+<style>
+        body {
+            background-color: #163146;
+            color: #BDE2FF;
+            font-family: 'Courier Prime', monospace;
+            -webkit-font-smoothing: none;
+        }
+        .bracket-connector {
+            position: relative;
+        }
+        .bracket-connector::after {
+            content: '';
+            position: absolute;
+            border-color: #3D5E78;
+            border-style: solid;
+        }
+        .scanline {
+            width: 100%;
+            height: 100px;
+            z-index: 99;
+            background: linear-gradient(0deg, rgba(0, 0, 0, 0) 0%, rgba(255, 195, 0, 0.05) 50%, rgba(0, 0, 0, 0) 100%);
+            opacity: 0.1;
+            position: fixed;
+            bottom: 100%;
+            pointer-events: none;
+            animation: scanline 8s linear infinite;
+        }
+        @keyframes scanline {
+            0% { bottom: 100%; }
+            100% { bottom: -100px; }
+        }
+        .terminal-glow {
+            text-shadow: 0 0 5px rgba(189, 226, 255, 0.3);
+        }
+        .divider-vertical {
+            width: 1px;
+            background-color: #3D5E78;
+        }
+        .matchup-card {
+            border: 1px solid #3D5E78;
+            background-color: #1C3C54;
+            border-radius: 4px;
+        }
+        .gold-highlight {
+            color: #FFC300;
+        }
+        .dimmed {
+            opacity: 0.5;
+        }
+    </style>
+</head>
+<body class="antialiased overflow-x-hidden">
+<div class="scanline"></div>
+<!-- MAIN TERMINAL WRAPPER -->
+<main class="flex min-h-screen w-full">
+<!-- WINNERS BRACKET (60%) -->
+<section class="w-3/5 p-margin-desktop flex flex-col gap-stack-lg border-r border-border-navy">
+<header class="mb-stack-md flex justify-between items-end border-b border-border-navy pb-stack-sm">
+<div>
+<h1 class="font-headline-lg text-headline-lg gold-highlight tracking-tighter">WINNERS BRACKET</h1>
+<p class="font-label-md text-label-md steel-blue">ELITE DIVISION FINAL STAGE // UNIT_ID: 0x442-GRID</p>
+</div>
+<div class="flex gap-stack-sm">
+<span class="material-symbols-outlined gold-highlight" style="font-variation-settings: 'FILL' 1;">trophy</span>
+<span class="font-label-lg text-label-lg text-gold uppercase underline decoration-2 underline-offset-4">Championship Pursuit</span>
+</div>
+</header>
+<div class="grid grid-cols-3 gap-stack-lg flex-grow">
+<!-- ROUND 1: WILD CARD -->
+<div class="flex flex-col gap-stack-lg">
+<h2 class="font-label-lg text-label-lg gold-highlight uppercase border-b border-border-navy pb-1 mb-2">RD 1: WILD CARD</h2>
+<!-- Matchup 1 -->
+<div class="matchup-card p-unit flex flex-col gap-unit">
+<div class="flex justify-between items-center py-1">
+<span class="font-label-md text-label-md gold-highlight">GRIDIRON GOBLINS</span>
+<span class="font-mono-data text-mono-data gold-highlight">142.6</span>
+</div>
+<div class="border-t border-border-navy opacity-30"></div>
+<div class="flex justify-between items-center py-1 dimmed">
+<span class="font-label-md text-label-md">HURTS SO GOOD</span>
+<span class="font-mono-data text-mono-data">118.3</span>
+</div>
+<div class="mt-1 pt-1 border-t border-border-navy flex justify-between font-label-md text-[9px] steel-blue">
+<span>MVP: CEEDEE LAMB (38.2)</span>
+<span>BENCH: 24.1</span>
+</div>
+</div>
+<!-- Matchup 2 -->
+<div class="matchup-card p-unit flex flex-col gap-unit">
+<div class="flex justify-between items-center py-1">
+<span class="font-label-md text-label-md gold-highlight">MAHOMIES</span>
+<span class="font-mono-data text-mono-data gold-highlight">134.5</span>
+</div>
+<div class="border-t border-border-navy opacity-30"></div>
+<div class="flex justify-between items-center py-1 dimmed">
+<span class="font-label-md text-label-md">DAK TO THE FUTURE</span>
+<span class="font-mono-data text-mono-data">102.1</span>
+</div>
+<div class="mt-1 pt-1 border-t border-border-navy flex justify-between font-label-md text-[9px] steel-blue">
+<span>MVP: P. MAHOMES (29.4)</span>
+<span>BENCH: 18.2</span>
+</div>
+</div>
+</div>
+<!-- ROUND 2: SEMIFINALS -->
+<div class="flex flex-col gap-stack-lg">
+<h2 class="font-label-lg text-label-lg gold-highlight uppercase border-b border-border-navy pb-1 mb-2">RD 2: SEMIFINALS</h2>
+<!-- Matchup 1 -->
+<div class="matchup-card p-unit flex flex-col gap-unit">
+<div class="flex justify-between items-center py-1">
+<span class="font-label-md text-label-md gold-highlight">GRIDIRON GOBLINS</span>
+<span class="font-mono-data text-mono-data gold-highlight">128.4</span>
+</div>
+<div class="border-t border-border-navy opacity-30"></div>
+<div class="flex justify-between items-center py-1 dimmed">
+<span class="font-label-md text-label-md">JUSTIN TIME</span>
+<span class="font-mono-data text-mono-data">115.7</span>
+</div>
+<div class="mt-1 pt-1 border-t border-border-navy font-label-md text-[9px] steel-blue text-center">
+                            MVP: T. HILL (31.0)
+                        </div>
+</div>
+<!-- Matchup 2 -->
+<div class="matchup-card p-unit flex flex-col gap-unit">
+<div class="flex justify-between items-center py-1">
+<span class="font-label-md text-label-md gold-highlight">THE LAMAR SHOW</span>
+<span class="font-mono-data text-mono-data gold-highlight">121.9</span>
+</div>
+<div class="border-t border-border-navy opacity-30"></div>
+<div class="flex justify-between items-center py-1 dimmed">
+<span class="font-label-md text-label-md">MAHOMIES</span>
+<span class="font-mono-data text-mono-data">112.3</span>
+</div>
+<div class="mt-1 pt-1 border-t border-border-navy font-label-md text-[9px] steel-blue text-center">
+                            MVP: L. JACKSON (35.4)
+                        </div>
+</div>
+<!-- Matchup 3 (5th Place Badge) -->
+<div class="mt-auto">
+<div class="flex items-center gap-1 mb-1">
+<span class="material-symbols-outlined text-[14px] gold-highlight">military_tech</span>
+<span class="font-label-md text-[10px] gold-highlight">5TH PLACE BATTLE</span>
+</div>
+<div class="matchup-card p-unit flex flex-col gap-unit">
+<div class="flex justify-between items-center py-1">
+<span class="font-label-md text-label-md gold-highlight">CHUBB CLUB</span>
+<span class="font-mono-data text-mono-data gold-highlight">138.2</span>
+</div>
+<div class="border-t border-border-navy opacity-30"></div>
+<div class="flex justify-between items-center py-1 dimmed">
+<span class="font-label-md text-label-md">BIJAN MUSTARD</span>
+<span class="font-mono-data text-mono-data">104.5</span>
+</div>
+<div class="mt-1 pt-1 border-t border-border-navy font-label-md text-[9px] steel-blue text-right">
+                                BENCH: 12.0 PTS
+                            </div>
+</div>
+</div>
+</div>
+<!-- ROUND 3: CHAMPIONSHIP -->
+<div class="flex flex-col gap-stack-lg">
+<h2 class="font-label-lg text-label-lg gold-highlight uppercase border-b border-border-navy pb-1 mb-2">RD 3: FINALS</h2>
+<!-- Championship Card -->
+<div>
+<div class="bg-gold text-surface px-2 py-1 flex items-center gap-2 mb-1 rounded-sm">
+<span class="material-symbols-outlined text-[16px]" style="font-variation-settings: 'FILL' 1;">star</span>
+<span class="font-label-md text-label-md font-bold">CHAMPIONSHIP</span>
+</div>
+<div class="matchup-card p-unit flex flex-col gap-unit border-2 border-gold shadow-[0_0_10px_rgba(255,195,0,0.2)]">
+<div class="flex justify-between items-center py-1">
+<span class="font-label-md text-label-md gold-highlight">GRIDIRON GOBLINS</span>
+<span class="animate-pulse bg-red-600 text-white px-1 text-[10px] rounded-sm">LIVE</span>
+</div>
+<div class="border-t border-border-navy opacity-50"></div>
+<div class="flex justify-between items-center py-1">
+<span class="font-label-md text-label-md">THE LAMAR SHOW</span>
+<span class="font-mono-data text-mono-data opacity-50">--</span>
+</div>
+<div class="mt-1 pt-1 border-t border-border-navy flex justify-between font-label-md text-[9px] steel-blue">
+<span>ACTIVE: C. LAMB</span>
+<span>PROJ: 144.2</span>
+</div>
+</div>
+</div>
+<!-- 3rd Place Card -->
+<div class="mt-12">
+<div class="flex items-center gap-1 mb-1">
+<span class="material-symbols-outlined text-[14px] gold-highlight">podium</span>
+<span class="font-label-md text-[10px] gold-highlight">3RD PLACE MATCH</span>
+</div>
+<div class="matchup-card p-unit flex flex-col gap-unit">
+<div class="flex justify-between items-center py-1 opacity-50">
+<span class="font-label-md text-label-md">JUSTIN TIME</span>
+<span class="font-mono-data text-mono-data">--</span>
+</div>
+<div class="border-t border-border-navy opacity-30"></div>
+<div class="flex justify-between items-center py-1 opacity-50">
+<span class="font-label-md text-label-md">MAHOMIES</span>
+<span class="font-mono-data text-mono-data">--</span>
+</div>
+<div class="mt-1 pt-1 border-t border-border-navy font-label-md text-[9px] steel-blue text-center italic">
+                                KICKOFF SUN 1PM
+                            </div>
+</div>
+</div>
+</div>
+</div>
+</section>
+<!-- LOSERS BRACKET (40%) -->
+<section class="w-2/5 p-margin-desktop flex flex-col gap-stack-lg bg-surface-container-lowest">
+<header class="mb-stack-md flex justify-between items-end border-b border-border-navy pb-stack-sm">
+<div>
+<h1 class="font-headline-lg text-headline-lg steel-blue tracking-tighter">LOSERS BRACKET</h1>
+<p class="font-label-md text-label-md opacity-60">CONSOLATION LADDER // DEPTH: LEVEL_2</p>
+</div>
+<div class="flex gap-stack-sm">
+<span class="material-symbols-outlined text-border-navy">dangerous</span>
+</div>
+</header>
+<div class="grid grid-cols-2 gap-stack-lg flex-grow">
+<!-- ROUND 1 -->
+<div class="flex flex-col gap-stack-lg">
+<h2 class="font-label-lg text-label-lg steel-blue uppercase border-b border-border-navy pb-1 mb-2">RD 1</h2>
+<div class="matchup-card p-unit flex flex-col gap-unit">
+<div class="flex justify-between items-center py-1">
+<span class="font-label-md text-label-md gold-highlight">CHUBB CLUB</span>
+<span class="font-mono-data text-mono-data gold-highlight">118.9</span>
+</div>
+<div class="border-t border-border-navy opacity-30"></div>
+<div class="flex justify-between items-center py-1 opacity-50">
+<span class="font-label-md text-label-md italic">BYE</span>
+<span class="font-mono-data text-mono-data">--</span>
+</div>
+</div>
+<div class="matchup-card p-unit flex flex-col gap-unit">
+<div class="flex justify-between items-center py-1">
+<span class="font-label-md text-label-md gold-highlight">BIJAN MUSTARD</span>
+<span class="font-mono-data text-mono-data gold-highlight">109.4</span>
+</div>
+<div class="border-t border-border-navy opacity-30"></div>
+<div class="flex justify-between items-center py-1 opacity-50">
+<span class="font-label-md text-label-md italic">BYE</span>
+<span class="font-mono-data text-mono-data">--</span>
+</div>
+</div>
+</div>
+<!-- ROUND 2 -->
+<div class="flex flex-col gap-stack-lg">
+<h2 class="font-label-lg text-label-lg steel-blue uppercase border-b border-border-navy pb-1 mb-2">RD 2</h2>
+<div class="matchup-card p-unit flex flex-col gap-unit">
+<div class="flex justify-between items-center py-1">
+<span class="font-label-md text-label-md gold-highlight">DAK TO THE FUTURE</span>
+<span class="font-mono-data text-mono-data gold-highlight">114.1</span>
+</div>
+<div class="border-t border-border-navy opacity-30"></div>
+<div class="flex justify-between items-center py-1">
+<span class="font-label-md text-label-md dimmed">HURTS SO GOOD</span>
+<span class="font-mono-data text-mono-data dimmed">98.6</span>
+</div>
+</div>
+<div class="matchup-card p-unit flex flex-col gap-unit">
+<div class="flex justify-between items-center py-1">
+<span class="font-label-md text-label-md gold-highlight">BIJAN MUSTARD</span>
+<span class="font-mono-data text-mono-data gold-highlight">122.3</span>
+</div>
+<div class="border-t border-border-navy opacity-30"></div>
+<div class="flex justify-between items-center py-1">
+<span class="font-label-md text-label-md dimmed">CHUBB CLUB</span>
+<span class="font-mono-data text-mono-data dimmed">110.4</span>
+</div>
+</div>
+</div>
+<!-- ROUND 3 / TOILET BOWL -->
+<div class="col-span-2 flex flex-col gap-stack-lg mt-8">
+<h2 class="font-label-lg text-label-lg steel-blue uppercase border-b border-border-navy pb-1 mb-2">RD 3: CONSOLATION FINALS</h2>
+<div class="flex gap-stack-lg">
+<div class="flex-1">
+<div class="bg-red-900 text-white px-2 py-1 flex items-center gap-2 mb-1 rounded-sm">
+<span class="material-symbols-outlined text-[16px]">error</span>
+<span class="font-label-md text-label-md font-bold uppercase">TOILET BOWL</span>
+</div>
+<div class="matchup-card p-unit flex flex-col gap-unit border-2 border-red-800">
+<div class="flex justify-between items-center py-1 opacity-50">
+<span class="font-label-md text-label-md">HURTS SO GOOD</span>
+<span class="font-mono-data text-mono-data">--</span>
+</div>
+<div class="border-t border-border-navy opacity-30"></div>
+<div class="flex justify-between items-center py-1 opacity-50">
+<span class="font-label-md text-label-md">CHUBB CLUB</span>
+<span class="font-mono-data text-mono-data">--</span>
+</div>
+</div>
+</div>
+<div class="flex-1">
+<div class="text-steel-blue px-2 py-1 flex items-center gap-2 mb-1 rounded-sm border border-border-navy">
+<span class="material-symbols-outlined text-[16px]">info</span>
+<span class="font-label-md text-label-md font-bold uppercase">7TH PLACE</span>
+</div>
+<div class="matchup-card p-unit flex flex-col gap-unit">
+<div class="flex justify-between items-center py-1 opacity-50">
+<span class="font-label-md text-label-md">DAK TO THE FUTURE</span>
+<span class="font-mono-data text-mono-data">--</span>
+</div>
+<div class="border-t border-border-navy opacity-30"></div>
+<div class="flex justify-between items-center py-1 opacity-50">
+<span class="font-label-md text-label-md">BIJAN MUSTARD</span>
+<span class="font-mono-data text-mono-data">--</span>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+<!-- ATMOSPHERIC IMAGE -->
+<div class="mt-auto border border-border-navy p-1 relative group overflow-hidden">
+<img alt="Football stadium at night" class="w-full h-32 object-cover opacity-40 grayscale contrast-125 hover:grayscale-0 transition-all duration-500" data-alt="A wide-angle, cinematic shot of a professional American football stadium at night under heavy floodlights. The atmosphere is dense with artificial fog and a cold, dark-navy color grading. Golden light flares from the stadium lamps cut through the haze, creating a high-contrast, technical sporting environment that feels like a futuristic scouting terminal. No people are visible, emphasizing the architectural scale and specialized sporting equipment on the turf." src="https://lh3.googleusercontent.com/aida-public/AB6AXuDKtX8EySik9yNR7nxq6zlkjtDf0pFfhy3IXY3XKy5O1slBNrfvMjprnvJb6xwyUTGsmK8wKcWHl35U9WKSJsexJs4HYc7qIOHaWJk-D_41gjGqCkyd96AH4HkyBEocszwXM2pAyEsDJiJmx3vHvCy9HwHvzcPQtuQk2kC3DOKLV_hYiiWStPkTy7ONBKoP3cnOP3gr7bOrBaXJ7Mh3StGp8yVHjaN-Nj8RMk7OtQWatSVMjAeFrNL7v6dIcr7gZfdK7z7oKv8681g"/>
+<div class="absolute inset-0 bg-gradient-to-t from-[#163146] to-transparent"></div>
+<div class="absolute bottom-2 left-2 font-label-md text-[8px] text-gold uppercase tracking-[0.2em] pointer-events-none">
+                    FIELD_DATA_FEED_01 // ACTIVE
+                </div>
+</div>
+</section>
+</main>
+<!-- FOOTER STATUS BAR -->
+<footer class="fixed bottom-0 w-full h-8 bg-surface-container border-t border-border-navy flex items-center px-margin-desktop justify-between z-50">
+<div class="flex items-center gap-stack-lg">
+<div class="flex items-center gap-1">
+<div class="w-2 h-2 rounded-full bg-gold animate-pulse"></div>
+<span class="font-label-md text-[10px] gold-highlight">SYSTEM_ONLINE</span>
+</div>
+<span class="font-label-md text-[10px] steel-blue opacity-50">USER: COMMISH_ALPHA</span>
+<span class="font-label-md text-[10px] steel-blue opacity-50">UPTIME: 324:12:09</span>
+</div>
+<div class="font-label-md text-[10px] steel-blue tracking-widest uppercase">
+            Gridiron Terminal © 2024 Season Management System v4.2.0
+        </div>
+</footer>
+<script>
+        // Simple micro-interaction for card hover glow
+        document.querySelectorAll('.matchup-card').forEach(card => {
+            card.addEventListener('mouseenter', () => {
+                card.style.borderColor = '#FFC300';
+                card.style.boxShadow = '0 0 12px rgba(255, 195, 0, 0.15)';
+            });
+            card.addEventListener('mouseleave', () => {
+                card.style.borderColor = '#3D5E78';
+                card.style.boxShadow = 'none';
+            });
+        });
+
+        // Periodic "data refresh" flicker simulation
+        setInterval(() => {
+            const elements = document.querySelectorAll('.font-mono-data');
+            const target = elements[Math.floor(Math.random() * elements.length)];
+            target.style.opacity = '0.4';
+            setTimeout(() => { target.style.opacity = '1'; }, 80);
+        }, 3000);
+    </script>
+</body></html>
