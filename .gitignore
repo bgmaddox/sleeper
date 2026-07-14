@@ -30,3 +30,12 @@ sleeper/
 
 # Render
 .render/
+
+# Tooling exhaust
+.playwright-mcp/
+playwrite_screenshots/
+.antigravitycli/
+*.log
+
+# Large local-only archive (75MB of old first-project files)
+archive/FirstPyProject/
