@@ -16,6 +16,7 @@ from plotly.subplots import make_subplots
 from PIL import Image
 from sklearn.preprocessing import MinMaxScaler, StandardScaler
 import nfl_data_py as nfl
+from dataclasses import dataclass, field as dc_field
 
 pd.options.mode.copy_on_write = True
 
@@ -319,7 +320,10 @@ leagueID_2022 = 861038938700255232
 leagueID_2023 = 992181788975620096
 leagueID_2024 = 1122303756063965184
 leagueID_2025 = 1252049821154410496
-Survivor_leagueID_2024 = 1136802217681539072
+SURVIVOR_LEAGUE_IDS = {
+    2024: 1136802217681539072,
+    2025: 1252050081251590144,
+}
 
 leagueNumbers_Dict = {
     2019: leagueID_2019, 2020: leagueID_2020, 2021: leagueID_2021,
@@ -329,6 +333,102 @@ leagueNumbers_Dict = {
 AVAILABLE_YEARS = [2019, 2020, 2021, 2022, 2023, 2024, 2025]
 
 SIDE_BET_SEASONS = {
+    2019: {
+        1  : {"name": 'Hot Start'                                   , "desc": 'Team with the highest score (starters only)'                                               , "winner": 'SweetDizzzzzle'},
+        2  : {"name": 'Look At These TDs'                           , "desc": 'Team with the most offensive touchdowns scored'                                            , "winner": 'jlglover'},
+        3  : {"name": 'Immaculate'                                  , "desc": 'Team with the WR with the most receptions'                                                 , "winner": 'GurlyGirls'},
+        4  : {"name": 'Blackjack'                                   , "desc": 'Team with a starter closest to 21 points without going over'                               , "winner": 'BMoreBallers88'},
+        5  : {"name": 'Biggest Loser'                               , "desc": 'Highest scoring losing team'                                                               , "winner": 'bgmaddox'},
+        6  : {"name": 'Like A Boss'                                 , "desc": 'Team with the biggest margin of victory'                                                   , "winner": 'BMoreBallers88'},
+        7  : {"name": 'Rushmore'                                    , "desc": 'Team with the RB with the most rushing yards'                                              , "winner": 'RascalHazard'},
+        8  : {"name": 'Stay On Target'                              , "desc": 'Team closest to their projected point total (over OR under)'                               , "winner": 'bgmaddox'},
+        9  : {"name": 'Dead Weight'                                 , "desc": 'Winning team with the lowest scoring starting player'                                      , "winner": 'jlglover'},
+        10 : {"name": 'Flexual Healing'                             , "desc": 'Highest FLEX position player score'                                                        , "winner": 'jlglover'},
+        11 : {"name": 'Thirty Flirty & Thriving'                    , "desc": 'Team with any starter closest to 30 points (over OR under)'                                , "winner": 'GurlyGirls'},
+        12 : {"name": 'Go Long'                                     , "desc": 'Team with the Starting QB with the highest completion % (over 10 throws)'                  , "winner": 'bgmaddox'},
+        13 : {"name": "Coffee's For Closers"                        , "desc": 'Team that beats its opponent by the smallest margin of victory'                            , "winner": 'SweetDizzzzzle'},
+        14 : {"name": 'TieBreaker'                                  , "desc": 'Most Accrued Points from 2 randomly chosen positions'                                      , "winner": 'jlglover'},
+    },
+    2020: {
+        1  : {"name": 'Hot Start'                                   , "desc": 'Team with the highest score (starters only)'                                               , "winner": 'JTizzzzle'},
+        2  : {"name": 'Look At These TDs'                           , "desc": 'Team with the most offensive touchdowns scored'                                            , "winner": 'JTizzzzle'},
+        3  : {"name": 'Immaculate'                                  , "desc": 'Team with the WR with the most receptions'                                                 , "winner": 'JTizzzzle & bgmaddox & BMoreBallers88'},
+        4  : {"name": 'Blackjack'                                   , "desc": 'Team with a starter closest to 21 points without going over'                               , "winner": 'JTizzzzle & bgmaddox & RascalHazard'},
+        5  : {"name": 'Biggest Loser'                               , "desc": 'Highest scoring losing team'                                                               , "winner": 'eegrady'},
+        6  : {"name": 'Like A Boss'                                 , "desc": 'Team with the biggest margin of victory'                                                   , "winner": 'jhuntmadd'},
+        7  : {"name": 'Rushmore'                                    , "desc": 'Team with the RB with the most rushing yards'                                              , "winner": 'jhuntmadd'},
+        8  : {"name": 'Stay On Target'                              , "desc": 'Team closest to their projected point total (over OR under)'                               , "winner": 'SweetDizzzzzle'},
+        9  : {"name": 'Dead Weight'                                 , "desc": 'Winning team with the lowest scoring starting player'                                      , "winner": 'BMoreBallers88'},
+        10 : {"name": 'Flexual Healing'                             , "desc": 'Highest FLEX position player score'                                                        , "winner": 'JTizzzzle'},
+        11 : {"name": 'Thirty Flirty & Thriving'                    , "desc": 'Team with any starter closest to 30 points (over OR under)'                                , "winner": 'JTizzzzle'},
+        12 : {"name": 'Go Long'                                     , "desc": 'Team with the Starting QB with the highest completion % (over 10 throws)'                  , "winner": 'SweetDizzzzzle'},
+        13 : {"name": "Coffee's For Closers"                        , "desc": 'Team that beats its opponent by the smallest margin of victory'                            , "winner": 'BMoreBallers88'},
+        14 : {"name": 'TieBreaker'                                  , "desc": 'Most Accrued Points from 2 randomly chosen positions'                                      , "winner": ''},
+    },
+    2021: {
+        1  : {"name": "I'm flying, Jack!"                           , "desc": 'Team with the highest score (starters only)'                                               , "winner": 'jhuntmadd'},
+        2  : {"name": 'Look At These TDs'                           , "desc": 'Team with the most offensive touchdowns scored'                                            , "winner": 'jhuntmadd'},
+        3  : {"name": 'Endzones that way -->'                       , "desc": 'Team with the worst performing defense (active or bench)'                                  , "winner": 'BMoreBallers88'},
+        4  : {"name": 'Blackjack'                                   , "desc": 'Team with a starter closest to 21 points without going over'                               , "winner": 'RReclam'},
+        5  : {"name": 'The Replacements'                            , "desc": 'Team with the highest total points for their bench'                                        , "winner": 'bgmaddox'},
+        6  : {"name": 'Like A Boss'                                 , "desc": 'Team with the biggest margin of victory'                                                   , "winner": 'bgmaddox'},
+        7  : {"name": 'Campus Rush Week'                            , "desc": 'Total rush yards for team (active or bench)'                                               , "winner": 'BillyRayGonnaGetcha'},
+        8  : {"name": 'Soothsayer'                                  , "desc": 'Players submit guesses for their total points by Thursday afternoon. Team closest to projection wins.', "winner": 'RReclam'},
+        9  : {"name": 'Keeping it Tight'                            , "desc": 'Team with best performing tight end (active or bench)'                                     , "winner": 'jhuntmadd'},
+        10 : {"name": 'NFL Franchise Week'                          , "desc": 'Team with the highest point total of players from the same franchise (active or bench)'    , "winner": 'BMoreBallers88'},
+        11 : {"name": 'Please not the Jets (Trade Deadline Week)'   , "desc": 'Team with the most trades this season wins'                                                , "winner": 'YouthPastor & bgmaddox'},
+        12 : {"name": 'Go Long'                                     , "desc": 'Team with the Starting QB with the highest completion % (over 10 throws)'                  , "winner": 'RascalHazard'},
+        13 : {"name": "Coffee's For Closers"                        , "desc": 'Team that beats its opponent by the smallest margin of victory'                            , "winner": 'BMoreBallers88'},
+        14 : {"name": 'Breaking of the Tie (if needed)'             , "desc": 'Choose 3 non-QB players. Highest combined total wins.'                                     , "winner": 'jhuntmadd'},
+    },
+    2022: {
+        1  : {"name": "I'm flying, Jack!"                           , "desc": 'Team with the highest score (starters only)'                                               , "winner": 'JTizzzzle'},
+        2  : {"name": 'Look At These TDs'                           , "desc": 'Team with the most offensive touchdowns scored'                                            , "winner": 'bgmaddox'},
+        3  : {"name": 'Endzones that way -->'                       , "desc": 'Team with the worst performing defense (active or bench)'                                  , "winner": 'jhuntmadd'},
+        4  : {"name": 'Blackjack'                                   , "desc": 'Team with a starter closest to 21 points without going over'                               , "winner": 'DirtyCommie'},
+        5  : {"name": 'The Replacements'                            , "desc": 'Team with the highest total points for their bench'                                        , "winner": 'bgmaddox'},
+        6  : {"name": 'Like A Boss'                                 , "desc": 'Team with the biggest margin of victory'                                                   , "winner": 'DirtyCommie'},
+        7  : {"name": 'Campus Rush Week'                            , "desc": 'Total rush yards for team (active or bench)'                                               , "winner": 'bgmaddox'},
+        8  : {"name": 'Soothsayer'                                  , "desc": 'Players submit guesses for their total points by Thursday afternoon. Team closest to projection wins.', "winner": 'RascalHazard'},
+        9  : {"name": 'Keeping it Tight'                            , "desc": 'Team with best performing tight end (active or bench)'                                     , "winner": 'RossLikeSauce'},
+        10 : {"name": 'NFL Franchise Week'                          , "desc": 'Team with the highest point total of players from the same franchise (active or bench)'    , "winner": 'sgmaddox'},
+        11 : {"name": 'Please not the Jets (Trade Deadline Week)'   , "desc": 'Team with the most trades this season wins'                                                , "winner": 'BMoreBallers88 & RReclam & jhuntmadd'},
+        12 : {"name": 'Go Long'                                     , "desc": 'Team with the Starting QB with the highest completion % (over 10 throws)'                  , "winner": 'eegrady'},
+        13 : {"name": "Coffee's For Closers"                        , "desc": 'Team that beats its opponent by the smallest margin of victory'                            , "winner": 'JTizzzzle'},
+        14 : {"name": 'Breaking of the Tie (if needed)'             , "desc": 'Choose 3 non-QB players. Highest combined total wins.'                                     , "winner": ''},
+    },
+    2023: {
+        1  : {"name": "I'm flying, Jack!"                           , "desc": 'Team with the highest score (starters only)'                                               , "winner": 'BMoreBallers88'},
+        2  : {"name": 'Look At These TDs'                           , "desc": 'Team with the most offensive touchdowns scored'                                            , "winner": 'DirtyCommie'},
+        3  : {"name": 'Endzones that way -->'                       , "desc": 'Team with the worst performing defense (active or bench)'                                  , "winner": 'jhuntmadd & bgmaddox'},
+        4  : {"name": 'Blackjack'                                   , "desc": 'Team with a starter closest to 21 points without going over'                               , "winner": 'BMoreBallers88'},
+        5  : {"name": 'The Replacements'                            , "desc": 'Team with the highest total points for their bench'                                        , "winner": 'jhuntmadd'},
+        6  : {"name": 'Like A Boss'                                 , "desc": 'Team with the biggest margin of victory'                                                   , "winner": 'RReclam'},
+        7  : {"name": 'Campus Rush Week'                            , "desc": 'Total rush yards for team (active or bench)'                                               , "winner": 'jlglover'},
+        8  : {"name": 'Soothsayer'                                  , "desc": 'Players submit guesses for their total points by Saturday afternoon. Team closest to projection wins.', "winner": 'BMoreBallers88'},
+        9  : {"name": 'Keeping it Tight'                            , "desc": 'Team with best performing tight end (active or bench)'                                     , "winner": 'eegrady'},
+        10 : {"name": 'NFL Franchise Week'                          , "desc": 'Team with the highest point total of players from the same franchise (active or bench)'    , "winner": 'BMoreBallers88'},
+        11 : {"name": 'Please not the Jets (Trade Deadline Week)'   , "desc": 'Team with the most trades this season wins'                                                , "winner": 'BMoreBallers88'},
+        12 : {"name": 'Go Long'                                     , "desc": 'Team with the Starting QB with the highest completion % (over 10 throws)'                  , "winner": 'RascalHazard'},
+        13 : {"name": "Coffee's For Closers"                        , "desc": 'Team that beats its opponent by the smallest margin of victory'                            , "winner": ''},
+        14 : {"name": 'Breaking of the Tie (if needed)'             , "desc": 'Choose 3 non-QB players. Highest combined total wins.'                                     , "winner": ''},
+    },
+    2024: {
+        1  : {"name": "I'm flying, Jack!"                           , "desc": 'Team with the highest score (starters only)'                                               , "winner": 'jlglover'},
+        2  : {"name": 'Look At These TDs'                           , "desc": 'Team with the most offensive touchdowns scored'                                            , "winner": 'bgmaddox'},
+        3  : {"name": 'Endzones that way -->'                       , "desc": 'Team with the worst performing defense (active or bench)'                                  , "winner": 'JTizzzzle'},
+        4  : {"name": 'Blackjack'                                   , "desc": 'Team with a starter closest to 21 points without going over'                               , "winner": 'jhuntmadd'},
+        5  : {"name": 'The Replacements'                            , "desc": 'Team with the highest total points for their bench'                                        , "winner": 'sgmaddox'},
+        6  : {"name": 'Like A Boss'                                 , "desc": 'Team with the biggest margin of victory'                                                   , "winner": 'bgmaddox'},
+        7  : {"name": 'Campus Rush Week'                            , "desc": 'Total rush yards for team (active or bench)'                                               , "winner": 'eegrady'},
+        8  : {"name": 'Soothsayer'                                  , "desc": 'Players submit guesses for their total points by Thursday afternoon. Team closest to projection wins.', "winner": 'sgmaddox'},
+        9  : {"name": 'Keeping it Tight'                            , "desc": 'Team with best performing tight end (active or bench)'                                     , "winner": 'JTizzzzle'},
+        10 : {"name": 'NFL Franchise Week'                          , "desc": 'Team with the highest point total of players from the same franchise (active or bench)'    , "winner": 'RossLikeSauce'},
+        11 : {"name": 'Please not the Jets (Trade Deadline Week)'   , "desc": 'Team with the most trades this season wins'                                                , "winner": 'jlglover'},
+        12 : {"name": 'Go Long'                                     , "desc": 'Team with the Starting QB with the highest completion % (over 10 throws)'                  , "winner": 'RossLikeSauce'},
+        13 : {"name": "Coffee's For Closers"                        , "desc": 'Team that beats its opponent by the smallest margin of victory'                            , "winner": 'RReclam'},
+        14 : {"name": 'Breaking of the Tie (if needed)'             , "desc": 'Choose 3 non-QB players. Highest combined total wins.'                                     , "winner": 'RossLikeSauce'},
+    },
     2025: {
         1:  {"name": "I'm Flying, Jack!",         "desc": "Team with the highest score (starters only)",                                                  "winner": "cosmodromedary"},
         2:  {"name": "Look At These TDs",          "desc": "Team with the most offensive touchdowns scored",                                               "winner": "DirtyCommie"},
@@ -5345,4 +5445,1046 @@ class SideBet:
         return figWeek13
 
 
-                        
+# ── Survivor Pool ─────────────────────────────────────────────────────────────
+
+class Survivor:
+    """Parses Sleeper Survivor pool data for 2024 and 2025 formats.
+
+    2024: uses `eliminated_leg_id` for single elimination.
+    2025: uses `lost_leg_ids` list with a revive mechanic (1 loss allowed before final elim).
+    """
+
+    NFL_TEAMS = sorted([
+        'ARI', 'ATL', 'BAL', 'BUF', 'CAR', 'CHI', 'CIN', 'CLE',
+        'DAL', 'DEN', 'DET', 'GB',  'HOU', 'IND', 'JAX', 'KC',
+        'LAC', 'LAR', 'LV',  'MIA', 'MIN', 'NE',  'NO',  'NYG',
+        'NYJ', 'PHI', 'PIT', 'SEA', 'SF',  'TB',  'TEN', 'WAS',
+    ])
+
+    def __init__(self, year: int):
+        import data_loader
+        self.year = year
+        league_id = SURVIVOR_LEAGUE_IDS[year]
+        rosters = data_loader.fetch_survivor_rosters(league_id)
+        users   = data_loader.fetch_survivor_users(league_id)
+        self.user_map = {u['user_id']: u['display_name'] for u in users}
+        self._parse(rosters)
+
+    def _parse(self, rosters_json: list):
+        picks_rows = []
+        status_rows = []
+
+        for roster in rosters_json:
+            owner_id = roster.get('owner_id')
+            username = self.user_map.get(owner_id, owner_id)
+            meta = roster.get('metadata') or {}
+
+            is_eliminated = meta.get('is_eliminated') == 'true'
+            points_by_leg = meta.get('points_by_leg') or {}
+            previous_picks = meta.get('previous_picks') or {}
+
+            # Detect format by presence of 2025-only key
+            if 'lost_leg_ids' in meta:
+                lost_leg_ids = meta.get('lost_leg_ids') or []
+                revive_loss_week = (
+                    int(lost_leg_ids[0].split(':')[-1]) if len(lost_leg_ids) >= 1 else None
+                )
+                fatal_week = (
+                    int(lost_leg_ids[-1].split(':')[-1])
+                    if is_eliminated and lost_leg_ids else None
+                )
+                # revived = used the one-loss-survive mechanic at least once
+                revived = (
+                    (len(lost_leg_ids) >= 2 and is_eliminated) or
+                    (len(lost_leg_ids) == 1 and not is_eliminated)
+                )
+            else:
+                elim_id = meta.get('eliminated_leg_id')
+                fatal_week = (
+                    int(elim_id.split(':')[-1]) if is_eliminated and elim_id else None
+                )
+                revive_loss_week = None
+                revived = False
+
+            player_picks = []
+            teams_used = []
+            for leg_key, team_list in previous_picks.items():
+                if not team_list:
+                    continue
+                week_num = int(leg_key.split(':')[-1])
+                team = team_list[0]
+                won = (points_by_leg.get(leg_key, 0.0) == 1.0)
+                is_fatal = is_eliminated and (week_num == fatal_week)
+                is_revive_loss = revived and (week_num == revive_loss_week)
+                row = {
+                    'username': username,
+                    'week': week_num,
+                    'team_pick': team,
+                    'won': won,
+                    'is_fatal': is_fatal,
+                    'is_revive_loss': is_revive_loss,
+                }
+                player_picks.append(row)
+                picks_rows.append(row)
+                teams_used.append(team)
+
+            weeks_survived = sum(1 for r in player_picks if r['won'])
+            status_rows.append({
+                'username': username,
+                'weeks_survived': weeks_survived,
+                'final_week': fatal_week,
+                'is_eliminated': is_eliminated,
+                'revived': revived,
+                'teams_used': teams_used,
+                'teams_left': self.find_unpicked(teams_used),
+            })
+
+        self.Picks = pd.DataFrame(picks_rows, columns=[
+            'username', 'week', 'team_pick', 'won', 'is_fatal', 'is_revive_loss',
+        ])
+        self.Status = pd.DataFrame(status_rows, columns=[
+            'username', 'weeks_survived', 'final_week', 'is_eliminated',
+            'revived', 'teams_used', 'teams_left',
+        ])
+
+    def get_game_results(self) -> dict:
+        """Returns {(team_abbr, week_int): (opponent_abbr, team_score, opp_score)}."""
+        import data_loader
+        sched = data_loader.fetch_nfl_schedule(self.year)
+        results = {}
+        reg = sched[sched['game_type'] == 'REG'] if 'game_type' in sched.columns else sched
+        for _, row in reg.iterrows():
+            week = int(row['week'])
+            home, away = row['home_team'], row['away_team']
+            hs, as_ = row.get('home_score'), row.get('away_score')
+            if pd.isna(hs) or pd.isna(as_):
+                continue
+            hs, as_ = float(hs), float(as_)
+            results[(home, week)] = (away, hs, as_)
+            results[(away, week)] = (home, as_, hs)
+        return results
+
+    def find_unpicked(self, picked_list: list) -> list:
+        return sorted(set(self.NFL_TEAMS) - set(picked_list))
+
+    # ── Chart methods ─────────────────────────────────────────────────────────
+
+    def pick_matrix_fig(self) -> go.Figure:
+        """Annotated heatmap: rows=players, cols=weeks, cells colored by outcome."""
+        if self.Picks.empty:
+            return go.Figure(layout=go.Layout(template='gridiron_ink'))
+
+        # Sort players: longest survivor (most weeks_survived) at top
+        player_order = (
+            self.Status.sort_values('weeks_survived', ascending=True)['username'].tolist()
+        )
+        weeks = sorted(self.Picks['week'].unique())
+
+        # Build z matrix and annotation text
+        # 2=won, 1=revive-loss, -1=fatal, 0=no pick
+        z = []
+        text = []
+        for username in player_order:
+            player_picks = self.Picks[self.Picks['username'] == username].set_index('week')
+            row_z, row_text = [], []
+            for wk in weeks:
+                if wk not in player_picks.index:
+                    row_z.append(0)
+                    row_text.append('')
+                else:
+                    pick = player_picks.loc[wk]
+                    team = pick['team_pick']
+                    if pick['is_fatal']:
+                        row_z.append(-1)
+                        row_text.append(f'{team} ✕')
+                    elif pick['is_revive_loss']:
+                        row_z.append(1)
+                        row_text.append(team)
+                    elif pick['won']:
+                        row_z.append(2)
+                        row_text.append(team)
+                    else:
+                        row_z.append(0)
+                        row_text.append('')
+            z.append(row_z)
+            text.append(row_text)
+
+        colorscale = [
+            [0.0,  '#1a3a4a'],   # 0  → no pick / post-elim
+            [0.25, '#1a3a4a'],
+            [0.25, '#e74c3c'],   # -1 remapped to 0 via zmin/zmax trick — see below
+            [0.5,  '#e74c3c'],
+            [0.5,  '#f39c12'],   # 1  → revive loss (amber)
+            [0.75, '#f39c12'],
+            [0.75, '#2ecc71'],   # 2  → win (green)
+            [1.0,  '#2ecc71'],
+        ]
+
+        fig = go.Figure()
+        fig.add_trace(go.Heatmap(
+            z=z,
+            x=weeks,
+            y=player_order,
+            text=text,
+            texttemplate='%{text}',
+            textfont=dict(size=11, color='white', family='Courier New'),
+            colorscale=colorscale,
+            zmin=-1, zmax=2,
+            showscale=False,
+            hovertemplate='%{y} · Week %{x}<br>%{text}<extra></extra>',
+            xgap=2,
+            ygap=2,
+        ))
+
+        fig.update_layout(
+            template='gridiron_ink',
+            title=dict(text='<b>Pick Matrix</b>', x=0.5),
+            xaxis=dict(title='Week', tickmode='linear', dtick=1, ticklen=0),
+            yaxis=dict(title=None, ticklen=0),
+            margin=dict(t=80, l=140, r=20, b=50),
+            height=max(300, 60 * len(player_order)),
+        )
+        return fig
+
+    def elimination_timeline_fig(self) -> go.Figure:
+        """Horizontal Gantt-style swim lanes: one bar per player showing survival span."""
+        if self.Status.empty:
+            return go.Figure(layout=go.Layout(template='gridiron_ink'))
+
+        results = self.get_game_results()
+        max_week = self.Picks['week'].max() if not self.Picks.empty else 17
+
+        player_order = (
+            self.Status.sort_values('weeks_survived', ascending=False)['username'].tolist()
+        )
+
+        fig = go.Figure()
+        for username in player_order:
+            row = self.Status[self.Status['username'] == username].iloc[0]
+            final = row['final_week'] if pd.notna(row['final_week']) else max_week
+            revived = row['revived']
+
+            # Find revive-loss week if applicable
+            revive_row = self.Picks[
+                (self.Picks['username'] == username) & (self.Picks['is_revive_loss'])
+            ]
+            revive_wk = int(revive_row['week'].iloc[0]) if not revive_row.empty else None
+
+            # Build bar segment(s)
+            if revived and revive_wk:
+                segments = [(1, revive_wk - 0.15), (revive_wk + 0.15, final)]
+            else:
+                segments = [(1, final)]
+
+            for i, (start, end) in enumerate(segments):
+                fatal_picks = self.Picks[
+                    (self.Picks['username'] == username) & self.Picks['is_fatal']
+                ]
+                if i == len(segments) - 1 and not fatal_picks.empty:
+                    fatal_team = fatal_picks.iloc[0]['team_pick']
+                    fatal_wk = int(fatal_picks.iloc[0]['week'])
+                    res = results.get((fatal_team, fatal_wk))
+                    if res:
+                        opp, score, opp_score = res
+                        label = f'{fatal_team} — Lost {score:.0f}-{opp_score:.0f}'
+                    else:
+                        label = f'{fatal_team} — Lost'
+                else:
+                    label = None
+
+                fig.add_trace(go.Bar(
+                    x=[end - start],
+                    y=[username],
+                    base=[start],
+                    orientation='h',
+                    marker_color='#2ecc71',
+                    text=[label] if label else [None],
+                    textposition='outside',
+                    textfont=dict(size=10, color='#BDE2FF'),
+                    showlegend=False,
+                    hovertemplate=f'{username}<br>Weeks {start:.0f}–{end:.0f}<extra></extra>',
+                ))
+
+        fig.update_layout(
+            template='gridiron_ink',
+            title=dict(text='<b>Elimination Timeline</b>', x=0.5),
+            xaxis=dict(title='Week', tickmode='linear', dtick=1, range=[0, max_week + 3]),
+            yaxis=dict(title=None, categoryorder='array', categoryarray=list(reversed(player_order))),
+            barmode='overlay',
+            margin=dict(t=80, l=140, r=100, b=50),
+            height=max(300, 60 * len(player_order)),
+        )
+        return fig
+
+    def weekly_carnage_fig(self) -> go.Figure:
+        """Bar chart of eliminations per week, annotated with fatal team picks."""
+        if self.Picks.empty:
+            return go.Figure(layout=go.Layout(template='gridiron_ink'))
+
+        results = self.get_game_results()
+        fatal_picks = self.Picks[self.Picks['is_fatal']].copy()
+
+        if fatal_picks.empty:
+            return go.Figure(layout=go.Layout(template='gridiron_ink'))
+
+        carnage = (
+            fatal_picks.groupby('week')
+            .agg(count=('username', 'count'), teams=('team_pick', list))
+            .reset_index()
+        )
+
+        annotations_text = []
+        for _, row in carnage.iterrows():
+            parts = []
+            for team in row['teams']:
+                res = results.get((team, int(row['week'])))
+                if res:
+                    _, score, opp_score = res
+                    parts.append(f'{team} (L {score:.0f}-{opp_score:.0f})')
+                else:
+                    parts.append(team)
+            annotations_text.append('<br>'.join(parts))
+
+        fig = go.Figure()
+        fig.add_trace(go.Bar(
+            x=carnage['week'],
+            y=carnage['count'],
+            marker_color='#e74c3c',
+            text=annotations_text,
+            textposition='outside',
+            textfont=dict(size=10),
+            hovertemplate='Week %{x}: %{y} eliminated<extra></extra>',
+        ))
+
+        fig.update_layout(
+            template='gridiron_ink',
+            title=dict(text='<b>Weekly Carnage</b>', x=0.5),
+            xaxis=dict(title='Week', tickmode='linear', dtick=1),
+            yaxis=dict(title='Players Eliminated', dtick=1),
+            margin=dict(t=80, l=60, r=20, b=50),
+        )
+        return fig
+
+    def team_graveyard_fig(self) -> go.Figure:
+        """4×8 heatmap grid of all 32 NFL teams colored by number of times picked."""
+        picks = self.Picks[self.Picks['team_pick'] != '']
+        pick_counts = picks.groupby('team_pick').size().to_dict()
+        fatal_teams = set(self.Picks[self.Picks['is_fatal']]['team_pick'].tolist())
+
+        win_counts = picks[picks['won']].groupby('team_pick').size().to_dict()
+        loss_counts = picks[~picks['won']].groupby('team_pick').size().to_dict()
+
+        # 4 rows × 8 columns, alphabetical
+        teams_grid = sorted(self.NFL_TEAMS)
+        rows, cols = 4, 8
+        z, hover, fatal_markers = [], [], []
+
+        for r in range(rows):
+            row_z, row_hover, row_fatal = [], [], []
+            for c in range(cols):
+                idx = r * cols + c
+                if idx < len(teams_grid):
+                    team = teams_grid[idx]
+                    n = pick_counts.get(team, 0)
+                    w = win_counts.get(team, 0)
+                    l = loss_counts.get(team, 0)
+                    row_z.append(n)
+                    row_hover.append(f'{team}: {n} picks ({w}W / {l}L)')
+                    row_fatal.append(team in fatal_teams)
+                else:
+                    row_z.append(0)
+                    row_hover.append('')
+                    row_fatal.append(False)
+            z.append(row_z)
+            hover.append(row_hover)
+            fatal_markers.append(row_fatal)
+
+        team_labels = [[teams_grid[r * cols + c] if r * cols + c < len(teams_grid) else ''
+                        for c in range(cols)] for r in range(rows)]
+
+        fatal_text = [['✕' if fatal_markers[r][c] else team_labels[r][c]
+                       for c in range(cols)] for r in range(rows)]
+
+        fig = go.Figure()
+        fig.add_trace(go.Heatmap(
+            z=z,
+            text=fatal_text,
+            texttemplate='%{text}',
+            textfont=dict(size=11, color='white'),
+            colorscale=[[0, '#163146'], [1, '#00BCD4']],
+            showscale=False,
+            customdata=hover,
+            hovertemplate='%{customdata}<extra></extra>',
+            xgap=3, ygap=3,
+        ))
+
+        fig.update_layout(
+            template='gridiron_ink',
+            title=dict(text='<b>Team Graveyard</b>', x=0.5),
+            xaxis=dict(showticklabels=False, ticklen=0),
+            yaxis=dict(showticklabels=False, ticklen=0),
+            margin=dict(t=80, l=20, r=20, b=20),
+            height=260,
+        )
+        return fig
+
+    def win_margin_fig(self, username: str) -> go.Figure:
+        """Waterfall-style bar chart of weekly win margins for one player."""
+        player_picks = self.Picks[self.Picks['username'] == username].sort_values('week')
+
+        if player_picks.empty:
+            return go.Figure(layout=go.Layout(template='gridiron_ink'))
+
+        results = self.get_game_results()
+        bars_x, bars_y, colors, labels = [], [], [], []
+
+        for _, pick in player_picks.iterrows():
+            week = int(pick['week'])
+            team = pick['team_pick']
+            res = results.get((team, week))
+
+            if res:
+                opp, score, opp_score = res
+                margin = score - opp_score
+                label = f'{team} vs {opp}'
+            else:
+                margin = 1.0 if pick['won'] else -1.0
+                opp = '?'
+                label = f'{team} vs {opp} (no data)'
+
+            if pick['is_fatal']:
+                color = '#e74c3c'
+                margin = -abs(margin)
+            elif pick['is_revive_loss']:
+                color = '#f39c12'
+                margin = -abs(margin)
+            elif pick['won']:
+                color = '#2ecc71'
+                margin = abs(margin)
+            else:
+                color = '#e74c3c'
+                margin = -abs(margin)
+
+            bars_x.append(week)
+            bars_y.append(margin)
+            colors.append(color)
+            labels.append(label)
+
+        fig = go.Figure()
+        fig.add_hline(y=0, line_color='#3D5E78', line_width=1)
+        fig.add_trace(go.Bar(
+            x=bars_x,
+            y=bars_y,
+            marker_color=colors,
+            text=labels,
+            textposition='outside',
+            textfont=dict(size=9),
+            hovertemplate='Week %{x}<br>Margin: %{y:.0f}<extra></extra>',
+        ))
+
+        fig.update_layout(
+            template='gridiron_ink',
+            title=dict(text=f'<b>Win Margins — {username}</b>', x=0.5),
+            xaxis=dict(title='Week', tickmode='linear', dtick=1),
+            yaxis=dict(title='Point Margin'),
+            margin=dict(t=80, l=60, r=20, b=80),
+        )
+        return fig
+
+    def longevity_leaderboard_fig(self, all_survivors: dict) -> go.Figure:
+        """Grouped horizontal bar chart of weeks survived across all years."""
+        if not all_survivors:
+            return go.Figure(layout=go.Layout(template='gridiron_ink'))
+
+        years = sorted(all_survivors.keys())
+
+        # Union of all players, total weeks survived across years
+        total_weeks = {}
+        data_by_year = {}
+        for year, surv in all_survivors.items():
+            year_data = surv.Status.set_index('username')['weeks_survived'].to_dict()
+            data_by_year[year] = year_data
+            for player, wks in year_data.items():
+                total_weeks[player] = total_weeks.get(player, 0) + wks
+
+        player_order = sorted(total_weeks, key=lambda p: total_weeks[p])
+
+        fig = go.Figure()
+        for i, year in enumerate(years):
+            year_data = data_by_year[year]
+            x_vals = [year_data.get(p) for p in player_order]
+            # Show only players who participated (exclude None)
+            fig.add_trace(go.Bar(
+                name=str(year),
+                y=player_order,
+                x=x_vals,
+                orientation='h',
+                marker_color=coastal_colorway[i % len(coastal_colorway)],
+                hovertemplate=f'{year}: %{{x}} weeks<extra>%{{y}}</extra>',
+            ))
+
+        fig.update_layout(
+            template='gridiron_ink',
+            title=dict(text='<b>Longevity Leaderboard</b>', x=0.5),
+            xaxis=dict(title='Weeks Survived', dtick=1),
+            yaxis=dict(title=None),
+            barmode='group',
+            legend=dict(title='Year'),
+            margin=dict(t=80, l=140, r=20, b=50),
+            height=max(300, 50 * len(player_order)),
+        )
+        return fig
+
+
+# ── Playoff Probability Calculator ───────────────────────────────────────────
+
+@dataclass
+class TeamPlayoffSnapshot:
+    roster_id: int
+    name: str
+    wins: int
+    losses: int
+    points_for: float
+    prob_any: float    # P(makes playoffs) — in top N in at least one scenario
+    prob_guar: float   # P(safely above bubble) — in top N-1 in this fraction of scenarios
+    clinch_in: int | None   # min wins to make playoffs in ALL scenarios; None if clinched or impossible
+    elim_in: int | None     # max losses before no path to playoffs exists; None if eliminated
+    key_matchups_swing: dict = dc_field(default_factory=dict)
+    # Maps (roster_id_a, roster_id_b) → swing magnitude in P(this team makes playoffs)
+    # if roster_id_a wins vs roster_id_b. Excludes games involving this team and 0.0 swings.
+
+
+class PlayoffCalculator:
+    """
+    Computes playoff probabilities using exact NumPy bitmask enumeration (≤29 matchups)
+    or Monte Carlo (1M simulations) when matchups exceed the bit limit.
+    """
+
+    EARLY_WEEK_THRESHOLD = 9
+    NUMPY_EXACT_BIT_LIMIT = 29
+    MC_SIMULATIONS = 1_000_000
+
+    def __init__(self, league, season, as_of_week: int):
+        self.league = league
+        self.season = season
+        self.as_of_week = as_of_week
+        self.year = league.year
+        self.teamcolors = get_slot_teamcolors(self.year)
+
+    def compute(self) -> list:
+        """Run enumeration and return one TeamPlayoffSnapshot per team."""
+        standings = self._build_standings()
+        if not standings:
+            return []
+
+        num_playoffs = self._determine_playoff_spots()
+        matchup_pairs, current_week_pairs = self._fetch_remaining_matchups()
+
+        roster_ids_list = sorted(standings.keys())
+        rid_to_idx = {rid: i for i, rid in enumerate(roster_ids_list)}
+
+        initial_wins = {rid: standings[rid]['wins'] for rid in roster_ids_list}
+        pf_totals = {rid: standings[rid]['points_for'] for rid in roster_ids_list}
+
+        M = len(matchup_pairs)
+
+        if M == 0:
+            return self._no_remaining_games(standings, num_playoffs)
+
+        use_exact = M <= self.NUMPY_EXACT_BIT_LIMIT
+        if use_exact:
+            total_scenarios = 2 ** M
+            in_count, guar_count, num_sims, swing_tally, swing_count = self._exact_numpy(
+                matchup_pairs, current_week_pairs, initial_wins, pf_totals, num_playoffs, total_scenarios)
+        else:
+            in_count, guar_count, num_sims, swing_tally, swing_count = self._monte_carlo(
+                matchup_pairs, current_week_pairs, initial_wins, pf_totals, num_playoffs)
+
+        snapshots = []
+        for rid in roster_ids_list:
+            idx = rid_to_idx[rid]
+            prob_any = float(in_count[idx]) / num_sims
+            prob_guar = float(guar_count[idx]) / num_sims
+
+            kms = {}
+            for cw_g_idx, (a, b) in enumerate(current_week_pairs):
+                if rid == a or rid == b:
+                    continue
+                c0, c1 = swing_count[cw_g_idx, 0], swing_count[cw_g_idx, 1]
+                if c0 > 0 and c1 > 0:
+                    swing = abs(swing_tally[idx, cw_g_idx, 0] / c0 - swing_tally[idx, cw_g_idx, 1] / c1)
+                    if swing > 1e-6:
+                        kms[(a, b)] = round(swing, 4)
+
+            clinch_in = None
+            elim_in = None
+            if use_exact:
+                if 0 < prob_any < 1.0:
+                    clinch_in = self._clinch_number(rid, matchup_pairs, initial_wins, pf_totals, num_playoffs, rid_to_idx)
+                    elim_in = self._elim_number(rid, matchup_pairs, initial_wins, pf_totals, num_playoffs, rid_to_idx)
+
+            snapshots.append(TeamPlayoffSnapshot(
+                roster_id=rid,
+                name=standings[rid]['name'],
+                wins=standings[rid]['wins'],
+                losses=standings[rid]['losses'],
+                points_for=standings[rid]['points_for'],
+                prob_any=prob_any,
+                prob_guar=prob_guar,
+                clinch_in=clinch_in,
+                elim_in=elim_in,
+                key_matchups_swing=kms,
+            ))
+
+        return snapshots
+
+    def _no_remaining_games(self, standings: dict, num_playoffs: int) -> list:
+        """Deterministic outcome when all games are decided."""
+        roster_ids_list = sorted(standings.keys())
+        wins_d = {rid: standings[rid]['wins'] for rid in roster_ids_list}
+        pf_d = {rid: standings[rid]['points_for'] for rid in roster_ids_list}
+        ranked = sorted(roster_ids_list, key=lambda r: (-wins_d[r], -pf_d[r], r))
+        result = []
+        for rank_pos, rid in enumerate(ranked):
+            in_playoffs = rank_pos < num_playoffs
+            safely_in = rank_pos < max(0, num_playoffs - 1)
+            result.append(TeamPlayoffSnapshot(
+                roster_id=rid,
+                name=standings[rid]['name'],
+                wins=standings[rid]['wins'],
+                losses=standings[rid]['losses'],
+                points_for=standings[rid]['points_for'],
+                prob_any=1.0 if in_playoffs else 0.0,
+                prob_guar=1.0 if safely_in else 0.0,
+                clinch_in=None,
+                elim_in=None,
+            ))
+        return result
+
+    def _build_standings(self) -> dict:
+        """Derive wins, losses, points_for per roster_id from AllMatchesDict."""
+        all_matches = AllMatchesDict.get(self.year, {})
+        dfs = []
+        for week, df in all_matches.items():
+            if week < self.as_of_week:
+                reg = df[df['Season'] == 'Regular']
+                if len(reg) > 0:
+                    dfs.append(reg[['Team', 'Total', 'Won']].copy())
+
+        if not dfs:
+            return {}
+
+        combined = pd.concat(dfs, ignore_index=True)
+        name_to_rid = {v: k for k, v in roster_ids[self.year].items()}
+
+        standings = {}
+        for team_name, group in combined.groupby('Team'):
+            rid = name_to_rid.get(team_name)
+            if rid is None:
+                continue
+            wins = int(group['Won'].sum())
+            standings[rid] = {
+                'wins': wins,
+                'losses': int(len(group) - wins),
+                'points_for': float(group['Total'].sum()),
+                'name': team_name,
+            }
+        return standings
+
+    def _fetch_remaining_matchups(self) -> tuple:
+        """Return (all_pairs, current_week_pairs) — tuples of (roster_id_a, roster_id_b)."""
+        import data_loader as dl
+        playoff_start = int(self.league.league_settings.get('settings.playoff_week_start', 15))
+        all_pairs = []
+        current_week_pairs = []
+
+        for week in range(self.as_of_week, playoff_start):
+            try:
+                raw = dl.fetch_matchups_json(self.league.id, week)
+            except Exception:
+                continue
+
+            by_matchup = {}
+            for entry in raw:
+                mid = entry.get('matchup_id')
+                if mid is None:
+                    continue
+                by_matchup.setdefault(mid, []).append(entry)
+
+            for mid, entries in by_matchup.items():
+                if len(entries) != 2:
+                    continue
+                a = entries[0]['roster_id']
+                b = entries[1]['roster_id']
+                if (entries[0].get('points') or 0) > 0 or (entries[1].get('points') or 0) > 0:
+                    continue
+                pair = (a, b)
+                all_pairs.append(pair)
+                if week == self.as_of_week:
+                    current_week_pairs.append(pair)
+
+        return all_pairs, current_week_pairs
+
+    def _determine_playoff_spots(self) -> int:
+        return int(self.league.league_settings.get('settings.playoff_teams', 6))
+
+    def _build_core_arrays(self, matchup_pairs, initial_wins, pf_totals):
+        """Build shared numpy arrays for vectorized enumeration."""
+        roster_ids_list = sorted(initial_wins.keys())
+        rid_to_idx = {rid: i for i, rid in enumerate(roster_ids_list)}
+        T = len(roster_ids_list)
+        M = len(matchup_pairs)
+
+        wins_delta = np.zeros((T, M, 2), dtype=np.int8)
+        for g, (a, b) in enumerate(matchup_pairs):
+            if a in rid_to_idx:
+                wins_delta[rid_to_idx[a], g, 0] = 1
+            if b in rid_to_idx:
+                wins_delta[rid_to_idx[b], g, 1] = 1
+
+        initial_wins_arr = np.array([initial_wins[rid] for rid in roster_ids_list], dtype=np.float64)
+        pf_arr = np.array([pf_totals[rid] for rid in roster_ids_list], dtype=np.float64)
+        rid_arr = np.array(roster_ids_list, dtype=np.float64)
+
+        return roster_ids_list, rid_to_idx, wins_delta, initial_wins_arr, pf_arr, rid_arr
+
+    def _rank_teams(self, final_wins, pf_arr, rid_arr, num_playoffs):
+        """
+        Compute in_playoffs and safely_in masks for a batch of scenarios.
+        final_wins: (chunk, T); returns (in_playoffs, safely_in) each (chunk, T).
+        Tiebreaker: wins DESC, pf DESC, roster_id ASC (deterministic — no true ties).
+        """
+        w_a = final_wins[:, :, None]    # (chunk, T, 1) — "challenger" team
+        w_b = final_wins[:, None, :]    # (chunk, 1, T) — "target" team
+        pf_a = pf_arr[None, :, None]
+        pf_b = pf_arr[None, None, :]
+        rid_a = rid_arr[None, :, None]
+        rid_b = rid_arr[None, None, :]
+
+        # beats[s, t', t] = True if t' ranks above t
+        beats = (
+            (w_a > w_b) |
+            ((w_a == w_b) & (pf_a > pf_b)) |
+            ((w_a == w_b) & (pf_a == pf_b) & (rid_a < rid_b))
+        )
+        rank = beats.sum(axis=1)  # (chunk, T): how many teams rank above team t
+        in_playoffs = rank < num_playoffs
+        safely_in = rank < max(0, num_playoffs - 1)
+        return in_playoffs, safely_in
+
+    def _apply_bits_to_wins(self, bits, wins_delta, initial_wins_arr):
+        """
+        Convert bit matrix (chunk, M) to final wins (chunk, T).
+        wins_delta shape: (T, M, 2); transposed to (M, 2, T) for efficient indexing.
+        """
+        M = bits.shape[1]
+        wd = wins_delta.transpose(1, 2, 0)          # (M, 2, T)
+        game_bits = np.arange(M, dtype=np.int64)
+        gathered = wd[game_bits[None, :], bits, :]  # (chunk, M, T)
+        return initial_wins_arr[None, :] + gathered.sum(axis=1)
+
+    def _accumulate_swings(self, bits, in_pl, cw_indices, swing_tally, swing_count):
+        """Update swing accumulators for current-week games."""
+        for local_g, mp_idx in enumerate(cw_indices):
+            bit_col = bits[:, mp_idx]
+            mask0 = (bit_col == 0)
+            mask1 = (bit_col == 1)
+            swing_tally[:, local_g, 0] += in_pl[mask0].sum(axis=0)
+            swing_tally[:, local_g, 1] += in_pl[mask1].sum(axis=0)
+            swing_count[local_g, 0] += int(mask0.sum())
+            swing_count[local_g, 1] += int(mask1.sum())
+
+    def _exact_numpy(self, matchup_pairs, current_week_pairs, initial_wins, pf_totals,
+                     num_playoffs, total_scenarios):
+        """Vectorized bitmask enumeration in chunks of 2^20."""
+        _, rid_to_idx, wins_delta, initial_wins_arr, pf_arr, rid_arr = self._build_core_arrays(
+            matchup_pairs, initial_wins, pf_totals)
+        T = len(initial_wins)
+        M = len(matchup_pairs)
+        G = len(current_week_pairs)
+
+        cw_set = set(current_week_pairs)
+        cw_indices = [g for g, pair in enumerate(matchup_pairs) if pair in cw_set]
+
+        in_count = np.zeros(T, dtype=np.int64)
+        guar_count = np.zeros(T, dtype=np.int64)
+        swing_tally = np.zeros((T, G, 2), dtype=np.int64)
+        swing_count = np.zeros((G, 2), dtype=np.int64)
+
+        chunk_size = 1 << 20
+        game_bits = np.arange(M, dtype=np.int64)
+
+        for chunk_start in range(0, total_scenarios, chunk_size):
+            chunk_end = min(chunk_start + chunk_size, total_scenarios)
+            scenarios = np.arange(chunk_start, chunk_end, dtype=np.int64)
+            bits = ((scenarios[:, None] >> game_bits[None, :]) & 1).astype(np.int8)
+
+            final_wins = self._apply_bits_to_wins(bits, wins_delta, initial_wins_arr)
+            in_pl, guar_pl = self._rank_teams(final_wins, pf_arr, rid_arr, num_playoffs)
+
+            in_count += in_pl.sum(axis=0)
+            guar_count += guar_pl.sum(axis=0)
+            self._accumulate_swings(bits, in_pl, cw_indices, swing_tally, swing_count)
+
+        return in_count, guar_count, total_scenarios, swing_tally, swing_count
+
+    def _monte_carlo(self, matchup_pairs, current_week_pairs, initial_wins, pf_totals, num_playoffs):
+        """1M random simulations with the same tiebreaker logic as _exact_numpy."""
+        _, rid_to_idx, wins_delta, initial_wins_arr, pf_arr, rid_arr = self._build_core_arrays(
+            matchup_pairs, initial_wins, pf_totals)
+        T = len(initial_wins)
+        M = len(matchup_pairs)
+        G = len(current_week_pairs)
+        N = self.MC_SIMULATIONS
+
+        cw_set = set(current_week_pairs)
+        cw_indices = [g for g, pair in enumerate(matchup_pairs) if pair in cw_set]
+
+        bits_all = np.random.randint(0, 2, size=(N, M), dtype=np.int8)
+
+        in_count = np.zeros(T, dtype=np.int64)
+        guar_count = np.zeros(T, dtype=np.int64)
+        swing_tally = np.zeros((T, G, 2), dtype=np.int64)
+        swing_count = np.zeros((G, 2), dtype=np.int64)
+
+        chunk_size = 1 << 20
+        for chunk_start in range(0, N, chunk_size):
+            chunk_end = min(chunk_start + chunk_size, N)
+            bits = bits_all[chunk_start:chunk_end]
+
+            final_wins = self._apply_bits_to_wins(bits, wins_delta, initial_wins_arr)
+            in_pl, guar_pl = self._rank_teams(final_wins, pf_arr, rid_arr, num_playoffs)
+
+            in_count += in_pl.sum(axis=0)
+            guar_count += guar_pl.sum(axis=0)
+            self._accumulate_swings(bits, in_pl, cw_indices, swing_tally, swing_count)
+
+        return in_count, guar_count, N, swing_tally, swing_count
+
+    def _enum_for_own_wins(self, roster_id, matchup_pairs, initial_wins, pf_totals,
+                            num_playoffs, rid_to_idx, own_wins_filter):
+        """
+        Enumerate all 2^M scenarios filtered to those where roster_id wins exactly
+        own_wins_filter games. Returns (all_in_playoffs, any_in_playoffs, any_scenario_found).
+        """
+        _, _, wins_delta, initial_wins_arr, pf_arr, rid_arr = self._build_core_arrays(
+            matchup_pairs, initial_wins, pf_totals)
+        M = len(matchup_pairs)
+        total_scenarios = 2 ** M
+        t_idx = rid_to_idx[roster_id]
+
+        own_if_0 = np.array([1 if a == roster_id else 0 for (a, b) in matchup_pairs], dtype=np.int8)
+        own_if_1 = np.array([1 if b == roster_id else 0 for (a, b) in matchup_pairs], dtype=np.int8)
+
+        chunk_size = 1 << 20
+        game_bits = np.arange(M, dtype=np.int64)
+        all_make_it = True
+        any_makes_it = False
+        any_found = False
+
+        for chunk_start in range(0, total_scenarios, chunk_size):
+            chunk_end = min(chunk_start + chunk_size, total_scenarios)
+            scenarios = np.arange(chunk_start, chunk_end, dtype=np.int64)
+            bits = ((scenarios[:, None] >> game_bits[None, :]) & 1).astype(np.int8)
+
+            own_wins = ((1 - bits) * own_if_0[None, :] + bits * own_if_1[None, :]).sum(axis=1)
+            mask = (own_wins == own_wins_filter)
+            if not mask.any():
+                continue
+            any_found = True
+
+            bits_f = bits[mask]
+            final_wins = self._apply_bits_to_wins(bits_f, wins_delta, initial_wins_arr)
+            in_pl, _ = self._rank_teams(final_wins, pf_arr, rid_arr, num_playoffs)
+
+            team_in = in_pl[:, t_idx]
+            if not team_in.all():
+                all_make_it = False
+            if team_in.any():
+                any_makes_it = True
+
+            if not all_make_it and any_makes_it:
+                break  # early exit: have all the info we need
+
+        return all_make_it, any_makes_it, any_found
+
+    def _clinch_number(self, roster_id, matchup_pairs, initial_wins, pf_totals,
+                       num_playoffs, rid_to_idx) -> int | None:
+        """
+        Min additional wins W such that team makes playoffs in ALL scenarios where they
+        win exactly W more games. Linear scan — domain is at most 6 values.
+        Returns None if already clinched (W=0 works) or impossible (no W works).
+        """
+        own_game_count = sum(1 for (a, b) in matchup_pairs if a == roster_id or b == roster_id)
+        for W in range(own_game_count + 1):
+            all_in, _, found = self._enum_for_own_wins(
+                roster_id, matchup_pairs, initial_wins, pf_totals, num_playoffs, rid_to_idx, W)
+            if found and all_in:
+                return None if W == 0 else W
+        return None
+
+    def _elim_number(self, roster_id, matchup_pairs, initial_wins, pf_totals,
+                     num_playoffs, rid_to_idx) -> int | None:
+        """
+        Max additional losses L before all paths to playoffs close.
+        Linear scan over L (= own_game_count - W). Returns None if already eliminated.
+        """
+        own_game_count = sum(1 for (a, b) in matchup_pairs if a == roster_id or b == roster_id)
+        last_viable_L = None
+        for L in range(own_game_count + 1):
+            W = own_game_count - L
+            _, any_in, found = self._enum_for_own_wins(
+                roster_id, matchup_pairs, initial_wins, pf_totals, num_playoffs, rid_to_idx, W)
+            if found and any_in:
+                last_viable_L = L
+        return last_viable_L
+
+    # ── Chart methods ─────────────────────────────────────────────────────────
+
+    @staticmethod
+    def PlayoffOddsBar(snapshots: list, teamcolors: dict = None) -> go.Figure:
+        """
+        Horizontal stacked bar chart of playoff probabilities.
+        Two layers per team: prob_guar (darker, "Guaranteed") + remainder to prob_any (lighter, "Any Path").
+        """
+        if not snapshots:
+            return go.Figure(layout=go.Layout(template='gridiron_ink'))
+
+        # Sort by prob_any DESC
+        ordered = sorted(snapshots, key=lambda s: s.prob_any)
+        names = [s.name for s in ordered]
+        prob_any_pct = [s.prob_any * 100 for s in ordered]
+        prob_guar_pct = [s.prob_guar * 100 for s in ordered]
+        prob_bubble_pct = [max(0.0, (s.prob_any - s.prob_guar) * 100) for s in ordered]
+
+        def _hex_to_rgba(hex_color: str, alpha: float) -> str:
+            h = hex_color.lstrip('#')
+            r, g, b = int(h[0:2], 16), int(h[2:4], 16), int(h[4:6], 16)
+            return f'rgba({r},{g},{b},{alpha})'
+
+        colors_guar = []
+        colors_bubble = []
+        for s in ordered:
+            base = (teamcolors or {}).get(s.name, '#54A2E5')
+            colors_guar.append(base)
+            colors_bubble.append(_hex_to_rgba(base, 0.4))
+
+        fig = go.Figure()
+
+        fig.add_trace(go.Bar(
+            name='Guaranteed',
+            y=names,
+            x=prob_guar_pct,
+            orientation='h',
+            marker_color=colors_guar,
+            hovertemplate='%{y}<br>Guaranteed: %{x:.1f}%<extra></extra>',
+        ))
+
+        fig.add_trace(go.Bar(
+            name='Any Path',
+            y=names,
+            x=prob_bubble_pct,
+            orientation='h',
+            marker_color=colors_bubble,
+            hovertemplate='%{y}<br>Any Path: %{customdata:.1f}%<extra></extra>',
+            customdata=prob_any_pct,
+        ))
+
+        # Custom hover with record + PF
+        for i, s in enumerate(ordered):
+            fig.data[0].customdata = [
+                f'{s.wins}-{s.losses} · PF: {s.points_for:.1f} · Prob: {s.prob_any*100:.1f}% ({s.prob_guar*100:.1f}% guar)'
+                for s in ordered
+            ]
+        fig.data[0].hovertemplate = '%{customdata}<extra></extra>'
+
+        # Status badge annotations
+        annotations = []
+        for i, s in enumerate(ordered):
+            label = ''
+            if s.prob_guar == 1.0:
+                label = 'CLINCHED'
+            elif s.prob_any == 0.0:
+                label = 'ELIMINATED'
+            elif s.prob_any >= 0.90:
+                label = 'WIN OUT'
+            elif s.prob_any < 0.15:
+                label = 'LONGSHOT'
+            if label:
+                annotations.append(dict(
+                    x=102, y=i, xref='x', yref='y',
+                    text=f'<b>{label}</b>',
+                    showarrow=False,
+                    font=dict(size=9, color='#BDE2FF'),
+                    xanchor='left',
+                ))
+
+        fig.update_layout(
+            template='gridiron_ink',
+            barmode='stack',
+            xaxis=dict(title='Playoff Probability %', range=[0, 115], ticksuffix='%'),
+            yaxis=dict(title=None),
+            legend=dict(orientation='h', yanchor='top', y=-0.12, xanchor='center', x=0.5),
+            margin=dict(t=20, b=80, l=140, r=80),
+            height=max(300, 50 * len(ordered)),
+            annotations=annotations,
+        )
+        return fig
+
+    @staticmethod
+    def PlayoffOddsTrajectory(probs_by_week: dict, teamcolors: dict = None, year: int = None) -> go.Figure:
+        """
+        Line chart of playoff probability over weeks (week → prob%).
+        One line per team, with markers. Dashed 50% reference line.
+        """
+        if not probs_by_week:
+            return go.Figure(layout=go.Layout(template='gridiron_ink'))
+
+        weeks = sorted(probs_by_week.keys())
+
+        # Collect per-team trajectory
+        teams_seen = {}
+        for w in weeks:
+            for s in probs_by_week[w]:
+                if s.name not in teams_seen:
+                    teams_seen[s.name] = {'weeks': [], 'probs': []}
+                teams_seen[s.name]['weeks'].append(w)
+                teams_seen[s.name]['probs'].append(s.prob_any * 100)
+
+        fig = go.Figure()
+
+        # 50% reference line
+        fig.add_hline(y=50, line_dash='dot', line_color='#3D5E78', line_width=1,
+                      annotation_text='50%', annotation_position='right',
+                      annotation_font_color='#8DCEFF')
+
+        for name, data in sorted(teams_seen.items()):
+            color = (teamcolors or {}).get(name, '#54A2E5')
+            final_w = max(data['weeks'])
+            symbols = ['circle' if w < final_w else 'circle-open' for w in data['weeks']]
+            hover = [
+                f"Week {w} · {data['probs'][i]:.1f}%"
+                for i, w in enumerate(data['weeks'])
+            ]
+            fig.add_trace(go.Scatter(
+                x=data['weeks'],
+                y=data['probs'],
+                mode='lines+markers',
+                name=name,
+                line=dict(color=color, width=2),
+                marker=dict(color=color, size=8, symbol=symbols),
+                hovertemplate='%{customdata}<extra>' + name + '</extra>',
+                customdata=hover,
+            ))
+
+        title_text = f'Playoff Race · {year}' if year else 'Playoff Race'
+        fig.update_layout(
+            template='gridiron_ink',
+            title=dict(text=f'<b>{title_text}</b>', x=0.5),
+            xaxis=dict(title='Week', tickmode='linear', dtick=1),
+            yaxis=dict(title='Playoff Probability %', range=[0, 105], ticksuffix='%'),
+            legend=dict(orientation='h', yanchor='top', y=-0.15, xanchor='center', x=0.5),
+            margin=dict(t=60, b=100, l=80, r=40),
+            height=480,
+        )
+        return fig

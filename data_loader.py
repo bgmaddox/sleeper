@@ -141,6 +141,61 @@ def fetch_traded_picks_json(league_id: int) -> list:
     _save_cache(key, data)
     return data
 
+def fetch_survivor_rosters(league_id: int) -> list:
+    """Survivor pool rosters (pick history + elimination metadata)."""
+    key = f"survivor_rosters_{league_id}"
+    cached = _load_cache(key)
+    if cached is not None:
+        return cached
+    data = requests.get(f"https://api.sleeper.app/v1/league/{league_id}/rosters").json()
+    _save_cache(key, data)
+    return data
+
+def fetch_survivor_users(league_id: int) -> list:
+    """Survivor pool users (owner_id → display_name mapping)."""
+    key = f"survivor_users_{league_id}"
+    cached = _load_cache(key)
+    if cached is not None:
+        return cached
+    data = requests.get(f"https://api.sleeper.app/v1/league/{league_id}/users").json()
+    _save_cache(key, data)
+    return data
+
+def fetch_matchups_json(league_id: int, week: int) -> list:
+    """Fetch raw Sleeper matchup JSON for a given week (cached to disk)."""
+    key = f"matchups_{league_id}_{week}"
+    cached = _load_cache(key)
+    if cached is not None:
+        return cached
+    data = requests.get(
+        f"https://api.sleeper.app/v1/league/{league_id}/matchups/{week}"
+    ).json()
+    _save_cache(key, data)
+    return data
+
+def fetch_nfl_schedule(year: int):
+    """NFL regular-season schedule from nfl_data_py, disk-cached."""
+    import pandas as pd
+    import nfl_data_py as nfl
+    key = f"nfl_schedule_{year}"
+    cached = _load_cache(key)
+    if cached is not None:
+        return cached
+    sched = nfl.import_schedules([year])
+    _save_cache(key, sched)
+    return sched
+
+def load_survivor_for_year(year: int):
+    """Build and return a Survivor object for the given year, disk-cached."""
+    import sleeper_core as core
+    key = f"survivor_{year}"
+    cached = _load_cache(key)
+    if cached is not None:
+        return cached
+    s = core.Survivor(year)
+    _save_cache(key, s)
+    return s
+
 
 # ── High-level data loading ───────────────────────────────────────────────────
 
@@ -233,6 +288,46 @@ def get_current_week(year: int) -> int:
         return int(settings.get("settings", {}).get("last_scored_leg", 1) or 1)
     except Exception:
         return 1
+
+
+def load_playoff_probs(year: int) -> dict | None:
+    """
+    Returns {as_of_week: list[TeamPlayoffSnapshot]} for weeks 9 through playoff_week_start-1.
+
+    For completed seasons: computes all weeks once and caches each independently.
+    For the current season: only computes weeks where data exists (≤ max completed week).
+    Returns None if data is unavailable (year not loaded, season too early).
+    """
+    import sleeper_core as core
+
+    try:
+        league, season, weeks = load_data_for_year(year, verbose=False)
+    except Exception:
+        return None
+
+    playoff_start = int(league.league_settings.get('settings.playoff_week_start', 15))
+    max_completed = max(weeks.keys()) if weeks else 0
+
+    result = {}
+    for as_of_week in range(core.PlayoffCalculator.EARLY_WEEK_THRESHOLD, playoff_start):
+        if as_of_week > max_completed:
+            break
+
+        week_key = f"playoff_probs_{year}_{as_of_week}"
+        cached = _load_cache(week_key)
+        if cached is not None:
+            result[as_of_week] = cached
+            continue
+
+        try:
+            calc = core.PlayoffCalculator(league, season, as_of_week)
+            snapshots = calc.compute()
+            _save_cache(week_key, snapshots)
+            result[as_of_week] = snapshots
+        except Exception:
+            continue
+
+    return result if result else None
 
 
 def invalidate_week(year: int, week: int):

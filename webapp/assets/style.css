@@ -754,7 +754,8 @@ html, body {
 /* ── Tab icons (mask-image technique) ───────────────────────────────────── */
 
 .tab--week::before, .tab--season::before, .tab--players::before,
-.tab--alltime::before, .tab--h2h::before {
+.tab--alltime::before, .tab--h2h::before, .tab--survivor::before,
+.tab--playoffs::before, .tab--sidebets::before {
   content: '';
   display: inline-block;
   width: 15px;
@@ -775,13 +776,19 @@ html, body {
 .tab--season.tab--selected::before,
 .tab--players.tab--selected::before,
 .tab--alltime.tab--selected::before,
-.tab--h2h.tab--selected::before { background-color: var(--accent); }
+.tab--h2h.tab--selected::before,
+.tab--survivor.tab--selected::before,
+.tab--playoffs.tab--selected::before,
+.tab--sidebets.tab--selected::before { background-color: var(--accent); }
 
 .tab--week:hover::before,
 .tab--season:hover::before,
 .tab--players:hover::before,
 .tab--alltime:hover::before,
-.tab--h2h:hover::before { background-color: var(--text-main); }
+.tab--h2h:hover::before,
+.tab--survivor:hover::before,
+.tab--playoffs:hover::before,
+.tab--sidebets:hover::before { background-color: var(--text-main); }
 
 /* Football */
 .tab--week::before {
@@ -813,6 +820,29 @@ html, body {
   mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cline x1='3' y1='9' x2='21' y2='9'/%3E%3Cpolyline points='17,5 21,9 17,13'/%3E%3Cline x1='21' y1='15' x2='3' y2='15'/%3E%3Cpolyline points='7,11 3,15 7,19'/%3E%3C/svg%3E");
 }
 
+/* Torch (survivor) */
+.tab--survivor::before {
+  -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M9 11 Q7 6 12 2 Q14 6 13 8 Q16 5 15 11 Q14 13 12 14 Q10 13 9 11 Z'/%3E%3Cline x1='10.5' y1='14' x2='13.5' y2='14'/%3E%3Cpath d='M10 14 L9.5 21'/%3E%3Cpath d='M14 14 L14.5 21'/%3E%3Cline x1='9.7' y1='17.5' x2='14.3' y2='17.5'/%3E%3Cline x1='8.5' y1='21' x2='15.5' y2='21'/%3E%3C/svg%3E");
+  mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M9 11 Q7 6 12 2 Q14 6 13 8 Q16 5 15 11 Q14 13 12 14 Q10 13 9 11 Z'/%3E%3Cline x1='10.5' y1='14' x2='13.5' y2='14'/%3E%3Cpath d='M10 14 L9.5 21'/%3E%3Cpath d='M14 14 L14.5 21'/%3E%3Cline x1='9.7' y1='17.5' x2='14.3' y2='17.5'/%3E%3Cline x1='8.5' y1='21' x2='15.5' y2='21'/%3E%3C/svg%3E");
+}
+
+/* Tournament bracket (playoffs) */
+.tab--playoffs::before {
+  -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='2' y='4' width='4' height='3'/%3E%3Crect x='2' y='10' width='4' height='3'/%3E%3Crect x='2' y='16' width='4' height='3'/%3E%3Crect x='10' y='7' width='4' height='3'/%3E%3Crect x='10' y='16' width='4' height='3'/%3E%3Crect x='18' y='11' width='4' height='3'/%3E%3Cline x1='6' y1='5.5' x2='10' y2='5.5'/%3E%3Cline x1='6' y1='11.5' x2='8' y2='11.5'/%3E%3Cline x1='8' y1='5.5' x2='8' y2='11.5'/%3E%3Cline x1='8' y1='8.5' x2='10' y2='8.5'/%3E%3Cline x1='6' y1='17.5' x2='10' y2='17.5'/%3E%3Cline x1='14' y1='8.5' x2='16' y2='8.5'/%3E%3Cline x1='14' y1='17.5' x2='16' y2='17.5'/%3E%3Cline x1='16' y1='8.5' x2='16' y2='17.5'/%3E%3Cline x1='16' y1='12.5' x2='18' y2='12.5'/%3E%3C/svg%3E");
+  mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='2' y='4' width='4' height='3'/%3E%3Crect x='2' y='10' width='4' height='3'/%3E%3Crect x='2' y='16' width='4' height='3'/%3E%3Crect x='10' y='7' width='4' height='3'/%3E%3Crect x='10' y='16' width='4' height='3'/%3E%3Crect x='18' y='11' width='4' height='3'/%3E%3Cline x1='6' y1='5.5' x2='10' y2='5.5'/%3E%3Cline x1='6' y1='11.5' x2='8' y2='11.5'/%3E%3Cline x1='8' y1='5.5' x2='8' y2='11.5'/%3E%3Cline x1='8' y1='8.5' x2='10' y2='8.5'/%3E%3Cline x1='6' y1='17.5' x2='10' y2='17.5'/%3E%3Cline x1='14' y1='8.5' x2='16' y2='8.5'/%3E%3Cline x1='14' y1='17.5' x2='16' y2='17.5'/%3E%3Cline x1='16' y1='8.5' x2='16' y2='17.5'/%3E%3Cline x1='16' y1='12.5' x2='18' y2='12.5'/%3E%3C/svg%3E");
+}
+
+/* Dice (side bets) */
+.tab--sidebets::before {
+  -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='3' y='3' width='9' height='9' rx='1.5'/%3E%3Ccircle cx='6' cy='6' r='0.8' fill='white' stroke='none'/%3E%3Ccircle cx='9' cy='9' r='0.8' fill='white' stroke='none'/%3E%3Crect x='12' y='12' width='9' height='9' rx='1.5'/%3E%3Ccircle cx='15' cy='15' r='0.8' fill='white' stroke='none'/%3E%3Ccircle cx='18' cy='15' r='0.8' fill='white' stroke='none'/%3E%3Ccircle cx='15' cy='18' r='0.8' fill='white' stroke='none'/%3E%3Ccircle cx='18' cy='18' r='0.8' fill='white' stroke='none'/%3E%3C/svg%3E");
+  mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='3' y='3' width='9' height='9' rx='1.5'/%3E%3Ccircle cx='6' cy='6' r='0.8' fill='white' stroke='none'/%3E%3Ccircle cx='9' cy='9' r='0.8' fill='white' stroke='none'/%3E%3Crect x='12' y='12' width='9' height='9' rx='1.5'/%3E%3Ccircle cx='15' cy='15' r='0.8' fill='white' stroke='none'/%3E%3Ccircle cx='18' cy='15' r='0.8' fill='white' stroke='none'/%3E%3Ccircle cx='15' cy='18' r='0.8' fill='white' stroke='none'/%3E%3Ccircle cx='18' cy='18' r='0.8' fill='white' stroke='none'/%3E%3C/svg%3E");
+}
+
+/* ── Survivor tab ──────────────────────────────────────────────────────────── */
+.survivor-alive-badge   { color: #2ecc71; font-weight: 600; }
+.survivor-out-badge     { color: #e74c3c; font-weight: 600; }
+.survivor-revived-badge { color: #f39c12; font-weight: 600; }
+
 /* ── Tab content area ────────────────────────────────────────────────────── */
 
 .tab-content-area {
@@ -831,11 +861,15 @@ html, body {
   margin-bottom: 0;
 }
 
-.chart-col-full  { width: 100%; }
-.chart-col-half  { width: calc(50% - 12px); }
+.chart-col-full       { width: 100%; }
+.chart-col-two-thirds { width: calc(66.666% - 8px); }
+.chart-col-half       { width: calc(50% - 12px); }
+.chart-col-third      { width: calc(33.333% - 16px); }
 
 @media (max-width: 900px) {
-  .chart-col-half { width: 100%; }
+  .chart-col-two-thirds { width: 100%; }
+  .chart-col-half       { width: 100%; }
+  .chart-col-third      { width: 100%; }
 }
 
 /* ── Chart cards ─────────────────────────────────────────────────────────── */
@@ -1249,7 +1283,7 @@ html, body {
 .sb-leaderboard { display: flex; flex-direction: column; gap: 8px; margin-top: 12px; }
 .sb-row {
   display: grid;
-  grid-template-columns: 32px 1fr 2fr 80px 52px;
+  grid-template-columns: 32px 1fr 2fr 80px 52px 1fr;
   align-items: center;
   gap: 12px;
   padding: 6px 4px;
@@ -1267,6 +1301,12 @@ html, body {
 }
 .sb-wins  { font-family: var(--font-main); font-size: 0.78rem; color: var(--text-muted); text-align: right; }
 .sb-prize { font-family: var(--font-display); font-size: 0.9rem; font-weight: bold; text-align: right; }
+.sb-weeks-won { display: flex; flex-wrap: wrap; gap: 4px; }
+.sb-week-pill {
+  font-family: var(--font-main); font-size: 0.7rem; color: var(--text-muted);
+  background: rgba(255,255,255,0.06); border: 1px solid var(--border);
+  border-radius: 4px; padding: 1px 5px;
+}
 
 /* Week navigator */
 .sidebet-week-nav {

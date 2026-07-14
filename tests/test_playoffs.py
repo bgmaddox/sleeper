@@ -10,6 +10,7 @@ All tests load from .cache/ — no API calls made during the run.
 """
 import os
 import sys
+import pandas as pd
 import pytest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
@@ -59,7 +60,8 @@ class TestBreakoutPlayerID:
     def test_player_id_is_string_for_known_players(self, breakout_2024):
         # Non-null player_ids should be strings (Sleeper uses string IDs)
         non_null = breakout_2024['player_id'].dropna()
-        assert non_null.dtype == object, "player_id column should be string/object dtype"
+        assert pd.api.types.is_string_dtype(non_null), \
+            "player_id column should be string dtype (object or StringDtype)"
 
     def test_player_id_majority_populated(self, breakout_2024):
         # Most rows should have a player_id. Allows for DEF rows and name-match

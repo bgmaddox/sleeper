@@ -85,3 +85,34 @@ def alltime(season_2024):
     at = core.AllTime()
     at.Update()
     return at
+
+
+@pytest.fixture(scope="session")
+def survivor_2025():
+    """Survivor object for 2025 season. Skips if cache is missing."""
+    path = dl._cache_path("survivor_2025")
+    if not os.path.exists(path):
+        pytest.skip("survivor 2025 cache not found — run data_loader.load_survivor_for_year(2025) once to build it")
+    return dl.load_survivor_for_year(2025)
+
+
+@pytest.fixture(scope="session")
+def survivor_2024():
+    """Survivor object for 2024 season. Skips if cache is missing."""
+    path = dl._cache_path("survivor_2024")
+    if not os.path.exists(path):
+        pytest.skip("survivor 2024 cache not found — run data_loader.load_survivor_for_year(2024) once to build it")
+    return dl.load_survivor_for_year(2024)
+
+
+@pytest.fixture(scope="session")
+def playoff_calc_2024(season_2024):
+    """PlayoffCalculator for 2024 season at as_of_week=12 (weeks 1–11 complete, weeks 12–14 remaining)."""
+    league, season, _ = season_2024
+    return core.PlayoffCalculator(league, season, as_of_week=12)
+
+
+@pytest.fixture(scope="session")
+def playoff_snapshots_2024(playoff_calc_2024):
+    """Pre-computed playoff snapshots for 2024 at week 12. Completed season → deterministic results."""
+    return playoff_calc_2024.compute()

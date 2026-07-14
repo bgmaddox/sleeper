@@ -164,3 +164,66 @@ def test_position_strength_polar_renamed(sf):
     """PositionStrengthPolar (corrected spelling, was PositionStengthPolar)."""
     fig = sf.PositionStrengthPolar()
     assert _is_valid_fig(fig)
+
+
+# ── Survivor chart smoke tests ────────────────────────────────────────────────
+
+class TestSurvivorCharts:
+
+    def test_pick_matrix_fig_returns_figure(self, survivor_2025):
+        fig = survivor_2025.pick_matrix_fig()
+        assert _is_valid_fig(fig)
+
+    def test_elimination_timeline_fig_returns_figure(self, survivor_2025):
+        fig = survivor_2025.elimination_timeline_fig()
+        assert _is_valid_fig(fig)
+
+    def test_weekly_carnage_fig_returns_figure(self, survivor_2025):
+        fig = survivor_2025.weekly_carnage_fig()
+        assert _is_valid_fig(fig)
+
+    def test_team_graveyard_fig_returns_figure(self, survivor_2025):
+        fig = survivor_2025.team_graveyard_fig()
+        assert _is_valid_fig(fig)
+
+    def test_win_margin_fig_returns_figure(self, survivor_2025):
+        username = survivor_2025.Status.iloc[0]['username']
+        fig = survivor_2025.win_margin_fig(username)
+        assert _is_valid_fig(fig)
+
+    def test_longevity_leaderboard_fig_returns_figure(self, survivor_2025, survivor_2024):
+        fig = survivor_2025.longevity_leaderboard_fig({2024: survivor_2024, 2025: survivor_2025})
+        assert _is_valid_fig(fig)
+
+
+# ── Playoff probability charts ────────────────────────────────────────────────
+
+class TestPlayoffCharts:
+
+    def test_playoff_odds_bar_smoke(self, playoff_snapshots_2024, playoff_calc_2024):
+        """PlayoffOddsBar returns a valid figure with at least one trace."""
+        import sleeper_core as core
+        fig = core.PlayoffCalculator.PlayoffOddsBar(
+            playoff_snapshots_2024, teamcolors=playoff_calc_2024.teamcolors)
+        assert _is_valid_fig(fig)
+
+    def test_playoff_odds_bar_team_count(self, playoff_snapshots_2024, playoff_calc_2024):
+        """Bar chart y-axis should include all teams."""
+        import sleeper_core as core
+        fig = core.PlayoffCalculator.PlayoffOddsBar(
+            playoff_snapshots_2024, teamcolors=playoff_calc_2024.teamcolors)
+        all_y = [v for trace in fig.data for v in (trace.y or [])]
+        assert len(set(all_y)) == len(playoff_snapshots_2024), \
+            f"Expected {len(playoff_snapshots_2024)} unique teams in chart, got {len(set(all_y))}"
+
+    def test_playoff_trajectory_smoke(self, playoff_snapshots_2024, playoff_calc_2024):
+        """PlayoffOddsTrajectory returns N traces (one per team)."""
+        import sleeper_core as core
+        probs_by_week = {12: playoff_snapshots_2024}
+        fig = core.PlayoffCalculator.PlayoffOddsTrajectory(
+            probs_by_week, teamcolors=playoff_calc_2024.teamcolors, year=2024)
+        assert isinstance(fig, go.Figure)
+        # +1 for the 50% reference line (add_hline adds a shape, not a trace)
+        n_teams = len(playoff_snapshots_2024)
+        assert len(fig.data) == n_teams, \
+            f"Expected {n_teams} team traces, got {len(fig.data)}"

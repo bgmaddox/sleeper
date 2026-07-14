@@ -203,6 +203,99 @@ class TestCacheInvalidation:
             pytest.fail(f"invalidate_week raised unexpectedly: {e}")
 
 
+# ── Survivor pool data pipeline ──────────────────────────────────────────────
+
+class TestSurvivor:
+
+    def test_picks_columns(self, survivor_2025):
+        expected = {'username', 'week', 'team_pick', 'won', 'is_fatal', 'is_revive_loss'}
+        assert expected.issubset(set(survivor_2025.Picks.columns))
+
+    def test_picks_no_empty_picks(self, survivor_2025):
+        assert survivor_2025.Picks['team_pick'].notna().all()
+        assert (survivor_2025.Picks['team_pick'] != '').all()
+
+    def test_status_columns(self, survivor_2025):
+        expected = {'username', 'weeks_survived', 'final_week', 'is_eliminated',
+                    'revived', 'teams_used', 'teams_left'}
+        assert expected.issubset(set(survivor_2025.Status.columns))
+
+    def test_weeks_survived_positive(self, survivor_2025):
+        assert (survivor_2025.Status['weeks_survived'] >= 0).all()
+        assert survivor_2025.Status['weeks_survived'].sum() > 0
+
+    def test_username_resolution(self, survivor_2025):
+        for username in survivor_2025.Status['username']:
+            assert not str(username).isdigit() or len(str(username)) < 10, \
+                f"Username looks like an unresolved owner_id: {username}"
+
+    def test_2025_revive_data(self, survivor_2025):
+        assert survivor_2025.Status['revived'].any(), \
+            "Expected at least one revived player in 2025 season"
+
+    def test_fatal_pick_unique_per_player(self, survivor_2025):
+        fatal_counts = survivor_2025.Picks.groupby('username')['is_fatal'].sum()
+        assert (fatal_counts <= 1).all(), \
+            f"Some players have multiple is_fatal=True rows: {fatal_counts[fatal_counts > 1]}"
+
+    def test_2024_no_revive(self, survivor_2024):
+        assert not survivor_2024.Picks['is_revive_loss'].any(), \
+            "2024 format should have no revive-loss picks"
+        assert not survivor_2024.Status['revived'].any(), \
+            "2024 format should have no revived players"
+
+
+# ── Playoff probability calculator ───────────────────────────────────────────
+
+class TestPlayoffCalculator:
+
+    def test_probs_sum_to_num_playoff_spots(self, playoff_snapshots_2024, league_2024):
+        """Mathematical invariant: sum(prob_any) ≈ num_playoff_spots across all teams."""
+        num_playoffs = int(league_2024.league_settings.get('settings.playoff_teams', 6))
+        prob_sum = sum(s.prob_any for s in playoff_snapshots_2024)
+        assert abs(prob_sum - num_playoffs) < 0.01, \
+            f"sum(prob_any)={prob_sum:.4f} expected ≈ {num_playoffs}"
+
+    def test_probs_bounded(self, playoff_snapshots_2024):
+        """All probability values are in [0, 1]."""
+        for s in playoff_snapshots_2024:
+            assert 0.0 <= s.prob_any <= 1.0, f"{s.name}: prob_any={s.prob_any} out of bounds"
+            assert 0.0 <= s.prob_guar <= 1.0, f"{s.name}: prob_guar={s.prob_guar} out of bounds"
+
+    def test_prob_any_gte_prob_guar(self, playoff_snapshots_2024):
+        """prob_any ≥ prob_guar for every team (guaranteed is a subset of any)."""
+        for s in playoff_snapshots_2024:
+            assert s.prob_any >= s.prob_guar - 1e-9, \
+                f"{s.name}: prob_any={s.prob_any} < prob_guar={s.prob_guar}"
+
+    def test_clinched_team_has_none_clinch_in(self, playoff_snapshots_2024):
+        """Teams with prob_guar == 1.0 are already clinched — clinch_in must be None."""
+        for s in playoff_snapshots_2024:
+            if s.prob_guar == 1.0:
+                assert s.clinch_in is None, \
+                    f"{s.name} has prob_guar=1.0 but clinch_in={s.clinch_in}"
+
+    def test_eliminated_team_has_zero(self, playoff_snapshots_2024):
+        """Teams with prob_any == 0.0 are eliminated — elim_in must be None."""
+        for s in playoff_snapshots_2024:
+            if s.prob_any == 0.0:
+                assert s.elim_in is None, \
+                    f"{s.name} has prob_any=0.0 but elim_in={s.elim_in}"
+
+    def test_matchup_pairs_structure(self, playoff_calc_2024):
+        """Remaining matchup pairs are valid (a, b) roster-ID tuples."""
+        try:
+            pairs, cw_pairs = playoff_calc_2024._fetch_remaining_matchups()
+        except Exception as e:
+            pytest.skip(f"Could not fetch matchup data: {e}")
+        assert isinstance(pairs, list)
+        assert isinstance(cw_pairs, list)
+        for a, b in pairs:
+            assert isinstance(a, int)
+            assert isinstance(b, int)
+            assert a != b, "Same team on both sides of a matchup"
+
+
 # ── CURRENT_SEASON constant ───────────────────────────────────────────────────
 
 class TestCurrentSeasonConstant:
@@ -222,3 +315,18 @@ class TestCurrentSeasonConstant:
             pytest.skip("CURRENT_SEASON not yet defined (Task 1C pending)")
         assert core.CURRENT_SEASON in core.AVAILABLE_YEARS, \
             f"CURRENT_SEASON {core.CURRENT_SEASON} not in AVAILABLE_YEARS {core.AVAILABLE_YEARS}"
+
+
+# ── Side bet winner roster invariant ─────────────────────────────────────────
+
+@pytest.mark.parametrize("year", [2019, 2020, 2021, 2022, 2023, 2024, 2025])
+def test_sidebet_winners_match_rosters(year):
+    """Every side bet winner must be a real roster member for that year."""
+    valid = set(core.roster_ids[year].values())
+    for week, cfg in core.SIDE_BET_SEASONS[year].items():
+        for name in cfg['winner'].split(' & '):
+            name = name.strip()
+            if name:
+                assert name in valid, \
+                    f"{year} week {week}: {name!r} not in roster_ids"
+

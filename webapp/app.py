@@ -15,18 +15,20 @@ SECTION MAP (for targeted edits — grep the # ── markers to jump directly)
   L465  League Digest card        — _digest() builds the weekly summary card
   L569  Layout                    — full app HTML/component tree (html.Div structure)
   L675  Core callbacks            — boot, year/week/team controls, tab router, URL deep-link
-  L971  Tab: This Week            — _tab_week()
-  L1045 Tab: Season               — _tab_season()
-  L1171 Tab: Players              — _tab_players()
-  L1261 Tab: All-Time             — _tab_alltime()
-  L1331 Tab: Head-to-Head         — _tab_h2h_shell(), _h2h() callback
-  L1450 Tab: Playoffs             — _tab_playoffs() (winners + losers bracket cards)
-  L1456 Toggle callbacks          — luck/timeline/pfa/freq/bench/bump/violin/top-players
+  L1095 Playoff Odds              — _playoff_key_games_card(), _playoff_odds_card()
+  L1185 Tab: This Week            — _tab_week()
+  L1260 Tab: Season               — _tab_season()
+  L1380 Tab: Players              — _tab_players()
+  L1470 Tab: All-Time             — _tab_alltime()
+  L1540 Tab: Head-to-Head         — _tab_h2h_shell(), _h2h() callback
+  L1660 Tab: Playoffs             — _tab_playoffs() (winners + losers bracket cards)
+  L1670 Toggle callbacks          — luck/timeline/pfa/freq/bench/bump/violin/top-players/playoff-view
   L1741 D3 store population       — _populate_d3_stores() (snake draft, schedule, matchups)
   L2003 D3: Bubble Map            — _populate_bubble_data()
   L2097 D3: Draft Board           — _populate_draft_data()
   L2196 D3: State Choropleth      — _populate_choropleth_data()
   L2254 D3: Chord Diagram         — _populate_chord_data()
+  L1976 Tab: Survivor             — _tab_survivor(), _survivor_win_margin() callback
   L2332 Run                       — if __name__ == '__main__'
 """
 
@@ -887,6 +889,7 @@ app.layout = html.Div([
             dcc.Tab(label='Head-to-Head', value='tab-h2h',      className='tab tab--h2h',      selected_className='tab--selected'),
             dcc.Tab(label='Playoffs',     value='tab-playoffs',  className='tab tab--playoffs',  selected_className='tab--selected'),
             dcc.Tab(label='Side Bets',    value='tab-sidebets',  className='tab tab--sidebets',  selected_className='tab--selected'),
+            dcc.Tab(label='Survivor',     value='tab-survivor',  className='tab tab--survivor',  selected_className='tab--selected'),
         ]),
 
         dcc.Loading(
@@ -1187,6 +1190,7 @@ def _render_tab(tab, year, week, teams):
     if tab == 'tab-h2h':       return _tab_h2h_shell()
     if tab == 'tab-playoffs':  return _tab_playoffs(year)
     if tab == 'tab-sidebets': return _tab_sidebets(year)
+    if tab == 'tab-survivor': return _tab_survivor(year)
     return html.Div('Unknown tab')
 
 
@@ -1213,7 +1217,7 @@ def _parse_url(search):
     tab_map = {'week': 'tab-week', 'season': 'tab-season',
                'players': 'tab-players', 'alltime': 'tab-alltime',
                'h2h': 'tab-h2h', 'playoffs': 'tab-playoffs',
-               'sidebets': 'tab-sidebets'}
+               'sidebets': 'tab-sidebets', 'survivor': 'tab-survivor'}
     if tab is not no_update:
         tab = tab_map.get(tab, no_update)
     return tab, year
@@ -1277,6 +1281,133 @@ def _sidebet_card(year, week, week_obj):
     return html.Div([k for k in kids if k is not None], className='chart-card chart-col-full')
 
 
+def _playoff_key_games_card(snapshots, league):
+    """Native HTML card: which opponent games to root for this week."""
+    rid_to_name = core.roster_ids.get(league.year, {})
+    team_colors = core.get_slot_teamcolors(league.year)
+
+    rows = []
+    for s in sorted(snapshots, key=lambda x: -x.prob_any):
+        if s.prob_any == 0.0 or s.prob_any == 1.0 or not s.key_matchups_swing:
+            tip = html.Span('No games this week affect your odds',
+                            style={'color': '#3D5E78', 'fontStyle': 'italic'})
+        else:
+            best_pair, swing = max(s.key_matchups_swing.items(), key=lambda kv: kv[1])
+            a_name = rid_to_name.get(best_pair[0], f'Roster {best_pair[0]}')
+            b_name = rid_to_name.get(best_pair[1], f'Roster {best_pair[1]}')
+            tip = html.Span([
+                'Root for ',
+                html.Strong(a_name, style={'color': '#90BE6D'}),
+                ' over ',
+                html.Strong(b_name, style={'color': '#F94144'}),
+                f' — adds +{swing * 100:.1f}% to your odds',
+            ])
+
+        color = team_colors.get(s.name, '#BDE2FF')
+        rows.append(html.Div([
+            html.Span(s.name, style={
+                'color': color, 'fontWeight': 'bold',
+                'minWidth': '130px', 'display': 'inline-block',
+            }),
+            html.Span(f'{s.wins}–{s.losses}', style={
+                'color': '#8DCEFF', 'margin': '0 12px',
+                'minWidth': '40px', 'display': 'inline-block',
+            }),
+            tip,
+        ], style={'padding': '6px 0', 'borderBottom': '1px solid #1e3d57'}))
+
+    return html.Div([
+        html.Div('Key Games This Week', className='chart-title'),
+        html.Div('Which matchups matter most for each team\'s playoff odds', className='chart-subtitle'),
+        html.Div(rows, style={'padding': '8px 0'}),
+    ], className='chart-card chart-col-third')
+
+
+def _playoff_odds_card(prob_data, year, week):
+    """
+    Playoff probability card for the This Week tab.
+    Locked when week < 9; shows final snapshot when playoffs have started.
+    """
+    EARLY = core.PlayoffCalculator.EARLY_WEEK_THRESHOLD
+    playoff_start = _playoff_week_start(year)
+    teamcolors = core.get_slot_teamcolors(year)
+
+    # Always include the toggle ID so Dash can reference it in callbacks —
+    # hidden in locked/final states, visible in active state.
+    hidden_toggle = dcc.RadioItems(
+        id='playoff-view-toggle',
+        options=[{'label': 'Current Odds', 'value': 'bar'},
+                 {'label': 'Season Trajectory', 'value': 'trajectory'}],
+        value='bar', className='toggle-group', inline=True,
+        style={'display': 'none'},
+    )
+
+    def _wrap(content, subtitle=''):
+        return html.Div([
+            html.Div('Playoff Probability', className='chart-title'),
+            html.Div(subtitle, className='chart-subtitle'),
+            hidden_toggle,
+            html.Div(content, id='playoff-odds-chart'),
+        ], className='chart-card chart-col-full')
+
+    if week < EARLY:
+        locked = _empty(f'Projections unlock Week {EARLY}')
+        locked.update_layout(height=260)
+        return _wrap(
+            dcc.Graph(figure=locked, config={'displayModeBar': False, 'responsive': True},
+                      style={'width': '100%'}),
+            subtitle=f'Projections unlock Week {EARLY}',
+        )
+
+    def _err_graph(msg):
+        return dcc.Graph(figure=_err(msg), config={'displayModeBar': False, 'responsive': True},
+                         style={'width': '100%'})
+
+    if prob_data is None:
+        return _wrap(_err_graph('Playoff probability data not available'))
+
+    display_week = min(week, playoff_start - 1)
+    available = sorted(w for w in prob_data if w <= display_week)
+    if not available:
+        return _wrap(_err_graph('No playoff probability data for this week'))
+
+    display_week = max(available)
+    snapshots = prob_data[display_week]
+    is_final = (week >= playoff_start)
+    subtitle = 'Regular Season Final' if is_final else f'As of Week {display_week}'
+
+    try:
+        bar_fig = core.PlayoffCalculator.PlayoffOddsBar(snapshots, teamcolors=teamcolors)
+        _strip(bar_fig, 480).update_layout(margin=dict(t=20, b=60, l=160, r=100))
+        initial_chart = dcc.Graph(figure=bar_fig, config={'displayModeBar': False, 'responsive': True},
+                                  style={'width': '100%'})
+    except Exception as e:
+        initial_chart = dcc.Graph(figure=_err(str(e)), config={'displayModeBar': False, 'responsive': True},
+                                  style={'width': '100%'})
+
+    active_toggle = dcc.RadioItems(
+        id='playoff-view-toggle',
+        options=[{'label': 'Current Odds', 'value': 'bar'},
+                 {'label': 'Season Trajectory', 'value': 'trajectory'}],
+        value='bar', className='toggle-group', inline=True,
+    ) if not is_final else hidden_toggle
+
+    main_card = html.Div([
+        html.Div('Playoff Probability', className='chart-title'),
+        html.Div(subtitle, className='chart-subtitle'),
+        active_toggle,
+        html.Div(initial_chart, id='playoff-odds-chart'),
+    ], className='chart-card chart-col-two-thirds')
+
+    children = [main_card]
+
+    league = _data.get(year, {}).get('league')
+    if not is_final and year == core.CURRENT_SEASON and league is not None:
+        children.append(_playoff_key_games_card(snapshots, league))
+
+    return html.Div(children, className='charts-row', style={'width': '100%'})
+
+
 def _tab_week(year, week, teams):
     season   = _season(year)
     week_obj = _week(year, week)
@@ -1292,6 +1423,12 @@ def _tab_week(year, week, teams):
         cards.append(_card(_err(str(e)), 'Power Rankings'))
 
     try:
+        prob_data = dl.load_playoff_probs(year)
+        cards.append(_playoff_odds_card(prob_data, year, week))
+    except Exception as e:
+        cards.append(_card(_err(str(e)), 'Playoff Probability'))
+
+    try:
         fig = week_obj.WeeklyGraph()
         _strip(fig, 720).update_layout(margin=dict(t=20, b=120, l=160, r=40),
                                         legend=dict(orientation='h', yanchor='top', y=-0.15, xanchor='center', x=0.5))
@@ -1304,7 +1441,7 @@ def _tab_week(year, week, teams):
         _strip(fig, 950).update_layout(margin=dict(t=80, b=100, l=80, r=40))
         initial_timeline = dcc.Graph(figure=fig, config={'displayModeBar': False, 'responsive': True}, style={'width': '100%'})
     except Exception as e:
-        initial_timeline = _err(str(e))
+        initial_timeline = dcc.Graph(figure=_err(str(e)), config={'displayModeBar': False, 'responsive': True}, style={'width': '100%'})
     cards.append(html.Div([
         html.Div(f'Week {week} · Points Timeline', className='chart-title'),
         html.Div('How scores accumulated by day through the matchup window', className='chart-subtitle'),
@@ -1319,7 +1456,7 @@ def _tab_week(year, week, teams):
         fig = sf.LuckChart(week)
         initial_luck = dcc.Graph(figure=_strip(fig, 660), config={'displayModeBar': False, 'responsive': True}, style={'width': '100%'})
     except Exception as e:
-        initial_luck = _err(str(e))
+        initial_luck = dcc.Graph(figure=_err(str(e)), config={'displayModeBar': False, 'responsive': True}, style={'width': '100%'})
     cards.append(html.Div([
         html.Div('Luck Chart', className='chart-title'),
         html.Div('Expected wins based on scoring — separates lucky records from genuinely dominant ones', className='chart-subtitle'),
@@ -1379,7 +1516,7 @@ def _tab_season(year, week, teams):
         _strip(fig, 680).update_layout(margin=dict(l=250, t=60, b=80))
         initial_pfa = dcc.Graph(figure=fig, config={'displayModeBar': False, 'responsive': True}, style={'width': '100%'})
     except Exception as e:
-        initial_pfa = _err(str(e))
+        initial_pfa = dcc.Graph(figure=_err(str(e)), config={'displayModeBar': False, 'responsive': True}, style={'width': '100%'})
     cards.append(html.Div([
         html.Div('Points For & Against', className='chart-title'),
         html.Div('Total points scored vs allowed — identifies dominant teams from lucky ones', className='chart-subtitle'),
@@ -1404,7 +1541,7 @@ def _tab_season(year, week, teams):
         initial_freq = dcc.Graph(figure=fig, config={'displayModeBar': False, 'responsive': True}, style={'width': '100%'})
     except Exception as e:
         traceback.print_exc()
-        initial_freq = _err(str(e))
+        initial_freq = dcc.Graph(figure=_err(str(e)), config={'displayModeBar': False, 'responsive': True}, style={'width': '100%'})
     cards.append(html.Div([
         html.Div('Scoring Frequency', className='chart-title'),
         html.Div('Distribution of game scores — reveals scoring tiers and outliers', className='chart-subtitle'),
@@ -1421,7 +1558,7 @@ def _tab_season(year, week, teams):
         fig.update_layout(title=None, width=None, height=580)
         initial_bench = dcc.Graph(figure=fig, config={'displayModeBar': False, 'responsive': True}, style={'width': '100%'})
     except Exception as e:
-        initial_bench = _err(str(e))
+        initial_bench = dcc.Graph(figure=_err(str(e)), config={'displayModeBar': False, 'responsive': True}, style={'width': '100%'})
     cards.append(html.Div([
         html.Div('Brawny Benches', className='chart-title'),
         html.Div('Points left on the bench — wasted potential from sub-optimal lineup decisions', className='chart-subtitle'),
@@ -1465,7 +1602,7 @@ def _tab_season(year, week, teams):
         initial_bump = dcc.Graph(figure=_strip(fig, 660), config={'displayModeBar': False, 'responsive': True}, style={'width': '100%'})
     except Exception as e:
         traceback.print_exc()
-        initial_bump = _err(str(e))
+        initial_bump = dcc.Graph(figure=_err(str(e)), config={'displayModeBar': False, 'responsive': True}, style={'width': '100%'})
     cards.append(html.Div([
         html.Div('Top Scorers · Points Race', className='chart-title'),
         html.Div('Weekly rank (or points) progression of the top fantasy scorers this season', className='chart-subtitle'),
@@ -1523,7 +1660,7 @@ def _tab_players(year, week, teams):
         initial_violin = dcc.Graph(figure=fig, config={'displayModeBar': False, 'responsive': True}, style={'width': '100%'})
     except Exception as e:
         traceback.print_exc()
-        initial_violin = _err(str(e))
+        initial_violin = dcc.Graph(figure=_err(str(e)), config={'displayModeBar': False, 'responsive': True}, style={'width': '100%'})
     cards.append(html.Div([
         html.Div('Scoring Distribution', className='chart-title'),
         html.Div('Score spread per player — the box shows the typical range, dots are weekly outings. Switch to By Position to compare positional depth across teams.', className='chart-subtitle'),
@@ -1564,7 +1701,7 @@ def _tab_players(year, week, teams):
         fig = sf.TopPlayers('QB', 50)
         initial_top = dcc.Graph(figure=_strip(fig, 580), config={'displayModeBar': False, 'responsive': True}, style={'width': '100%'})
     except Exception as e:
-        initial_top = _err(str(e))
+        initial_top = dcc.Graph(figure=_err(str(e)), config={'displayModeBar': False, 'responsive': True}, style={'width': '100%'})
     cards.append(html.Div([
         html.Div('Top Players · Cumulative Points', className='chart-title'),
         html.Div('Highest-scoring rostered players by position — ranked by total fantasy points this season', className='chart-subtitle'),
@@ -1871,11 +2008,17 @@ def _tab_sidebets(year):
 
     # ── Section 1: Championship Scoreboard ───────────────────────────────────
     winner_counts: dict = {}
-    for cfg in year_config.values():
-        for name in cfg['winner'].split(' & '):
-            name = name.strip()
-            if name:
-                winner_counts[name] = winner_counts.get(name, 0) + 1
+    money_earned: dict = {}
+    weeks_won: dict = {}
+    for wk, cfg in year_config.items():
+        names = [n.strip() for n in cfg['winner'].split(' & ') if n.strip()]
+        if not names:
+            continue
+        share = 20 / len(names)
+        for name in names:
+            winner_counts[name] = winner_counts.get(name, 0) + 1
+            money_earned[name]  = money_earned.get(name, 0) + share
+            weeks_won.setdefault(name, []).append(wk)
 
     all_teams  = list(core.roster_ids.get(config_year, {}).values())
     tally      = sorted([(t, winner_counts.get(t, 0)) for t in all_teams], key=lambda x: -x[1])
@@ -1892,8 +2035,12 @@ def _tab_sidebets(year):
         medal = MEDAL_COLORS.get(rank, 'var(--text-muted)')
         color = teamcolors.get(team, 'var(--text-main)')
         bar_pct = wins / max_wins * 100
-        prize   = wins * 20
+        prize   = money_earned.get(team, 0)
 
+        wk_pills = [
+            html.Span(f'W{w}', className='sb-week-pill')
+            for w in sorted(weeks_won.get(team, []))
+        ]
         rows.append(html.Div([
             html.Span(f'#{rank}', className='sb-rank', style={'color': medal}),
             html.Span(team,       className='sb-team',  style={'color': color}),
@@ -1904,8 +2051,10 @@ def _tab_sidebets(year):
                 className='sb-bar-track',
             ),
             html.Span(f'{wins} {"win" if wins == 1 else "wins"}', className='sb-wins'),
-            html.Span(f'${prize}', className='sb-prize',
+            html.Span(f'${prize:.0f}' if prize == int(prize) else f'${prize:.2f}',
+                      className='sb-prize',
                       style={'color': '#FFD700' if prize > 0 else 'var(--text-muted)'}),
+            html.Div(wk_pills, className='sb-weeks-won'),
         ], className='sb-row'))
 
     sections.append(html.Div([
@@ -1969,6 +2118,147 @@ def _tab_sidebets(year):
         ], id=f'sidebet-week-{wk}', className='chart-card chart-col-full'))
 
     return html.Div(sections, className='charts-row')
+
+
+# ── Tab: Survivor ─────────────────────────────────────────────────────────────
+
+def _tab_survivor(year):
+    survivor_year = year if year in core.SURVIVOR_LEAGUE_IDS else max(core.SURVIVOR_LEAGUE_IDS)
+
+    try:
+        surv = dl.load_survivor_for_year(survivor_year)
+    except Exception as e:
+        traceback.print_exc()
+        return html.Div(f'Could not load Survivor data: {e}', className='error-msg-card')
+
+    n_players = len(surv.Status)
+    all_elim  = surv.Status['is_eliminated'].all()
+    status_label = 'Season Complete' if all_elim else 'In Progress'
+
+    # Player dropdown options (sorted by weeks_survived descending)
+    player_opts = [
+        {'label': row['username'], 'value': row['username']}
+        for _, row in surv.Status.sort_values('weeks_survived', ascending=False).iterrows()
+    ]
+    default_player = player_opts[0]['value'] if player_opts else None
+
+    # All available survivor years for the longevity leaderboard
+    all_survivors = {}
+    for yr in sorted(core.SURVIVOR_LEAGUE_IDS):
+        try:
+            all_survivors[yr] = dl.load_survivor_for_year(yr)
+        except Exception:
+            pass
+
+    def _schart(method, *args, h=None, margin=None, **kwargs):
+        try:
+            fig = getattr(surv, method)(*args, **kwargs)
+            if h:
+                fig.update_layout(height=h)
+            if margin:
+                fig.update_layout(margin=margin)
+            fig.update_layout(title=None, width=None)
+            return dcc.Graph(figure=fig, config={'displayModeBar': False, 'responsive': True},
+                             style={'width': '100%'})
+        except Exception as e:
+            return dcc.Graph(figure=_err(str(e)), config={'displayModeBar': False, 'responsive': True},
+                             style={'width': '100%'})
+
+    # Row 1: Pick Matrix (full width)
+    row1 = html.Div([
+        html.Div('Pick Matrix', className='chart-title'),
+        html.Div('Which team each player picked each week — green=win, amber=revive loss, red=fatal elimination', className='chart-subtitle'),
+        _schart('pick_matrix_fig', h=max(340, 60 * n_players)),
+    ], className='chart-card chart-col-full')
+
+    # Row 2: Timeline | Carnage | Graveyard (three columns)
+    row2_timeline = html.Div([
+        html.Div('Elimination Timeline', className='chart-title'),
+        html.Div('How long each player survived — gap marks revive use', className='chart-subtitle'),
+        _schart('elimination_timeline_fig', h=max(300, 55 * n_players)),
+    ], className='chart-card chart-col-third')
+
+    row2_carnage = html.Div([
+        html.Div('Weekly Carnage', className='chart-title'),
+        html.Div('How many players were eliminated each week', className='chart-subtitle'),
+        _schart('weekly_carnage_fig', h=340),
+    ], className='chart-card chart-col-third')
+
+    row2_graveyard = html.Div([
+        html.Div('Team Graveyard', className='chart-title'),
+        html.Div('Which NFL teams were picked most — ✕ marks a fatal pick', className='chart-subtitle'),
+        _schart('team_graveyard_fig', h=280),
+    ], className='chart-card chart-col-third')
+
+    # Row 3: Win Margin (with dropdown) | Longevity Leaderboard
+    try:
+        initial_margin_fig = surv.win_margin_fig(default_player)
+        initial_margin_fig.update_layout(title=None, width=None, height=400)
+        initial_margin = dcc.Graph(id='survivor-win-margin-graph', figure=initial_margin_fig,
+                                   config={'displayModeBar': False, 'responsive': True},
+                                   style={'width': '100%'})
+    except Exception as e:
+        initial_margin = dcc.Graph(id='survivor-win-margin-graph', figure=_err(str(e)),
+                                   config={'displayModeBar': False, 'responsive': True},
+                                   style={'width': '100%'})
+
+    row3_margin = html.Div([
+        html.Div('Win Margins', className='chart-title'),
+        html.Div('Point margin per week for a selected player — red bars go negative', className='chart-subtitle'),
+        dcc.Dropdown(
+            id='survivor-player-dropdown',
+            options=player_opts,
+            value=default_player,
+            clearable=False,
+            className='dash-dropdown',
+            style={'marginBottom': '12px'},
+        ),
+        initial_margin,
+    ], className='chart-card chart-col-half')
+
+    try:
+        longevity_fig = surv.longevity_leaderboard_fig(all_survivors)
+        longevity_fig.update_layout(title=None, width=None, height=max(300, 50 * n_players))
+        longevity_el = dcc.Graph(figure=longevity_fig, config={'displayModeBar': False, 'responsive': True},
+                                 style={'width': '100%'})
+    except Exception as e:
+        longevity_el = dcc.Graph(figure=_err(str(e)), config={'displayModeBar': False, 'responsive': True},
+                                 style={'width': '100%'})
+
+    row3_longevity = html.Div([
+        html.Div('Longevity Leaderboard', className='chart-title'),
+        html.Div('Weeks survived across all Survivor seasons', className='chart-subtitle'),
+        longevity_el,
+    ], className='chart-card chart-col-half')
+
+    return html.Div([
+        dcc.Store(id='survivor-year-store', data=survivor_year),
+        html.Div([
+            html.Div('Survivor Pool', className='chart-title'),
+            html.Div(f'{survivor_year} · {n_players} players · {status_label}', className='chart-subtitle'),
+        ], className='chart-card chart-col-full', style={'paddingBottom': '8px'}),
+        html.Div([row1], className='charts-row'),
+        html.Div([row2_timeline, row2_carnage, row2_graveyard], className='charts-row'),
+        html.Div([row3_margin, row3_longevity], className='charts-row'),
+    ])
+
+
+@app.callback(
+    Output('survivor-win-margin-graph', 'figure'),
+    Input('survivor-player-dropdown', 'value'),
+    State('survivor-year-store', 'data'),
+    prevent_initial_call=True,
+)
+def _survivor_win_margin(username, survivor_year):
+    if not username or survivor_year is None:
+        return _err('No player selected.')
+    try:
+        surv = dl.load_survivor_for_year(survivor_year)
+        fig = surv.win_margin_fig(username)
+        fig.update_layout(title=None, width=None, height=400)
+        return fig
+    except Exception as e:
+        return _err(str(e))
 
 
 @app.callback(
@@ -2068,6 +2358,49 @@ def _h2h(team_a, team_b):
 
 
 # ── Toggle callbacks ─────────────────────────────────────────────────────────
+
+@app.callback(
+    Output('playoff-odds-chart', 'children'),
+    Input('playoff-view-toggle', 'value'),
+    State('store-year', 'data'),
+    State('store-week', 'data'),
+    prevent_initial_call=True,
+)
+def _update_playoff_odds_chart(mode, year, week):
+    year = year or CURRENT_YEAR
+    week = week or 1
+    playoff_start = _playoff_week_start(year)
+    teamcolors = core.get_slot_teamcolors(year)
+
+    try:
+        prob_data = dl.load_playoff_probs(year)
+    except Exception:
+        return _err('Could not load playoff data')
+
+    if prob_data is None:
+        return _err('No playoff probability data')
+
+    display_week = min(week, playoff_start - 1)
+    available = sorted(w for w in prob_data if w <= display_week)
+    if not available:
+        return _err('No data for this week')
+
+    display_week = max(available)
+    snapshots = prob_data[display_week]
+
+    try:
+        if mode == 'bar':
+            fig = core.PlayoffCalculator.PlayoffOddsBar(snapshots, teamcolors=teamcolors)
+            _strip(fig, 480).update_layout(margin=dict(t=20, b=60, l=160, r=100))
+        else:
+            fig = core.PlayoffCalculator.PlayoffOddsTrajectory(
+                prob_data, teamcolors=teamcolors, year=year)
+            fig.update_layout(title=None, width=None)
+        return dcc.Graph(figure=fig, config={'displayModeBar': False, 'responsive': True},
+                         style={'width': '100%'})
+    except Exception as e:
+        return _err(str(e))
+
 
 @app.callback(
     Output('luck-chart', 'children'),

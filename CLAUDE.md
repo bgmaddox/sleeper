@@ -45,7 +45,7 @@ Always kill before restarting. Confirm with `curl -s -o /dev/null -w "%{http_cod
 
 Run the server in the background so the session stays interactive. After code changes, kill and restart — there is no hot reload.
 
-Activate the venv if running other scripts: `source .venv/bin/activate` (Python 3.11, venv at `Sleeper Project/.venv/`).
+Activate the venv if running other scripts: `source .venv/bin/activate` (Python 3.12, venv at `Sleeper Project/.venv/`).
 
 To bust stale cache for a week: call `data_loader.invalidate_week(year, week)` or delete `.cache/` files manually.
 
@@ -63,7 +63,9 @@ webapp/             — The live Dash web app (active development)
 Data/               — NFL player stats CSVs
 Photos&Videos/      — League logos and media assets
 Sleeper_v2.ipynb    — Authoritative notebook (source of sleeper_core.py methods)
-archive/            — Old planning docs, prototypes, superseded files
+scripts/            — One-shot utility scripts (e.g. parse_sidebet_xlsx.py)
+design/             — Active planning docs (roadmap.md)
+archive/            — Superseded files: old dashboards, completed plans, prototypes
 ```
 
 **Import path:** `webapp/app.py` adds the project root to `sys.path`, so it imports `sleeper_core` and `data_loader` directly from the root.
@@ -84,19 +86,32 @@ Dash callback → data_loader.load_data_for_year(year)
 - **`Week(league, week_num)`** — one week of matchups; builds matchup dataframes and per-player breakouts
 - **`Season(league, weeks_dict)`** — aggregates all weeks; 30+ chart methods
 - **`AllTime()`** — concatenates seasons 2019–2025 for historical charts
+- **`Playoffs(league, season)`** — resolves bracket refs, maps roster IDs → names, joins scores and best-player data
+- **`AllTimePlayoffs()`** — aggregates bracket + score data across all seasons; produces `playoff_results` and `playoff_games` dataframes for the all-time charts
+- **`SideBet(league, season, DictofWeeks)`** — per-week side bet charts (Week1–Week14 methods); reads config from `SIDE_BET_SEASONS`
+- **`PlayoffCalculator`** — computes per-team playoff probabilities via bitmask enumeration; drives the Playoff Calculator card on This Week tab
 
 Global dicts populated as objects are built:
 - `AllMatchesDict[year][week]` — matchup dataframes
 - `AllBreakoutDict[year][week]` — player-level stat dataframes
 - `OptimalScoresByYear[year][week]` — best possible lineup score per team
 
+Key config dicts in `sleeper_core.py`:
+- `leagueNumbers_Dict` — year → Sleeper league ID
+- `roster_ids` — year → {roster_num: username} for 2019–2025
+- `SIDE_BET_SEASONS` — year → {week → {name, desc, winner}} for 2019–2025
+- `SURVIVOR_LEAGUE_IDS` — year → Sleeper survivor league ID (2024–2025)
+
 ### Dashboard tabs
 
-1. **This Week** — weekly matchups, points timeline, power rankings, luck chart (YTD / This Week toggle)
+1. **This Week** — weekly matchups, points timeline, power rankings, luck chart (YTD / This Week toggle), Side Bet of the Week card, Playoff Calculator card
 2. **Season** — win progression (wins / points toggle), points for/against (avg line toggle), scoring frequency (all/wins/losses toggle), bench strength (season / by-week toggle)
-3. **Players** — player points, violin distributions (starters / all rostered toggle), score trends, top players (QB/RB/WR/TE toggle)
-4. **All-Time** — hall of fame/shame, highest-scoring losses, closest margins, cumulative stats
-5. **Head-to-Head** — all-time matchup history between two selected teams
+3. **Players** — player points, violin distributions (4-way toggle: starters / all rostered / by-position starters / by-position all), score trends, top players (QB/RB/WR/TE toggle)
+4. **Playoffs** — winners + losers bracket cards, analytics charts (Champion's Road, Playoff Heat Check, Bench Points Left), all-time playoff history charts (Playoff Pedigree, Win Rate, Seeding vs. Finish, Records, Path to Glory)
+5. **All-Time** — hall of fame/shame, highest-scoring losses, closest margins, cumulative stats
+6. **Side Bets** — season scoreboard (D3 leaderboard), week navigator, per-week challenge cards with charts; supports all years in `SIDE_BET_SEASONS` (2019–2025)
+7. **Survivor** — survivor pool pick history and elimination tracking (2024–2025)
+8. **Head-to-Head** — all-time matchup history between two selected teams
 
 ### Theming
 
