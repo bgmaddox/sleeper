@@ -5,6 +5,25 @@ Inputs: `phase-1-notebook-parity.md`, `phase-2-core-library.md`, `phase-3-webapp
 
 ---
 
+## Fix-session status tracker
+
+**To resume in a fresh session:** say "run the next session in design/review/synthesis.md". Read this tracker, then the matching session brief in §4, then execute. Ground rules: run `pytest tests/ -m "not slow" -q` before and after (must be green both times); verify data fixes against raw cached JSON, not just chart smoke; if `sleeper_core.py` data outputs change, rebuild season caches (delete `.cache/season_data_*` pickles, reload each year — Sleeper JSONs stay cached); commit when done and update this tracker.
+
+| Session | Focus | Status |
+|---|---|---|
+| 1 | Housekeeping & safety net | ✅ done — commits `be22214`/`d8d1f28`/`c52e1f8`; suite green (was 171, now 178) |
+| 2 | ID-based joins (name-join fan-out) | ✅ done — commit `448b256`; all season caches rebuilt; 7 regression tests added |
+| 3 | Optimal-lineup family (`Week.OptimalTeams`, `LineupEfficiency`, LuckChart median) | not started |
+| 4 | All-Time completeness & loading limbo | not started |
+| 5 | Secrets & deploy posture | ✅ done early (pre-push) — commit `19d6b1d`; secrets in `.env`, credentials rotated, `/debug-error` gated, debug opt-in. Remaining if deploying: systemd `Environment=` on the Pi |
+| 6 | Front-end quick wins (CSS vars, mobile nav, D3 leaks) | not started |
+| 7 | Config to data files + I/O hardening | not started |
+| 8 | Retire the notebook (Sleeper_v3 thin wrapper) | not started |
+| 9 | Playoff Calculator semantics + presentation | not started |
+| 10 | Boilerplate consolidation | opportunistic — do when touching those files |
+
+---
+
 ## 1. Overall verdict
 
 **The app is genuinely good where it's hardest to be good, and wrong where it's easiest not to notice.**
