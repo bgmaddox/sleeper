@@ -330,3 +330,64 @@ def test_sidebet_winners_match_rosters(year):
                 assert name in valid, \
                     f"{year} week {week}: {name!r} not in roster_ids"
 
+
+
+# ── Breakout join integrity (Session 2: ID-based joins) ──────────────────────
+
+@pytest.mark.parametrize("year", [2023, 2024])
+class TestBreakoutJoinIntegrity:
+    """Guards against name-join fan-out (e.g. two Josh Allens quadrupling rows).
+
+    Requires caches rebuilt after the ID-join fix; a failure here most likely
+    means a stale season pickle in .cache/.
+    """
+
+    def _weeks(self, year):
+        path = dl._cache_path(f"season_data_{year}_18")
+        if not os.path.exists(path):
+            pytest.skip(f"{year} cache not found")
+        _, _, weeks = dl.load_data_for_year(year, verbose=False)
+        return weeks
+
+    def test_breakout_row_count_matches_raw_json(self, year):
+        """Each week's breakout must have exactly one row per (team, player) entry
+        in the raw Sleeper matchup JSON — no merge fan-out, no dropped players."""
+        weeks = self._weeks(year)
+        for w, wk in weeks.items():
+            expected = sum(len(t['players_points']) for t in wk.json)
+            actual = len(core.AllBreakoutDict[year][w])
+            assert actual == expected, \
+                f"{year} week {w}: breakout has {actual} rows, raw JSON has {expected}"
+
+    def test_breakout_no_duplicate_player_rows(self, year):
+        weeks = self._weeks(year)
+        for w in weeks:
+            frame = core.AllBreakoutDict[year][w]
+            dups = frame.duplicated(subset=['team', 'player_id']).sum()
+            assert dups == 0, f"{year} week {w}: {dups} duplicated (team, player_id) rows"
+
+    def test_breakout_points_sum_matches_raw_json(self, year):
+        """Total points in the breakout must equal the raw JSON total exactly."""
+        weeks = self._weeks(year)
+        for w, wk in weeks.items():
+            expected = sum(sum(t['players_points'].values()) for t in wk.json)
+            actual = core.AllBreakoutDict[year][w]['points'].sum()
+            assert abs(actual - expected) < 0.01, \
+                f"{year} week {w}: breakout points {actual:.2f} != raw {expected:.2f}"
+
+
+def test_josh_allen_2023_season_total_not_inflated():
+    """Regression for the 4x name-collision bug: QB Josh Allen (Sleeper id 4984)
+    season total must match his raw players_points, not a multiple of it."""
+    path = dl._cache_path("season_data_2023_18")
+    if not os.path.exists(path):
+        pytest.skip("2023 cache not found")
+    _, _, weeks = dl.load_data_for_year(2023, verbose=False)
+    truth = sum(wk.json and sum(t['players_points'].get('4984', 0) for t in wk.json) or 0
+                for wk in weeks.values())
+    frames = [core.AllBreakoutDict[2023][w] for w in weeks]
+    import pandas as pd
+    bo = pd.concat(frames, ignore_index=True)
+    actual = bo.loc[bo['player_id'] == '4984', 'points'].sum()
+    assert abs(actual - truth) < 0.01, \
+        f"Josh Allen 2023: breakout total {actual:.1f} != raw total {truth:.1f}"

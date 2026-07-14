@@ -663,37 +663,20 @@ class Week:
     def PlayerBreakout(self):
         # Initialize an empty list to hold the rows
         JSON_data = self.json
-        player_data = self.league.player_team_DF
         rows = []
-        
+
         Regular = list(range(1,15))
         Playoff = list(range(15,19))
 
         WeeklyNFLData = self.league.WeeklyNFLData
         schedule = self.league.schedule
-        NFLTeamList =self.league.player_team_DF_Import['recent_team'].unique()
 
-        Defence = pd.DataFrame(NFLTeamList)
-        Defence = Defence.rename(columns={0:'player_name'})
-        Defence['team'] = NFLTeamList
-        
-        player_team_DF = pd.concat([player_data,Defence])
-        
-        player_team_DF['player_name'] = player_team_DF['player_name'].replace(' Jr.','', regex=True).replace(' Sr.','', regex=True).replace(' III','',regex=True).replace(' II','',regex=True)
+        # ID-keyed roster table (Sleeper player_id → NFL team / roster info).
+        # Replaces the old name-based merges, which fanned out on shared names
+        # (two Josh Allens → duplicated rows) and needed hand-kept name fixups.
+        rosters = self.league.Rosters
+        rosters = rosters[rosters['sleeper_id'].notna()].drop_duplicates(subset='sleeper_id', keep='last')
 
-        
-        #Player Corrections
-        player_team_DF = player_team_DF.drop(1035)
-        player_team_DF = player_team_DF.replace('Marquise Brown','Hollywood Brown')
-        player_team_DF = player_team_DF.replace('Audric Estimé','Audric Estime')
-
-        # player_team_DF = player_team_DF.replace('Zonovan Knight','Bam Knight')
-        player_team_DF.loc[-1] = ['LAR','LA']
-
-        
-        player_team_DF.index = player_team_DF.index+1
-        player_team_DF = player_team_DF.sort_index()
-        
         for team in JSON_data:
             # Extract relevant information
             matchup_id = team['matchup_id']
@@ -726,13 +709,16 @@ class Week:
         dfBreakout['team'] = dfBreakout['team'].replace(league_names)
         dfBreakout['week'] = self.week
         dfBreakout['year'] = self.year
-        
-        player_team_DF['player_name'] = player_team_DF['player_name'].replace(' Jr.',' Jr', regex=True).replace(' Sr.',' Sr', regex=True).replace(' III','',regex=True).replace(' II','',regex=True)
 
-        dfBreakout = dfBreakout.merge(player_team_DF, left_on='player', right_on='player_name', how = 'left')
-        dfBreakout['player_name'] = dfBreakout['player_name'].replace(' Jr.',' Jr', regex=True).replace(' Sr.',' Sr', regex=True).replace(' III','',regex=True).replace(' II','',regex=True)
+        # NFL team + display name per player, keyed by Sleeper ID. DEF entries use
+        # the team abbreviation as their Sleeper ID (Rams: Sleeper 'LAR' vs nflverse 'LA').
+        dfBreakout['player_name'] = dfBreakout['player_id'].map(dict(zip(rosters['sleeper_id'], rosters['player_name'])))
+        dfBreakout['recent_teams'] = dfBreakout['player_id'].map(dict(zip(rosters['sleeper_id'], rosters['team'])))
+        is_def = dfBreakout['position'] == 'DEF'
+        dfBreakout.loc[is_def, 'player_name'] = dfBreakout.loc[is_def, 'player_id']
+        dfBreakout.loc[is_def, 'recent_teams'] = dfBreakout.loc[is_def, 'player_id'].replace({'LAR': 'LA'})
 
-        dfBreakout['week_id'] = dfBreakout['team_y'] + '-' + dfBreakout['week'].astype(str)
+        dfBreakout['week_id'] = dfBreakout['recent_teams'] + '-' + dfBreakout['week'].astype(str)
         
         if self.week in Regular:
             dfBreakout['Season'] = 'Regular'
@@ -748,12 +734,12 @@ class Week:
         WeeklyNFLData['gsis_week_id'] = WeeklyNFLData['player_id'] + ' - ' + WeeklyNFLData['week'].astype(str)
 
         dfBreakout = dfBreakout.merge(schedule, on = 'week_id', how = 'left')
+        # ID-based roster join (one row per sleeper_id, so no fan-out).
         # suffixes=('','_roster') preserves 'position' as the Sleeper fantasy position (QB/RB/WR/TE/K/DEF)
-        dfBreakout = dfBreakout.merge(self.league.Rosters, on='player_name', how='left', suffixes=('', '_roster'))
+        dfBreakout = dfBreakout.merge(rosters, left_on='player_id', right_on='sleeper_id', how='left', suffixes=('', '_roster'))
         dfBreakout = dfBreakout.merge(WeeklyNFLData, on='gsis_week_id', how='left', suffixes=('','_NFL'))
         dfBreakout['gametime'] = pd.to_datetime(dfBreakout['gametime'], format='mixed').dt.strftime('%I %p')
         dfBreakout['Game_date_time'] = dfBreakout['weekday'] + ' ' + dfBreakout['gametime'].astype(str).replace(r'0', "", regex=True)
-        dfBreakout = dfBreakout.rename(columns={'team_x':'team','team_y':'recent_teams'})
         dfBreakout = dfBreakout.loc[:,~dfBreakout.columns.duplicated()].copy()
         if self.year != CURRENT_SEASON: dfBreakout['color'] = dfBreakout['team'].map(self.teamcolors)
         
