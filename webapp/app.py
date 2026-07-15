@@ -5,31 +5,33 @@ Run locally: python app.py  → http://localhost:8050
 Deploy:      gunicorn app:server
 
 SECTION MAP (for targeted edits — grep the # ── markers to jump directly)
-  L28   NFL Stadium Coordinates   — static lat/lon lookup dict
-  L66   Config                    — SECRET_KEY, AVAILABLE_YEARS, theme map
-  L78   Plotly template           — _register_template()
-  L89   Dash / Flask setup        — app, server
-  L101  Auth                      — login route, token helpers, auth gate middleware
-  L236  Data store                — _load_bg, _ensure, _season, _weeks, _week
-  L283  Helpers                   — _strip, _empty, _card, _power_rankings_native, etc.
-  L465  League Digest card        — _digest() builds the weekly summary card
-  L569  Layout                    — full app HTML/component tree (html.Div structure)
-  L675  Core callbacks            — boot, year/week/team controls, tab router, URL deep-link
-  L1095 Playoff Odds              — _playoff_key_games_card(), _playoff_odds_card()
-  L1185 Tab: This Week            — _tab_week()
-  L1260 Tab: Season               — _tab_season()
-  L1380 Tab: Players              — _tab_players()
-  L1470 Tab: All-Time             — _tab_alltime()
-  L1540 Tab: Head-to-Head         — _tab_h2h_shell(), _h2h() callback
-  L1660 Tab: Playoffs             — _tab_playoffs() (winners + losers bracket cards)
-  L1670 Toggle callbacks          — luck/timeline/pfa/freq/bench/bump/violin/top-players/playoff-view
-  L1741 D3 store population       — _populate_d3_stores() (snake draft, schedule, matchups)
-  L2003 D3: Bubble Map            — _populate_bubble_data()
-  L2097 D3: Draft Board           — _populate_draft_data()
-  L2196 D3: State Choropleth      — _populate_choropleth_data()
-  L2254 D3: Chord Diagram         — _populate_chord_data()
-  L1976 Tab: Survivor             — _tab_survivor(), _survivor_win_margin() callback
-  L2332 Run                       — if __name__ == '__main__'
+  L58   NFL Stadium Coordinates   — static lat/lon lookup dict
+  L96   Config                    — SECRET_KEY, AVAILABLE_YEARS, theme map
+  L153  Plotly template           — _register_template()
+  L164  Dash / Flask setup        — app, server
+  L176  Auth                      — login route, token helpers, auth gate middleware
+  L311  Data store                — _load_bg, _ensure, _season/_weeks/_matches/_breakout, eager load
+  L388  Helpers                   — _strip, _empty, _card, loading placeholders, etc.
+  L753  League Digest card        — _digest() builds the weekly summary card
+  L857  Layout                    — full app HTML/component tree (html.Div structure)
+  L975  Core callbacks            — boot, year/week/team controls, retry tick, tab router
+  L1289 URL deep-link             — parse ?tab=&year=&week= on initial load
+  L1376 Playoff Odds              — _playoff_key_games_card(), _playoff_odds_card()
+  L1503 Tab: This Week            — _tab_week()
+  L1588 Tab: Season               — _tab_season()
+  L1734 Tab: Players              — _tab_players()
+  L1837 Tab: All-Time             — _tab_alltime()
+  L1907 Tab: Head-to-Head         — _tab_h2h_shell() (inner _h2h() callback at L2356)
+  L1936 Tab: Playoffs             — _tab_playoffs() (winners + losers bracket cards)
+  L2080 Tab: Side Bets            — _tab_sidebets()
+  L2217 Tab: Survivor             — _tab_survivor(), _survivor_win_margin() callback
+  L2451 Toggle callbacks          — luck/timeline/pfa/freq/bench/bump/violin/top-players/playoff-view
+  L2783 D3 store population       — _populate_d3_stores() (snake draft, schedule, matchups)
+  L3070 D3: Bubble Map            — _populate_bubble_data()
+  L3166 D3: Draft Board           — _populate_draft_data()
+  L3229 D3: State Choropleth      — _populate_choropleth_data()
+  L3325 D3: Chord Diagram         — _populate_chord_data()
+  L3409 Run                       — if __name__ == '__main__'
 """
 
 import sys
@@ -322,7 +324,13 @@ def _load_bg(year: int):
     try:
         league, season, weeks = dl.load_data_for_year(year, max_week=18, verbose=True)
         sb = core.SideBet(league, season, DictofWeeks=weeks)
-        _data[year] = {'league': league, 'season': season, 'weeks': weeks, 'sidebet': sb}
+        _data[year] = {
+            'league': league, 'season': season, 'weeks': weeks, 'sidebet': sb,
+            # Snapshot the module-global dicts so callbacks read a stable,
+            # fully-built copy instead of state the loader thread mutates.
+            'matches':  dict(core.AllMatchesDict.get(year, {})),
+            'breakout': dict(core.AllBreakoutDict.get(year, {})),
+        }
         _failed_years.discard(year)
     except Exception as e:
         print(f'[data] Error loading {year}: {e}')
@@ -355,8 +363,26 @@ def _sidebet(year):
     return _data.get(year, {}).get('sidebet')
 
 
-# Pre-load current year in background at startup
-threading.Thread(target=_load_bg, args=(CURRENT_YEAR,), daemon=True).start()
+def _matches(year):
+    """Per-week matchup DataFrames for a loaded year ({week: df}); empty if not loaded."""
+    return _data.get(year, {}).get('matches', {})
+
+
+def _breakout(year):
+    """Per-week player-breakout DataFrames for a loaded year; empty if not loaded."""
+    return _data.get(year, {}).get('breakout', {})
+
+
+def _eager_load_all():
+    """Load every season at startup — current year first so the landing tab is
+    fast, then the rest so All-Time/H2H/Playoff-history are complete from the
+    first click. Sequential on purpose: the loaders mutate core module globals."""
+    for y in [CURRENT_YEAR] + [y for y in ALL_YEARS if y != CURRENT_YEAR]:
+        _load_bg(y)
+
+
+# Pre-load all years in background at startup (warm cache: ~1s total)
+threading.Thread(target=_eager_load_all, daemon=True).start()
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -676,6 +702,30 @@ def _loading_placeholder():
     ], className='loading-msg')
 
 
+def _historical_loading_msg(missing):
+    """Loading state for views that need every season. Carries its own interval
+    so the tab re-renders automatically once the background loads finish —
+    without it the message would sit there until the user poked a control."""
+    return html.Div([
+        html.Div(className='loading-spinner'),
+        f'Loading {len(missing)} historical season(s)…',
+        dcc.Interval(id='alltime-retry', interval=1500),
+    ], className='loading-msg')
+
+
+def _failed_years_banner():
+    """Warning banner when some seasons failed to load — shown instead of
+    silently rendering incomplete all-time numbers."""
+    failed = sorted(y for y in ALL_YEARS if y in _failed_years)
+    if not failed:
+        return None
+    return html.Div(
+        f"⚠ Could not load {', '.join(str(y) for y in failed)} — "
+        'all-time numbers below exclude those season(s). Use Refresh to retry.',
+        className='error-msg-card',
+    )
+
+
 def _filter_season(season, teams):
     if season is None or teams is None:
         return season
@@ -705,12 +755,12 @@ def _filter_season(season, teams):
 def _digest(year, week):
     """Hero stats bar above tabs: top scorer, tightest game, biggest beatdown.
 
-    AllMatchesDict[year][week] is a single DataFrame where each row is one team.
+    _matches(year)[week] is a single DataFrame where each row is one team.
     Teams in the same matchup share the same 'Matchup' value.
     Score column is 'Total'; team name column is 'Team'.
     """
     try:
-        df = core.AllMatchesDict.get(year, {}).get(week)
+        df = _matches(year).get(week)
         if df is None or df.empty:
             return html.Div()
         if 'Team' not in df.columns or 'Total' not in df.columns:
@@ -822,7 +872,8 @@ app.layout = html.Div([
     dcc.Store(id='store-max-week', data=1),
     dcc.Store(id='store-playoff-week-start', data=15),
     dcc.Store(id='store-d3-trigger', data=0),
-    dcc.Interval(id='boot', interval=1500, n_intervals=0, max_intervals=60),
+    dcc.Interval(id='boot', interval=1500, n_intervals=0, max_intervals=-1),
+    dcc.Store(id='store-retry'),
 
     # Top bar
     html.Div([
@@ -945,6 +996,9 @@ def _playoff_week_start(year):
 def _boot(_, year):
     w = _weeks(year or CURRENT_YEAR)
     if not w:
+        if (year or CURRENT_YEAR) in _failed_years:
+            # Load failed — stop polling; the tab body shows the error state
+            return no_update, no_update, no_update, no_update, no_update, True, no_update
         return no_update, no_update, no_update, no_update, no_update, False, no_update  # keep polling
     slider_max, default_week = _default_week(year or CURRENT_YEAR, w)
     pws = _playoff_week_start(year or CURRENT_YEAR)
@@ -958,19 +1012,21 @@ def _boot(_, year):
     Output('store-playoff-week-start', 'data',  allow_duplicate=True),
     Output('team-list', 'options'),
     Output('team-list', 'value'),
+    Output('boot', 'disabled', allow_duplicate=True),
     Input('year-dd', 'value'),
     prevent_initial_call=True,
 )
 def _year_changed(year):
-    if year not in _data:
-        threading.Thread(target=_load_bg, args=(year,), daemon=True).start()
-        _ensure(year)
+    # Re-arm the boot poller when switching to a not-yet-loaded year so the
+    # slider/store update (and tab re-render) fire once the data arrives.
+    boot_disabled = True if year in _data else False
+    _ensure(year)
     w = _weeks(year)
     slider_max, default_week = _default_week(year, w) if w else (1, 1)
     pws = _playoff_week_start(year)
     teams = sorted(core.roster_ids.get(year, {}).values())
     opts = [{'label': t, 'value': t} for t in teams]
-    return slider_max, default_week, slider_max, pws, opts, None
+    return slider_max, default_week, slider_max, pws, opts, None, boot_disabled
 
 
 @app.callback(
@@ -1171,6 +1227,7 @@ def _sync_stores(year, week):
 
 @app.callback(
     Output('refresh-status', 'children'),
+    Output('boot', 'disabled', allow_duplicate=True),
     Input('btn-refresh', 'n_clicks'),
     State('year-dd', 'value'),
     prevent_initial_call=True,
@@ -1181,7 +1238,8 @@ def _refresh(_, year):
     _failed_years.discard(year)
     dl.invalidate_week(year, 0)
     threading.Thread(target=_load_bg, args=(year,), daemon=True).start()
-    return 'loading…'
+    # Re-arm the boot poller so the tab re-renders when the reload finishes
+    return 'loading…', False
 
 
 @app.callback(
@@ -1194,13 +1252,26 @@ def _update_digest(year, week):
 
 
 @app.callback(
-    Output('tab-content', 'children'),
-    Input('tabs',       'value'),
-    Input('store-year', 'data'),
-    Input('store-week', 'data'),
-    Input('team-list',  'value'),
+    Output('store-retry', 'data'),
+    Input('alltime-retry', 'n_intervals'),
+    prevent_initial_call=True,
 )
-def _render_tab(tab, year, week, teams):
+def _retry_tick(_):
+    """Ticks while a _historical_loading_msg placeholder is mounted; bumping
+    store-retry re-fires _render_tab (and the D3 stores) so the view swaps to
+    real content as soon as the background loads land."""
+    return time.time()
+
+
+@app.callback(
+    Output('tab-content', 'children'),
+    Input('tabs',        'value'),
+    Input('store-year',  'data'),
+    Input('store-week',  'data'),
+    Input('team-list',   'value'),
+    Input('store-retry', 'data'),
+)
+def _render_tab(tab, year, week, teams, _retry):
     year = year or CURRENT_YEAR
     week = week or 1
 
@@ -1764,14 +1835,11 @@ def _tab_players(year, week, teams):
 # ── Tab: All-Time ─────────────────────────────────────────────────────────────
 
 def _tab_alltime(teams, year=None):
-    missing = [y for y in ALL_YEARS if y not in _data]
+    missing = [y for y in ALL_YEARS if y not in _data and y not in _failed_years]
     if missing:
         for y in missing:
-            threading.Thread(target=_load_bg, args=(y,), daemon=True).start()
-        return html.Div([
-            html.Div(className='loading-spinner'),
-            f'Loading {len(missing)} historical season(s)… switch back in a moment.',
-        ], className='loading-msg')
+            _ensure(y)
+        return _historical_loading_msg(missing)
 
     try:
         at = core.AllTime()
@@ -1779,6 +1847,9 @@ def _tab_alltime(teams, year=None):
         return html.Div(f'Could not build All-Time data: {e}', className='error-msg-card')
 
     cards = []
+    banner = _failed_years_banner()
+    if banner is not None:
+        cards.append(banner)
 
     _alltime_meta = [
         ('HallofFame_Team',     'Hall of Fame · Best Team Scores',    False, 'The highest single-week team scores across all seasons'),
@@ -1966,15 +2037,15 @@ def _tab_playoffs(year):
         className='section-divider',
     ))
 
-    missing_years = [y for y in ALL_YEARS if y not in _data]
+    missing_years = [y for y in ALL_YEARS if y not in _data and y not in _failed_years]
     if missing_years:
         for y in missing_years:
-            threading.Thread(target=_load_bg, args=(y,), daemon=True).start()
-        alltime_section.append(html.Div([
-            html.Div(className='loading-spinner'),
-            f'Loading {len(missing_years)} historical season(s)… switch back in a moment.',
-        ], className='loading-msg'))
+            _ensure(y)
+        alltime_section.append(_historical_loading_msg(missing_years))
     else:
+        banner = _failed_years_banner()
+        if banner is not None:
+            alltime_section.append(banner)
         try:
             atp = core.AllTimePlayoffs()
             alltime_section.append(_playoff_records_card(atp))
@@ -2287,18 +2358,17 @@ def _survivor_win_margin(username, survivor_year):
     Output('h2h-charts', 'children'),
     Input('h2h-team-a',  'value'),
     Input('h2h-team-b',  'value'),
-    prevent_initial_call=True,
 )
 def _h2h(team_a, team_b):
     if not team_a or not team_b or team_a == team_b:
         return html.Div('Select two different teams above.', className='loading-msg'), html.Div()
 
     # Scan all matchup data across all loaded years.
-    # AllMatchesDict[year][week] is a single DataFrame — one row per team,
+    # _matches(year)[week] is a single DataFrame — one row per team,
     # grouped by 'Matchup' value. Score column is 'Total'.
     h2h_games = []
-    for year, _ydata in _data.items():
-        for week, df in core.AllMatchesDict.get(year, {}).items():
+    for year in sorted(_data.keys()):
+        for week, df in _matches(year).items():
             if df is None or df.empty or 'Team' not in df.columns or 'Total' not in df.columns:
                 continue
             teams_in_week = set(df['Team'].tolist())
@@ -3019,7 +3089,7 @@ def _populate_bubble_data(tab, year, week, _boot_done, _trigger):
             return no_update
 
         # Get breakout data for this week
-        breakout = core.AllBreakoutDict.get(year, {}).get(week)
+        breakout = _breakout(year).get(week)
         if breakout is None:
             return no_update
 
@@ -3058,7 +3128,7 @@ def _populate_bubble_data(tab, year, week, _boot_done, _trigger):
 
         # Season average per NFL team (use all weeks loaded so far)
         season_avgs = {}
-        all_weeks_breakout = core.AllBreakoutDict.get(year, {})
+        all_weeks_breakout = _breakout(year)
         for w, wb in all_weeks_breakout.items():
             if wb is None:
                 continue
@@ -3196,10 +3266,11 @@ _NFL_TEAM_STATE = {
 
 @app.callback(
     Output('store-choropleth-data', 'data'),
-    Input('tabs',  'value'),
-    Input('boot',  'disabled'),
+    Input('tabs',        'value'),
+    Input('boot',        'disabled'),
+    Input('store-retry', 'data'),
 )
-def _populate_choropleth_data(tab, _boot_done):
+def _populate_choropleth_data(tab, _boot_done, _retry):
     if tab != 'tab-alltime':
         return no_update
     try:
@@ -3255,10 +3326,11 @@ def _populate_choropleth_data(tab, _boot_done):
 
 @app.callback(
     Output('store-chord-data', 'data'),
-    Input('tabs',  'value'),
-    Input('boot',  'disabled'),
+    Input('tabs',        'value'),
+    Input('boot',        'disabled'),
+    Input('store-retry', 'data'),
 )
-def _populate_chord_data(tab, _boot_done):
+def _populate_chord_data(tab, _boot_done, _retry):
     if tab != 'tab-alltime':
         return no_update
     try:

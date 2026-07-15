@@ -231,6 +231,13 @@ def load_data_for_year(year: int, max_week: int = 18, verbose: bool = True):
         # Restore global dicts so Season methods work
         core.AllMatchesDict[year].update(cached["matches_snap"])
         core.AllBreakoutDict[year].update(cached["breakout_snap"])
+        # OptimalScoresByYear is populated as a Week-construction side effect, so
+        # unpickled caches leave it empty (blank playoff efficiency badges).
+        # Each cached Week carries its OptimalScoresDF — restore from those.
+        for wk_num, wk in cached["weeks"].items():
+            opt_df = getattr(wk, "OptimalScoresDF", None)
+            if opt_df is not None:
+                core.OptimalScoresByYear.setdefault(year, {})[wk_num] = opt_df
         # Always refresh teamcolors so cached objects pick up current slot-based palette
         cached["season"].SetTeamColors()
         return cached["league"], cached["season"], cached["weeks"]

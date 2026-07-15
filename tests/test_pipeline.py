@@ -391,3 +391,37 @@ def test_josh_allen_2023_season_total_not_inflated():
     actual = bo.loc[bo['player_id'] == '4984', 'points'].sum()
     assert abs(actual - truth) < 0.01, \
         f"Josh Allen 2023: breakout total {actual:.1f} != raw total {truth:.1f}"
+
+
+# ── Session 4: OptimalScoresByYear cache restore ─────────────────────────────
+
+class TestOptimalScoresRestore:
+    """OptimalScoresByYear is populated as a Week-construction side effect, so
+    loading a season from a pickle used to leave it empty — every playoff
+    bracket efficiency badge rendered blank. data_loader must now rebuild it
+    from each cached Week's OptimalScoresDF."""
+
+    def test_optimal_scores_restored_for_every_week(self, season_2024):
+        _, _, weeks = season_2024
+        opt = core.OptimalScoresByYear.get(2024, {})
+        missing = sorted(set(weeks) - set(opt))
+        assert not missing, f"OptimalScoresByYear[2024] missing weeks: {missing}"
+
+    def test_optimal_scores_are_lineup_dataframes(self, season_2024):
+        import pandas as pd
+        for wk_num, df in core.OptimalScoresByYear[2024].items():
+            assert isinstance(df, pd.DataFrame), f"week {wk_num}: not a DataFrame"
+            assert {'team', 'points'} <= set(df.columns), f"week {wk_num}: missing cols"
+            assert not df.empty, f"week {wk_num}: empty optimal lineup"
+
+    def test_playoff_efficiency_badges_populated(self, season_2024):
+        """With the restore in place, a completed season's winners bracket must
+        produce at least one non-None efficiency value."""
+        league, season, _ = season_2024
+        playoffs = core.Playoffs(league, season)
+        effs = [m.get(k) for rnd in playoffs.winners.values() for m in rnd
+                for k in ('efficiency1', 'efficiency2')]
+        populated = [e for e in effs if e is not None]
+        assert populated, "all playoff efficiency badges are None — restore failed"
+        for e in populated:
+            assert 0 < e <= 100, f"impossible efficiency value: {e}"
