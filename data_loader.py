@@ -314,9 +314,15 @@ def load_playoff_probs(year: int) -> dict | None:
     """
     Returns {as_of_week: list[TeamPlayoffSnapshot]} for weeks 9 through playoff_week_start-1.
 
+    A checkpoint at week W reflects all results through week W; later weeks are
+    simulated as 50/50 even if since played (see PlayoffCalculator docstring),
+    so retroactively computed checkpoints are genuine reconstructed odds.
+
     For completed seasons: computes all weeks once and caches each independently.
     For the current season: only computes weeks where data exists (≤ max completed week).
     Returns None if data is unavailable (year not loaded, season too early).
+    Cache key is versioned (v2) — v1 snapshots predate the fold-in/simulate
+    semantics and collapse to 0%/100% when computed retroactively.
     """
     import sleeper_core as core
 
@@ -333,7 +339,7 @@ def load_playoff_probs(year: int) -> dict | None:
         if as_of_week > max_completed:
             break
 
-        week_key = f"playoff_probs_{year}_{as_of_week}"
+        week_key = f"playoff_probs_v2_{year}_{as_of_week}"
         cached = _load_cache(week_key)
         if cached is not None:
             result[as_of_week] = cached

@@ -818,6 +818,16 @@ html, body {
   margin-bottom: 2px;
 }
 
+/* Fine-print caveat line at the bottom of a chart card */
+.chart-footnote {
+  font-family: var(--font-main);
+  font-size: 0.68rem;
+  color: var(--text-muted);
+  font-style: italic;
+  padding: 6px 6px 2px;
+  opacity: 0.8;
+}
+
 /* Plotly graph stretches to fill card */
 .chart-card .js-plotly-plot,
 .chart-card .plot-container,

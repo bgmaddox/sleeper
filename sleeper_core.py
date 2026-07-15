@@ -347,6 +347,32 @@ AllSeasonsBreakoutList = [Breakout_Matches_2019, Breakout_Matches_2020, Breakout
 AllMatchesList = [Matches_2019, Matches_2020, Matches_2021, Matches_2022,
                   Matches_2023, Matches_2024, Matches_2025]
 
+# Starting-lineup structure assumed by the optimal-lineup logic
+# (Week.OptimalTeams and Season.OptimalTeams hardcode these counts).
+# validate_lineup_slots() checks each season's actual Sleeper settings against it.
+LINEUP_SLOTS = {'QB': 1, 'RB': 2, 'WR': 2, 'TE': 1, 'FLEX': 1, 'K': 1, 'DEF': 1}
+
+
+def validate_lineup_slots(league_settings: dict, year: int) -> None:
+    """Warn loudly if a season's roster_positions differ from LINEUP_SLOTS —
+    every optimal-lineup and efficiency number silently shifts if they do."""
+    import warnings
+    positions = league_settings.get('roster_positions')
+    if not isinstance(positions, (list, tuple)):
+        return
+    actual = {}
+    for pos in positions:
+        if pos in ('BN', 'IR', 'TAXI'):
+            continue
+        actual[pos] = actual.get(pos, 0) + 1
+    if actual != LINEUP_SLOTS:
+        warnings.warn(
+            f'{year} league lineup slots {actual} differ from the hardcoded '
+            f'LINEUP_SLOTS {LINEUP_SLOTS} — optimal-lineup and efficiency '
+            f'numbers will be wrong until Week/Season.OptimalTeams are updated.',
+            stacklevel=2,
+        )
+
 
 class League:
     def __init__(self,year, id):
@@ -379,6 +405,7 @@ class League:
         league_settings_json = dl.fetch_league_json(self.id)
         league_settings_json_normal = json_normalize(league_settings_json)
         self.league_settings = league_settings_json_normal.T.set_axis(['league_setting'], axis=1).to_dict()['league_setting']
+        validate_lineup_slots(self.league_settings, self.year)
 
     def UsersJSONtoDF(self):
         import data_loader as dl
@@ -667,6 +694,15 @@ class Week:
 
         # Step 3: Optional - Convert the boolean 'Won' column to 1 (win) and 0 (loss)
         WeeklyDf['Won'] = WeeklyDf['Won'].astype(int)
+
+        # A tied matchup (max == min) would otherwise award both teams a win;
+        # score it as half a win each. Column stays int unless a tie actually occurs.
+        min_scores = WeeklyDf.groupby('Matchup')['Total'].transform('min')
+        group_sizes = WeeklyDf.groupby('Matchup')['Total'].transform('size')
+        tie_mask = (max_scores == min_scores) & (group_sizes == 2)
+        if tie_mask.any():
+            WeeklyDf['Won'] = WeeklyDf['Won'].astype(float)
+            WeeklyDf.loc[tie_mask, 'Won'] = 0.5
         
         
         WeeklyDf['Opp'] = np.where(WeeklyDf['Won'] == 1,WeeklyDf.groupby('Matchup')['Total'].transform('min'),WeeklyDf.groupby('Matchup')['Total'].transform('max'))
@@ -5747,8 +5783,8 @@ class Survivor:
 class TeamPlayoffSnapshot:
     roster_id: int
     name: str
-    wins: int
-    losses: int
+    wins: int | float      # fractional (n.5) only if a tied matchup has occurred
+    losses: int | float
     points_for: float
     prob_any: float    # P(makes playoffs) — in top N in at least one scenario
     prob_guar: float   # P(safely above bubble) — in top N-1 in this fraction of scenarios
@@ -5763,10 +5799,21 @@ class PlayoffCalculator:
     """
     Computes playoff probabilities using exact NumPy bitmask enumeration (≤29 matchups)
     or Monte Carlo (1M simulations) when matchups exceed the bit limit.
+
+    Checkpoint semantics: a snapshot at `as_of_week` reflects every result known
+    through that week (earlier weeks via standings, plus any games already played
+    in as_of_week itself). All later weeks are simulated as 50/50 coin flips —
+    even when recomputing a past checkpoint after those games have been played —
+    so retroactive checkpoints reconstruct the odds as they stood at the time.
+    Model caveats: team strength is ignored (every game 50/50), and the
+    points-for tiebreaker uses PF frozen at the checkpoint.
     """
 
     EARLY_WEEK_THRESHOLD = 9
-    NUMPY_EXACT_BIT_LIMIT = 29
+    # Above 2^20 scenarios, exact enumeration costs more than 1M Monte Carlo
+    # samples for indistinguishable chart-grade accuracy (~20s vs ~1.5s at M=24),
+    # and load_playoff_probs runs synchronously in a tab render.
+    NUMPY_EXACT_BIT_LIMIT = 20
     MC_SIMULATIONS = 1_000_000
 
     def __init__(self, league, season, as_of_week: int):
@@ -5776,14 +5823,21 @@ class PlayoffCalculator:
         self.year = league.year
         self.teamcolors = get_slot_teamcolors(self.year)
 
-    def compute(self) -> list:
-        """Run enumeration and return one TeamPlayoffSnapshot per team."""
+    def compute(self, include_clinch_elim: bool = False) -> list:
+        """
+        Run enumeration and return one TeamPlayoffSnapshot per team.
+
+        include_clinch_elim: the clinch/elimination numbers cost a full extra
+        enumeration per candidate team and nothing in the webapp reads them,
+        so they're opt-in (snapshots carry None when skipped).
+        """
         standings = self._build_standings()
         if not standings:
             return []
 
         num_playoffs = self._determine_playoff_spots()
-        matchup_pairs, current_week_pairs = self._fetch_remaining_matchups()
+        matchup_pairs, current_week_pairs, played_results = self._fetch_remaining_matchups()
+        self._fold_played_results(standings, played_results)
 
         roster_ids_list = sorted(standings.keys())
         rid_to_idx = {rid: i for i, rid in enumerate(roster_ids_list)}
@@ -5823,7 +5877,7 @@ class PlayoffCalculator:
 
             clinch_in = None
             elim_in = None
-            if use_exact:
+            if use_exact and include_clinch_elim:
                 if 0 < prob_any < 1.0:
                     clinch_in = self._clinch_number(rid, matchup_pairs, initial_wins, pf_totals, num_playoffs, rid_to_idx)
                     elim_in = self._elim_number(rid, matchup_pairs, initial_wins, pf_totals, num_playoffs, rid_to_idx)
@@ -5842,6 +5896,22 @@ class PlayoffCalculator:
             ))
 
         return snapshots
+
+    @staticmethod
+    def _fold_played_results(standings: dict, played_results: list) -> None:
+        """Apply already-played as_of_week games to standings. Ties count 0.5 wins each."""
+        for a, pts_a, b, pts_b in played_results:
+            for rid, own, opp in ((a, pts_a, pts_b), (b, pts_b, pts_a)):
+                if rid not in standings:
+                    continue
+                standings[rid]['points_for'] += own
+                if own > opp:
+                    standings[rid]['wins'] += 1
+                elif own < opp:
+                    standings[rid]['losses'] += 1
+                else:
+                    standings[rid]['wins'] += 0.5
+                    standings[rid]['losses'] += 0.5
 
     def _no_remaining_games(self, standings: dict, num_playoffs: int) -> list:
         """Deterministic outcome when all games are decided."""
@@ -5887,21 +5957,40 @@ class PlayoffCalculator:
             rid = name_to_rid.get(team_name)
             if rid is None:
                 continue
-            wins = int(group['Won'].sum())
+            wins = float(group['Won'].sum())  # may be fractional if a week tied (0.5)
+            wins = int(wins) if wins.is_integer() else wins
+            losses = len(group) - wins
+            losses = int(losses) if float(losses).is_integer() else losses
             standings[rid] = {
                 'wins': wins,
-                'losses': int(len(group) - wins),
+                'losses': losses,
                 'points_for': float(group['Total'].sum()),
                 'name': team_name,
             }
         return standings
 
     def _fetch_remaining_matchups(self) -> tuple:
-        """Return (all_pairs, current_week_pairs) — tuples of (roster_id_a, roster_id_b)."""
+        """
+        Return (all_pairs, current_week_pairs, played_results).
+
+        Semantics of a checkpoint at `as_of_week`: all *known* results through
+        as_of_week count — weeks before it via _build_standings, and any games
+        already played in as_of_week itself via `played_results`
+        (list of (rid_a, pts_a, rid_b, pts_b), to be folded into standings).
+        Games in weeks *after* as_of_week are always simulated as 50/50, even if
+        their results are now known — so a checkpoint recomputed after the fact
+        reconstructs what the odds looked like at that point in the season
+        instead of collapsing to 0%/100%.
+
+        current_week_pairs are always a prefix of all_pairs (the as_of_week
+        loop iteration runs first), so index i in current_week_pairs is index i
+        in all_pairs — the swing accumulators rely on this.
+        """
         import data_loader as dl
         playoff_start = int(self.league.league_settings.get('settings.playoff_week_start', 15))
         all_pairs = []
         current_week_pairs = []
+        played_results = []
 
         for week in range(self.as_of_week, playoff_start):
             try:
@@ -5921,14 +6010,17 @@ class PlayoffCalculator:
                     continue
                 a = entries[0]['roster_id']
                 b = entries[1]['roster_id']
-                if (entries[0].get('points') or 0) > 0 or (entries[1].get('points') or 0) > 0:
+                pts_a = float(entries[0].get('points') or 0)
+                pts_b = float(entries[1].get('points') or 0)
+                if week == self.as_of_week and (pts_a > 0 or pts_b > 0):
+                    played_results.append((a, pts_a, b, pts_b))
                     continue
                 pair = (a, b)
                 all_pairs.append(pair)
                 if week == self.as_of_week:
                     current_week_pairs.append(pair)
 
-        return all_pairs, current_week_pairs
+        return all_pairs, current_week_pairs, played_results
 
     def _determine_playoff_spots(self) -> int:
         return int(self.league.league_settings.get('settings.playoff_teams', 6))
@@ -6008,8 +6100,10 @@ class PlayoffCalculator:
         M = len(matchup_pairs)
         G = len(current_week_pairs)
 
-        cw_set = set(current_week_pairs)
-        cw_indices = [g for g, pair in enumerate(matchup_pairs) if pair in cw_set]
+        # current_week_pairs are a prefix of matchup_pairs by construction
+        # (see _fetch_remaining_matchups). Positional mapping — not tuple identity —
+        # so a rematch of the same pair in a later week can't inflate the index list.
+        cw_indices = list(range(G))
 
         in_count = np.zeros(T, dtype=np.int64)
         guar_count = np.zeros(T, dtype=np.int64)
@@ -6042,8 +6136,8 @@ class PlayoffCalculator:
         G = len(current_week_pairs)
         N = self.MC_SIMULATIONS
 
-        cw_set = set(current_week_pairs)
-        cw_indices = [g for g, pair in enumerate(matchup_pairs) if pair in cw_set]
+        # Positional prefix mapping — see comment in _exact_numpy.
+        cw_indices = list(range(G))
 
         bits_all = np.random.randint(0, 2, size=(N, M), dtype=np.int8)
 
@@ -6268,7 +6362,7 @@ class PlayoffCalculator:
             final_w = max(data['weeks'])
             symbols = ['circle' if w < final_w else 'circle-open' for w in data['weeks']]
             hover = [
-                f"Week {w} · {data['probs'][i]:.1f}%"
+                f"After Week {w} · {data['probs'][i]:.1f}%"
                 for i, w in enumerate(data['weeks'])
             ]
             fig.add_trace(go.Scatter(
@@ -6286,7 +6380,7 @@ class PlayoffCalculator:
         fig.update_layout(
             template='gridiron_ink',
             title=dict(text=f'<b>{title_text}</b>', x=0.5),
-            xaxis=dict(title='Week', tickmode='linear', dtick=1),
+            xaxis=dict(title='After Week', tickmode='linear', dtick=1),
             yaxis=dict(title='Playoff Probability %', range=[0, 105], ticksuffix='%'),
             legend=dict(orientation='h', yanchor='top', y=-0.15, xanchor='center', x=0.5),
             margin=dict(t=60, b=100, l=80, r=40),

@@ -1468,7 +1468,10 @@ def _playoff_odds_card(prob_data, year, week):
     display_week = max(available)
     snapshots = prob_data[display_week]
     is_final = (week >= playoff_start)
-    subtitle = 'Regular Season Final' if is_final else f'As of Week {display_week}'
+    subtitle = 'Regular Season Final' if is_final else f'After Week {display_week}'
+    footnote = ('Model: unplayed games are 50/50 coin flips; the points-for tiebreaker uses '
+                'PF frozen at the checkpoint. Checkpoints before the latest week are '
+                'reconstructed retroactively under the same model.')
 
     try:
         bar_fig = core.PlayoffCalculator.PlayoffOddsBar(snapshots, teamcolors=teamcolors)
@@ -1491,6 +1494,7 @@ def _playoff_odds_card(prob_data, year, week):
         html.Div(subtitle, className='chart-subtitle'),
         active_toggle,
         html.Div(initial_chart, id='playoff-odds-chart'),
+        html.Div(footnote, className='chart-footnote'),
     ], className='chart-card chart-col-two-thirds')
 
     children = [main_card]
