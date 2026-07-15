@@ -96,11 +96,11 @@ Global dicts populated as objects are built:
 - `AllBreakoutDict[year][week]` — player-level stat dataframes
 - `OptimalScoresByYear[year][week]` — best possible lineup score per team
 
-Key config dicts in `sleeper_core.py`:
-- `leagueNumbers_Dict` — year → Sleeper league ID
-- `roster_ids` — year → {roster_num: username} for 2019–2025
-- `SIDE_BET_SEASONS` — year → {week → {name, desc, winner}} for 2019–2025
-- `SURVIVOR_LEAGUE_IDS` — year → Sleeper survivor league ID (2024–2025)
+Key config dicts (loaded at import from `config/*.json` — edit the JSON, not the module):
+- `leagueNumbers_Dict` — year → Sleeper league ID (`config/league_ids.json`)
+- `roster_ids` — year → {roster_num: username} for 2019–2025 (`config/roster_ids.json`)
+- `SIDE_BET_SEASONS` — year → {week → {name, desc, winner}} for 2019–2025 (`config/side_bet_seasons.json`)
+- `SURVIVOR_LEAGUE_IDS` — year → Sleeper survivor league ID, 2024–2025 (`config/league_ids.json`)
 
 ### Dashboard tabs
 
@@ -125,10 +125,7 @@ Custom Plotly template `gridiron_ink` in `sleeper_core.py`:
 
 ### League configuration
 
-`sleeper_core.py` contains:
-- `leagueNumbers_Dict` — year → Sleeper league ID
-- `roster_ids` — year → {roster_num: username} for 2019–2025
-- `AVAILABLE_YEARS = [2019, 2020, 2021, 2022, 2023, 2024, 2025]`
+Seasonal config lives in `config/*.json` (`roster_ids.json`, `league_ids.json`, `side_bet_seasons.json`), loaded by `sleeper_core.py` at import. `AVAILABLE_YEARS` is derived from the league IDs — adding a new season is a JSON-only edit.
 
 ## Key Data Files
 

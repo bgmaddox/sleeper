@@ -11,6 +11,17 @@ import requests
 CACHE_DIR = os.path.join(os.path.dirname(__file__), ".cache")
 os.makedirs(CACHE_DIR, exist_ok=True)
 
+REQUEST_TIMEOUT = 30  # seconds — a hung Sleeper call should fail, not freeze a year load
+
+
+def _get_json(url: str):
+    """GET a JSON API endpoint with a timeout and HTTP status check.
+    Raises requests.RequestException on timeout/connection failure/4xx/5xx
+    instead of silently caching an error payload."""
+    resp = requests.get(url, timeout=REQUEST_TIMEOUT)
+    resp.raise_for_status()
+    return resp.json()
+
 
 # ── Low-level cache helpers ───────────────────────────────────────────────────
 
@@ -44,7 +55,7 @@ def fetch_player_data() -> dict:
     cached = _load_cache(key)
     if cached is not None:
         return cached
-    data = requests.get("https://api.sleeper.app/v1/players/nfl").json()
+    data = _get_json("https://api.sleeper.app/v1/players/nfl")
     _save_cache(key, data)
     return data
 
@@ -53,7 +64,7 @@ def fetch_league_json(league_id: int) -> dict:
     cached = _load_cache(key)
     if cached is not None:
         return cached
-    data = requests.get(f"https://api.sleeper.app/v1/league/{league_id}").json()
+    data = _get_json(f"https://api.sleeper.app/v1/league/{league_id}")
     _save_cache(key, data)
     return data
 
@@ -82,7 +93,7 @@ def fetch_league_users_json(league_id: int) -> list:
     cached = _load_cache(key)
     if cached is not None:
         return cached
-    data = requests.get(f"https://api.sleeper.app/v1/league/{league_id}/users").json()
+    data = _get_json(f"https://api.sleeper.app/v1/league/{league_id}/users")
     _save_cache(key, data)
     return data
 
@@ -90,7 +101,7 @@ def fetch_state_json() -> dict:
     """Current NFL season state: week (leg), season_type, season year.
     Returns keys: season, season_type, leg, display_week, season_start_date.
     Not cached — always fetches fresh so leg reflects the actual current week."""
-    return requests.get("https://api.sleeper.app/v1/state/nfl").json()
+    return _get_json("https://api.sleeper.app/v1/state/nfl")
 
 
 def fetch_winners_bracket(league_id: int) -> list:
@@ -99,9 +110,9 @@ def fetch_winners_bracket(league_id: int) -> list:
     cached = _load_cache(key)
     if cached is not None:
         return cached
-    data = requests.get(
+    data = _get_json(
         f"https://api.sleeper.app/v1/league/{league_id}/winners_bracket"
-    ).json()
+    )
     _save_cache(key, data)
     return data
 
@@ -111,9 +122,9 @@ def fetch_losers_bracket(league_id: int) -> list:
     cached = _load_cache(key)
     if cached is not None:
         return cached
-    data = requests.get(
+    data = _get_json(
         f"https://api.sleeper.app/v1/league/{league_id}/losers_bracket"
-    ).json()
+    )
     _save_cache(key, data)
     return data
 
@@ -123,9 +134,9 @@ def fetch_transactions_json(league_id: int, week: int) -> list:
     cached = _load_cache(key)
     if cached is not None:
         return cached
-    data = requests.get(
+    data = _get_json(
         f"https://api.sleeper.app/v1/league/{league_id}/transactions/{week}"
-    ).json()
+    )
     _save_cache(key, data)
     return data
 
@@ -135,9 +146,9 @@ def fetch_traded_picks_json(league_id: int) -> list:
     cached = _load_cache(key)
     if cached is not None:
         return cached
-    data = requests.get(
+    data = _get_json(
         f"https://api.sleeper.app/v1/league/{league_id}/traded_picks"
-    ).json()
+    )
     _save_cache(key, data)
     return data
 
@@ -147,7 +158,7 @@ def fetch_survivor_rosters(league_id: int) -> list:
     cached = _load_cache(key)
     if cached is not None:
         return cached
-    data = requests.get(f"https://api.sleeper.app/v1/league/{league_id}/rosters").json()
+    data = _get_json(f"https://api.sleeper.app/v1/league/{league_id}/rosters")
     _save_cache(key, data)
     return data
 
@@ -157,7 +168,7 @@ def fetch_survivor_users(league_id: int) -> list:
     cached = _load_cache(key)
     if cached is not None:
         return cached
-    data = requests.get(f"https://api.sleeper.app/v1/league/{league_id}/users").json()
+    data = _get_json(f"https://api.sleeper.app/v1/league/{league_id}/users")
     _save_cache(key, data)
     return data
 
@@ -167,9 +178,9 @@ def fetch_matchups_json(league_id: int, week: int) -> list:
     cached = _load_cache(key)
     if cached is not None:
         return cached
-    data = requests.get(
+    data = _get_json(
         f"https://api.sleeper.app/v1/league/{league_id}/matchups/{week}"
-    ).json()
+    )
     _save_cache(key, data)
     return data
 
@@ -253,18 +264,20 @@ def load_data_for_year(year: int, max_week: int = 18, verbose: bool = True):
             print(f"  Week {w}/{max_week}…", end="\r")
         try:
             wk = core.Week(w, league_obj)
-            # Only keep weeks that have data (empty matchup JSON = season hasn't reached that week)
-            if not wk.json:
-                break
-            # Skip weeks where every entry has matchup_id=None (Sleeper returns roster
-            # score data for all NFL weeks even after the fantasy season ends)
-            if all(m.get('matchup_id') is None for m in wk.json):
-                break
-            weeks_dict[w] = wk
-        except Exception as e:
-            if verbose:
-                print(f"\n  Week {w}: skipped ({e})")
-            continue
+        except requests.RequestException as e:
+            # A network blip would otherwise leave a silent hole in the season —
+            # fail the whole year load so the caller can retry, not cache a lie.
+            raise RuntimeError(
+                f"Failed to fetch {year} week {w} from the Sleeper API: {e}"
+            ) from e
+        # Only keep weeks that have data (empty matchup JSON = season hasn't reached that week)
+        if not wk.json:
+            break
+        # Skip weeks where every entry has matchup_id=None (Sleeper returns roster
+        # score data for all NFL weeks even after the fantasy season ends)
+        if all(m.get('matchup_id') is None for m in wk.json):
+            break
+        weeks_dict[w] = wk
 
     if verbose:
         print(f"\n  Building Season object…")

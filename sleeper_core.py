@@ -252,30 +252,23 @@ MARGIN_HBAR_MED = dict(t=130, b=100, l=180, r=40)   # horizontal bar, medium-len
 MARGIN_HBAR     = dict(t=130, b=100, l=200, r=40)   # horizontal bar, long labels
 # ─────────────────────────────────────────────────────────────────────────────
 
-# ── Roster IDs ───────────────────────────────────────────────────────────────
-roster_ids_2019 = {1: 'bgmaddox', 2: 'jlglover', 3: 'akbrown29', 4: 'RascalHazard',
- 5: 'BMoreBallers88', 6: 'eegrady', 7: 'YouthPastor', 8: 'BillyRayGonnaGetcha',
- 9: 'GurlyGirls', 10: 'SweetDizzzzzle', 11: 'RossLikeSauce', 12: 'JTizzzzle'}
-roster_ids_2020 = {1: 'bgmaddox', 2: 'jlglover', 3: 'JTizzzzle', 4: 'RascalHazard',
- 5: 'BMoreBallers88', 6: 'eegrady', 7: 'YouthPastor', 8: 'jhuntmadd',
- 9: 'RReclam', 10: 'SweetDizzzzzle'}
-roster_ids_2021 = {1: 'bgmaddox', 2: 'jlglover', 3: 'JTizzzzle', 4: 'RascalHazard',
- 5: 'BMoreBallers88', 6: 'eegrady', 7: 'YouthPastor', 8: 'jhuntmadd',
- 9: 'RReclam', 10: 'SweetDizzzzzle', 11: 'RossLikeSauce', 12: 'BillyRayGonnaGetcha'}
-roster_ids_2022 = {1: 'bgmaddox', 2: 'jlglover', 3: 'JTizzzzle', 4: 'RascalHazard',
- 5: 'BMoreBallers88', 6: 'eegrady', 7: 'DirtyCommie', 8: 'jhuntmadd',
- 9: 'RReclam', 10: 'sgmaddox', 11: 'RossLikeSauce', 12: 'Just_Here_For_The_Snacks'}
-roster_ids_2023 = {1: 'bgmaddox', 2: 'jlglover', 3: 'JTizzzzle', 4: 'RascalHazard',
- 5: 'BMoreBallers88', 6: 'eegrady', 7: 'DirtyCommie', 8: 'jhuntmadd',
- 9: 'RReclam', 10: 'sgmaddox', 11: 'RossLikeSauce', 12: 'InfiniteJesse'}
-roster_ids_2024 = roster_ids_2023
-roster_ids_2025 = {1: 'bgmaddox', 2: 'jlglover', 3: 'JTizzzzle', 4: 'RascalHazard',
- 5: 'BMoreBallers88', 6: 'eegrady', 7: 'DirtyCommie', 8: 'jhuntmadd',
- 9: 'cosmodromedary', 10: 'sgmaddox', 11: 'RossLikeSauce', 12: 'InfiniteJesse'}
+# ── League configuration (config/*.json) ────────────────────────────────────
+# Seasonal data (roster slots, league IDs, side bets) lives in config/*.json so
+# the yearly "add a season" edit can't break this module's import. JSON object
+# keys are always strings, so years/slots/weeks are converted back to int here.
 
-roster_ids = {2019: roster_ids_2019, 2020: roster_ids_2020, 2021: roster_ids_2021,
-              2022: roster_ids_2022, 2023: roster_ids_2023, 2024: roster_ids_2024,
-              2025: roster_ids_2025}
+_CONFIG_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'config')
+
+def _load_config(filename):
+    with open(os.path.join(_CONFIG_DIR, filename), encoding='utf-8') as f:
+        return json.load(f)
+
+def _intkeys(d):
+    return {int(k): v for k, v in d.items()}
+
+# {year: {roster_slot: username}}
+roster_ids = {int(y): _intkeys(slots)
+              for y, slots in _load_config('roster_ids.json').items()}
 
 
 def get_slot_teamcolors(year, colorway=None):
@@ -313,139 +306,15 @@ positions = {0: 'QB', 1: 'RB1', 2: 'RB2', 3: 'WR1', 4: 'WR2', 5: 'TE', 6: 'WRT',
 position_list = list(positions.values())
 
 # ── League IDs ───────────────────────────────────────────────────────────────
-leagueID_2019 = 464552024260734976
-leagueID_2020 = 601250643570659328
-leagueID_2021 = 726148502706589696
-leagueID_2022 = 861038938700255232
-leagueID_2023 = 992181788975620096
-leagueID_2024 = 1122303756063965184
-leagueID_2025 = 1252049821154410496
-SURVIVOR_LEAGUE_IDS = {
-    2024: 1136802217681539072,
-    2025: 1252050081251590144,
-}
+_league_ids = _load_config('league_ids.json')
+leagueNumbers_Dict = _intkeys(_league_ids['leagues'])          # {year: sleeper_league_id}
+SURVIVOR_LEAGUE_IDS = _intkeys(_league_ids['survivor_leagues'])
 
-leagueNumbers_Dict = {
-    2019: leagueID_2019, 2020: leagueID_2020, 2021: leagueID_2021,
-    2022: leagueID_2022, 2023: leagueID_2023, 2024: leagueID_2024, 2025: leagueID_2025,
-}
+AVAILABLE_YEARS = sorted(leagueNumbers_Dict)
 
-AVAILABLE_YEARS = [2019, 2020, 2021, 2022, 2023, 2024, 2025]
-
-SIDE_BET_SEASONS = {
-    2019: {
-        1  : {"name": 'Hot Start'                                   , "desc": 'Team with the highest score (starters only)'                                               , "winner": 'SweetDizzzzzle'},
-        2  : {"name": 'Look At These TDs'                           , "desc": 'Team with the most offensive touchdowns scored'                                            , "winner": 'jlglover'},
-        3  : {"name": 'Immaculate'                                  , "desc": 'Team with the WR with the most receptions'                                                 , "winner": 'GurlyGirls'},
-        4  : {"name": 'Blackjack'                                   , "desc": 'Team with a starter closest to 21 points without going over'                               , "winner": 'BMoreBallers88'},
-        5  : {"name": 'Biggest Loser'                               , "desc": 'Highest scoring losing team'                                                               , "winner": 'bgmaddox'},
-        6  : {"name": 'Like A Boss'                                 , "desc": 'Team with the biggest margin of victory'                                                   , "winner": 'BMoreBallers88'},
-        7  : {"name": 'Rushmore'                                    , "desc": 'Team with the RB with the most rushing yards'                                              , "winner": 'RascalHazard'},
-        8  : {"name": 'Stay On Target'                              , "desc": 'Team closest to their projected point total (over OR under)'                               , "winner": 'bgmaddox'},
-        9  : {"name": 'Dead Weight'                                 , "desc": 'Winning team with the lowest scoring starting player'                                      , "winner": 'jlglover'},
-        10 : {"name": 'Flexual Healing'                             , "desc": 'Highest FLEX position player score'                                                        , "winner": 'jlglover'},
-        11 : {"name": 'Thirty Flirty & Thriving'                    , "desc": 'Team with any starter closest to 30 points (over OR under)'                                , "winner": 'GurlyGirls'},
-        12 : {"name": 'Go Long'                                     , "desc": 'Team with the Starting QB with the highest completion % (over 10 throws)'                  , "winner": 'bgmaddox'},
-        13 : {"name": "Coffee's For Closers"                        , "desc": 'Team that beats its opponent by the smallest margin of victory'                            , "winner": 'SweetDizzzzzle'},
-        14 : {"name": 'TieBreaker'                                  , "desc": 'Most Accrued Points from 2 randomly chosen positions'                                      , "winner": 'jlglover'},
-    },
-    2020: {
-        1  : {"name": 'Hot Start'                                   , "desc": 'Team with the highest score (starters only)'                                               , "winner": 'JTizzzzle'},
-        2  : {"name": 'Look At These TDs'                           , "desc": 'Team with the most offensive touchdowns scored'                                            , "winner": 'JTizzzzle'},
-        3  : {"name": 'Immaculate'                                  , "desc": 'Team with the WR with the most receptions'                                                 , "winner": 'JTizzzzle & bgmaddox & BMoreBallers88'},
-        4  : {"name": 'Blackjack'                                   , "desc": 'Team with a starter closest to 21 points without going over'                               , "winner": 'JTizzzzle & bgmaddox & RascalHazard'},
-        5  : {"name": 'Biggest Loser'                               , "desc": 'Highest scoring losing team'                                                               , "winner": 'eegrady'},
-        6  : {"name": 'Like A Boss'                                 , "desc": 'Team with the biggest margin of victory'                                                   , "winner": 'jhuntmadd'},
-        7  : {"name": 'Rushmore'                                    , "desc": 'Team with the RB with the most rushing yards'                                              , "winner": 'jhuntmadd'},
-        8  : {"name": 'Stay On Target'                              , "desc": 'Team closest to their projected point total (over OR under)'                               , "winner": 'SweetDizzzzzle'},
-        9  : {"name": 'Dead Weight'                                 , "desc": 'Winning team with the lowest scoring starting player'                                      , "winner": 'BMoreBallers88'},
-        10 : {"name": 'Flexual Healing'                             , "desc": 'Highest FLEX position player score'                                                        , "winner": 'JTizzzzle'},
-        11 : {"name": 'Thirty Flirty & Thriving'                    , "desc": 'Team with any starter closest to 30 points (over OR under)'                                , "winner": 'JTizzzzle'},
-        12 : {"name": 'Go Long'                                     , "desc": 'Team with the Starting QB with the highest completion % (over 10 throws)'                  , "winner": 'SweetDizzzzzle'},
-        13 : {"name": "Coffee's For Closers"                        , "desc": 'Team that beats its opponent by the smallest margin of victory'                            , "winner": 'BMoreBallers88'},
-        14 : {"name": 'TieBreaker'                                  , "desc": 'Most Accrued Points from 2 randomly chosen positions'                                      , "winner": ''},
-    },
-    2021: {
-        1  : {"name": "I'm flying, Jack!"                           , "desc": 'Team with the highest score (starters only)'                                               , "winner": 'jhuntmadd'},
-        2  : {"name": 'Look At These TDs'                           , "desc": 'Team with the most offensive touchdowns scored'                                            , "winner": 'jhuntmadd'},
-        3  : {"name": 'Endzones that way -->'                       , "desc": 'Team with the worst performing defense (active or bench)'                                  , "winner": 'BMoreBallers88'},
-        4  : {"name": 'Blackjack'                                   , "desc": 'Team with a starter closest to 21 points without going over'                               , "winner": 'RReclam'},
-        5  : {"name": 'The Replacements'                            , "desc": 'Team with the highest total points for their bench'                                        , "winner": 'bgmaddox'},
-        6  : {"name": 'Like A Boss'                                 , "desc": 'Team with the biggest margin of victory'                                                   , "winner": 'bgmaddox'},
-        7  : {"name": 'Campus Rush Week'                            , "desc": 'Total rush yards for team (active or bench)'                                               , "winner": 'BillyRayGonnaGetcha'},
-        8  : {"name": 'Soothsayer'                                  , "desc": 'Players submit guesses for their total points by Thursday afternoon. Team closest to projection wins.', "winner": 'RReclam'},
-        9  : {"name": 'Keeping it Tight'                            , "desc": 'Team with best performing tight end (active or bench)'                                     , "winner": 'jhuntmadd'},
-        10 : {"name": 'NFL Franchise Week'                          , "desc": 'Team with the highest point total of players from the same franchise (active or bench)'    , "winner": 'BMoreBallers88'},
-        11 : {"name": 'Please not the Jets (Trade Deadline Week)'   , "desc": 'Team with the most trades this season wins'                                                , "winner": 'YouthPastor & bgmaddox'},
-        12 : {"name": 'Go Long'                                     , "desc": 'Team with the Starting QB with the highest completion % (over 10 throws)'                  , "winner": 'RascalHazard'},
-        13 : {"name": "Coffee's For Closers"                        , "desc": 'Team that beats its opponent by the smallest margin of victory'                            , "winner": 'BMoreBallers88'},
-        14 : {"name": 'Breaking of the Tie (if needed)'             , "desc": 'Choose 3 non-QB players. Highest combined total wins.'                                     , "winner": 'jhuntmadd'},
-    },
-    2022: {
-        1  : {"name": "I'm flying, Jack!"                           , "desc": 'Team with the highest score (starters only)'                                               , "winner": 'JTizzzzle'},
-        2  : {"name": 'Look At These TDs'                           , "desc": 'Team with the most offensive touchdowns scored'                                            , "winner": 'bgmaddox'},
-        3  : {"name": 'Endzones that way -->'                       , "desc": 'Team with the worst performing defense (active or bench)'                                  , "winner": 'jhuntmadd'},
-        4  : {"name": 'Blackjack'                                   , "desc": 'Team with a starter closest to 21 points without going over'                               , "winner": 'DirtyCommie'},
-        5  : {"name": 'The Replacements'                            , "desc": 'Team with the highest total points for their bench'                                        , "winner": 'bgmaddox'},
-        6  : {"name": 'Like A Boss'                                 , "desc": 'Team with the biggest margin of victory'                                                   , "winner": 'DirtyCommie'},
-        7  : {"name": 'Campus Rush Week'                            , "desc": 'Total rush yards for team (active or bench)'                                               , "winner": 'bgmaddox'},
-        8  : {"name": 'Soothsayer'                                  , "desc": 'Players submit guesses for their total points by Thursday afternoon. Team closest to projection wins.', "winner": 'RascalHazard'},
-        9  : {"name": 'Keeping it Tight'                            , "desc": 'Team with best performing tight end (active or bench)'                                     , "winner": 'RossLikeSauce'},
-        10 : {"name": 'NFL Franchise Week'                          , "desc": 'Team with the highest point total of players from the same franchise (active or bench)'    , "winner": 'sgmaddox'},
-        11 : {"name": 'Please not the Jets (Trade Deadline Week)'   , "desc": 'Team with the most trades this season wins'                                                , "winner": 'BMoreBallers88 & RReclam & jhuntmadd'},
-        12 : {"name": 'Go Long'                                     , "desc": 'Team with the Starting QB with the highest completion % (over 10 throws)'                  , "winner": 'eegrady'},
-        13 : {"name": "Coffee's For Closers"                        , "desc": 'Team that beats its opponent by the smallest margin of victory'                            , "winner": 'JTizzzzle'},
-        14 : {"name": 'Breaking of the Tie (if needed)'             , "desc": 'Choose 3 non-QB players. Highest combined total wins.'                                     , "winner": ''},
-    },
-    2023: {
-        1  : {"name": "I'm flying, Jack!"                           , "desc": 'Team with the highest score (starters only)'                                               , "winner": 'BMoreBallers88'},
-        2  : {"name": 'Look At These TDs'                           , "desc": 'Team with the most offensive touchdowns scored'                                            , "winner": 'DirtyCommie'},
-        3  : {"name": 'Endzones that way -->'                       , "desc": 'Team with the worst performing defense (active or bench)'                                  , "winner": 'jhuntmadd & bgmaddox'},
-        4  : {"name": 'Blackjack'                                   , "desc": 'Team with a starter closest to 21 points without going over'                               , "winner": 'BMoreBallers88'},
-        5  : {"name": 'The Replacements'                            , "desc": 'Team with the highest total points for their bench'                                        , "winner": 'jhuntmadd'},
-        6  : {"name": 'Like A Boss'                                 , "desc": 'Team with the biggest margin of victory'                                                   , "winner": 'RReclam'},
-        7  : {"name": 'Campus Rush Week'                            , "desc": 'Total rush yards for team (active or bench)'                                               , "winner": 'jlglover'},
-        8  : {"name": 'Soothsayer'                                  , "desc": 'Players submit guesses for their total points by Saturday afternoon. Team closest to projection wins.', "winner": 'BMoreBallers88'},
-        9  : {"name": 'Keeping it Tight'                            , "desc": 'Team with best performing tight end (active or bench)'                                     , "winner": 'eegrady'},
-        10 : {"name": 'NFL Franchise Week'                          , "desc": 'Team with the highest point total of players from the same franchise (active or bench)'    , "winner": 'BMoreBallers88'},
-        11 : {"name": 'Please not the Jets (Trade Deadline Week)'   , "desc": 'Team with the most trades this season wins'                                                , "winner": 'BMoreBallers88'},
-        12 : {"name": 'Go Long'                                     , "desc": 'Team with the Starting QB with the highest completion % (over 10 throws)'                  , "winner": 'RascalHazard'},
-        13 : {"name": "Coffee's For Closers"                        , "desc": 'Team that beats its opponent by the smallest margin of victory'                            , "winner": ''},
-        14 : {"name": 'Breaking of the Tie (if needed)'             , "desc": 'Choose 3 non-QB players. Highest combined total wins.'                                     , "winner": ''},
-    },
-    2024: {
-        1  : {"name": "I'm flying, Jack!"                           , "desc": 'Team with the highest score (starters only)'                                               , "winner": 'jlglover'},
-        2  : {"name": 'Look At These TDs'                           , "desc": 'Team with the most offensive touchdowns scored'                                            , "winner": 'bgmaddox'},
-        3  : {"name": 'Endzones that way -->'                       , "desc": 'Team with the worst performing defense (active or bench)'                                  , "winner": 'JTizzzzle'},
-        4  : {"name": 'Blackjack'                                   , "desc": 'Team with a starter closest to 21 points without going over'                               , "winner": 'jhuntmadd'},
-        5  : {"name": 'The Replacements'                            , "desc": 'Team with the highest total points for their bench'                                        , "winner": 'sgmaddox'},
-        6  : {"name": 'Like A Boss'                                 , "desc": 'Team with the biggest margin of victory'                                                   , "winner": 'bgmaddox'},
-        7  : {"name": 'Campus Rush Week'                            , "desc": 'Total rush yards for team (active or bench)'                                               , "winner": 'eegrady'},
-        8  : {"name": 'Soothsayer'                                  , "desc": 'Players submit guesses for their total points by Thursday afternoon. Team closest to projection wins.', "winner": 'sgmaddox'},
-        9  : {"name": 'Keeping it Tight'                            , "desc": 'Team with best performing tight end (active or bench)'                                     , "winner": 'JTizzzzle'},
-        10 : {"name": 'NFL Franchise Week'                          , "desc": 'Team with the highest point total of players from the same franchise (active or bench)'    , "winner": 'RossLikeSauce'},
-        11 : {"name": 'Please not the Jets (Trade Deadline Week)'   , "desc": 'Team with the most trades this season wins'                                                , "winner": 'jlglover'},
-        12 : {"name": 'Go Long'                                     , "desc": 'Team with the Starting QB with the highest completion % (over 10 throws)'                  , "winner": 'RossLikeSauce'},
-        13 : {"name": "Coffee's For Closers"                        , "desc": 'Team that beats its opponent by the smallest margin of victory'                            , "winner": 'RReclam'},
-        14 : {"name": 'Breaking of the Tie (if needed)'             , "desc": 'Choose 3 non-QB players. Highest combined total wins.'                                     , "winner": 'RossLikeSauce'},
-    },
-    2025: {
-        1:  {"name": "I'm Flying, Jack!",         "desc": "Team with the highest score (starters only)",                                                  "winner": "cosmodromedary"},
-        2:  {"name": "Look At These TDs",          "desc": "Team with the most offensive touchdowns scored",                                               "winner": "DirtyCommie"},
-        3:  {"name": "Big Helpers, Too",           "desc": "Most combined points with starting D/ST & Kicker",                                            "winner": "jhuntmadd"},
-        4:  {"name": "Blackjack",                  "desc": "Team with a starter closest to 21 points without going over",                                 "winner": "sgmaddox & jhuntmadd"},
-        5:  {"name": "The Replacements",           "desc": "Team with the highest total points for their bench",                                           "winner": "DirtyCommie"},
-        6:  {"name": "The Boom & Bust",            "desc": "Largest point differential between single highest and lowest-scoring starter",                 "winner": "eegrady"},
-        7:  {"name": "Campus Rush Week",           "desc": "Highest total rush yards for team (active or bench)",                                          "winner": "bgmaddox"},
-        8:  {"name": "All Hands on Deck",          "desc": "Team with the most starting players who score over 15 points",                                 "winner": "bgmaddox"},
-        9:  {"name": "The Old Man & Young Buck",   "desc": "Best combined score from a starting player over 30 and a rookie",                             "winner": "JTizzzzle"},
-        10: {"name": "NFL Franchise Week",         "desc": "Team with highest point total of players from the same NFL franchise (active or bench)",       "winner": "DirtyCommie"},
-        11: {"name": "Please Not the Jets",        "desc": "Trade Deadline Week — team with the most trades this season wins",                             "winner": "jhuntmadd & BMoreBallers88"},
-        12: {"name": "Go Long",                    "desc": "Starting QB with the highest completion % (over 10 throws)",                                   "winner": "bgmaddox"},
-        13: {"name": "Coffee's For Closers",       "desc": "Team that beats its opponent by the smallest margin of victory",                               "winner": ""},
-        14: {"name": "Breaking of the Tie",        "desc": "If needed — choose 3 non-QB players; highest combined total wins",                            "winner": ""},
-    }
-}
+# {year: {week: {"name": ..., "desc": ..., "winner": ...}}}
+SIDE_BET_SEASONS = {int(y): _intkeys(weeks)
+                    for y, weeks in _load_config('side_bet_seasons.json').items()}
 
 # ── Global Match Dicts (populated as Week objects are created) ───────────────
 Matches_2019 = {}; Matches_2020 = {}; Matches_2021 = {}; Matches_2022 = {}
@@ -560,9 +429,10 @@ class League:
         self.Teams = dict(zip(self.Members.player_code,self.Members.display_name))
 
     def ImportWeek(self, week):
-        week_response = requests.get(f'https://api.sleeper.app/v1/league/{self.id}/matchups/{week}')
-        week_json = week_response.json()
-        return week_json
+        week_response = requests.get(
+            f'https://api.sleeper.app/v1/league/{self.id}/matchups/{week}', timeout=30)
+        week_response.raise_for_status()
+        return week_response.json()
     
     def ScheduleFormater(self):
         self.schedule['gametime_gameday'] = self.schedule['gameday'] + ' ' + self.schedule['gametime']
@@ -587,7 +457,9 @@ class League:
     
     def Draft(self):
         draft_id = self.league_settings['draft_id']
-        draft_request = requests.get(f'https://api.sleeper.app/v1/draft/{draft_id}/picks')
+        draft_request = requests.get(
+            f'https://api.sleeper.app/v1/draft/{draft_id}/picks', timeout=30)
+        draft_request.raise_for_status()
         draft_json = draft_request.json()
         draft_json_normal = json_normalize(draft_json)
         draft_json_normal.roster_id = draft_json_normal['roster_id'].map(self.Teams)
@@ -621,9 +493,10 @@ class Week:
             
     
     def ImportWeek(self):
-        week_response = requests.get(f'https://api.sleeper.app/v1/league/{self.id}/matchups/{self.week}')
-        week_json = week_response.json()
-        self.json = week_json
+        week_response = requests.get(
+            f'https://api.sleeper.app/v1/league/{self.id}/matchups/{self.week}', timeout=30)
+        week_response.raise_for_status()
+        self.json = week_response.json()
 
     def SetTeamColors(self, color_dict:dict = None):
         self.teamcolors = get_slot_teamcolors(self.year)
@@ -3753,7 +3626,7 @@ class AllTime:
         return result
     
     def OppWinPercentageTable(self):
-        year_roster = roster_ids.get(self.year, roster_ids_2025)
+        year_roster = roster_ids.get(self.year, roster_ids[max(roster_ids)])
         all_teams = list(year_roster.values())
         result = pd.pivot_table(self.Matches, values='Won',index='Team',columns='Opp_team',aggfunc='mean').round(2).fillna('')
         result = result[result.columns.intersection(year_roster.values())].reset_index()

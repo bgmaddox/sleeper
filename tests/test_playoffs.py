@@ -77,38 +77,38 @@ class TestBreakoutPlayerID:
 class TestBracketFetchers:
 
     def test_fetch_winners_bracket_returns_list(self):
-        result = dl.fetch_winners_bracket(core.leagueID_2025)
+        result = dl.fetch_winners_bracket(core.leagueNumbers_Dict[2025])
         assert isinstance(result, list), "fetch_winners_bracket should return a list"
 
     def test_fetch_losers_bracket_returns_list(self):
-        result = dl.fetch_losers_bracket(core.leagueID_2025)
+        result = dl.fetch_losers_bracket(core.leagueNumbers_Dict[2025])
         assert isinstance(result, list), "fetch_losers_bracket should return a list"
 
     def test_winners_bracket_has_entries(self):
-        result = dl.fetch_winners_bracket(core.leagueID_2025)
+        result = dl.fetch_winners_bracket(core.leagueNumbers_Dict[2025])
         assert len(result) > 0, "Winners bracket is empty"
 
     def test_losers_bracket_has_entries(self):
-        result = dl.fetch_losers_bracket(core.leagueID_2025)
+        result = dl.fetch_losers_bracket(core.leagueNumbers_Dict[2025])
         assert len(result) > 0, "Losers bracket is empty"
 
     def test_winners_bracket_has_three_rounds(self):
-        result = dl.fetch_winners_bracket(core.leagueID_2025)
+        result = dl.fetch_winners_bracket(core.leagueNumbers_Dict[2025])
         rounds = {m['r'] for m in result}
         assert rounds == {1, 2, 3}, f"Expected rounds {{1,2,3}}, got {rounds}"
 
     def test_losers_bracket_has_three_rounds(self):
-        result = dl.fetch_losers_bracket(core.leagueID_2025)
+        result = dl.fetch_losers_bracket(core.leagueNumbers_Dict[2025])
         rounds = {m['r'] for m in result}
         assert rounds == {1, 2, 3}, f"Expected rounds {{1,2,3}}, got {rounds}"
 
     def test_winners_bracket_match_count_for_6_teams(self):
-        result = dl.fetch_winners_bracket(core.leagueID_2025)
+        result = dl.fetch_winners_bracket(core.leagueNumbers_Dict[2025])
         assert len(result) == 7, \
             f"6-team bracket should have 7 matches, got {len(result)}"
 
     def test_bracket_entries_have_required_keys(self):
-        result = dl.fetch_winners_bracket(core.leagueID_2025)
+        result = dl.fetch_winners_bracket(core.leagueNumbers_Dict[2025])
         required = {'r', 'm', 't1', 't2'}
         for entry in result:
             missing = required - set(entry.keys())
@@ -116,7 +116,7 @@ class TestBracketFetchers:
 
     def test_settled_bracket_has_no_null_winners(self):
         # 2025 is a completed season — all w/l fields should be filled
-        result = dl.fetch_winners_bracket(core.leagueID_2025)
+        result = dl.fetch_winners_bracket(core.leagueNumbers_Dict[2025])
         for entry in result:
             assert entry.get('w') is not None, \
                 f"Match {entry['m']} has null winner in settled bracket"
@@ -124,7 +124,7 @@ class TestBracketFetchers:
                 f"Match {entry['m']} has null loser in settled bracket"
 
     def test_championship_match_has_placement_1(self):
-        result = dl.fetch_winners_bracket(core.leagueID_2025)
+        result = dl.fetch_winners_bracket(core.leagueNumbers_Dict[2025])
         champ_matches = [m for m in result if m.get('p') == 1]
         assert len(champ_matches) == 1, \
             f"Expected exactly 1 championship match (p=1), got {len(champ_matches)}"

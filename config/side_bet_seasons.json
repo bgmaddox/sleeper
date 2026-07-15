@@ -1,0 +1,506 @@
+{
+  "2019": {
+    "1": {
+      "name": "Hot Start",
+      "desc": "Team with the highest score (starters only)",
+      "winner": "SweetDizzzzzle"
+    },
+    "2": {
+      "name": "Look At These TDs",
+      "desc": "Team with the most offensive touchdowns scored",
+      "winner": "jlglover"
+    },
+    "3": {
+      "name": "Immaculate",
+      "desc": "Team with the WR with the most receptions",
+      "winner": "GurlyGirls"
+    },
+    "4": {
+      "name": "Blackjack",
+      "desc": "Team with a starter closest to 21 points without going over",
+      "winner": "BMoreBallers88"
+    },
+    "5": {
+      "name": "Biggest Loser",
+      "desc": "Highest scoring losing team",
+      "winner": "bgmaddox"
+    },
+    "6": {
+      "name": "Like A Boss",
+      "desc": "Team with the biggest margin of victory",
+      "winner": "BMoreBallers88"
+    },
+    "7": {
+      "name": "Rushmore",
+      "desc": "Team with the RB with the most rushing yards",
+      "winner": "RascalHazard"
+    },
+    "8": {
+      "name": "Stay On Target",
+      "desc": "Team closest to their projected point total (over OR under)",
+      "winner": "bgmaddox"
+    },
+    "9": {
+      "name": "Dead Weight",
+      "desc": "Winning team with the lowest scoring starting player",
+      "winner": "jlglover"
+    },
+    "10": {
+      "name": "Flexual Healing",
+      "desc": "Highest FLEX position player score",
+      "winner": "jlglover"
+    },
+    "11": {
+      "name": "Thirty Flirty & Thriving",
+      "desc": "Team with any starter closest to 30 points (over OR under)",
+      "winner": "GurlyGirls"
+    },
+    "12": {
+      "name": "Go Long",
+      "desc": "Team with the Starting QB with the highest completion % (over 10 throws)",
+      "winner": "bgmaddox"
+    },
+    "13": {
+      "name": "Coffee's For Closers",
+      "desc": "Team that beats its opponent by the smallest margin of victory",
+      "winner": "SweetDizzzzzle"
+    },
+    "14": {
+      "name": "TieBreaker",
+      "desc": "Most Accrued Points from 2 randomly chosen positions",
+      "winner": "jlglover"
+    }
+  },
+  "2020": {
+    "1": {
+      "name": "Hot Start",
+      "desc": "Team with the highest score (starters only)",
+      "winner": "JTizzzzle"
+    },
+    "2": {
+      "name": "Look At These TDs",
+      "desc": "Team with the most offensive touchdowns scored",
+      "winner": "JTizzzzle"
+    },
+    "3": {
+      "name": "Immaculate",
+      "desc": "Team with the WR with the most receptions",
+      "winner": "JTizzzzle & bgmaddox & BMoreBallers88"
+    },
+    "4": {
+      "name": "Blackjack",
+      "desc": "Team with a starter closest to 21 points without going over",
+      "winner": "JTizzzzle & bgmaddox & RascalHazard"
+    },
+    "5": {
+      "name": "Biggest Loser",
+      "desc": "Highest scoring losing team",
+      "winner": "eegrady"
+    },
+    "6": {
+      "name": "Like A Boss",
+      "desc": "Team with the biggest margin of victory",
+      "winner": "jhuntmadd"
+    },
+    "7": {
+      "name": "Rushmore",
+      "desc": "Team with the RB with the most rushing yards",
+      "winner": "jhuntmadd"
+    },
+    "8": {
+      "name": "Stay On Target",
+      "desc": "Team closest to their projected point total (over OR under)",
+      "winner": "SweetDizzzzzle"
+    },
+    "9": {
+      "name": "Dead Weight",
+      "desc": "Winning team with the lowest scoring starting player",
+      "winner": "BMoreBallers88"
+    },
+    "10": {
+      "name": "Flexual Healing",
+      "desc": "Highest FLEX position player score",
+      "winner": "JTizzzzle"
+    },
+    "11": {
+      "name": "Thirty Flirty & Thriving",
+      "desc": "Team with any starter closest to 30 points (over OR under)",
+      "winner": "JTizzzzle"
+    },
+    "12": {
+      "name": "Go Long",
+      "desc": "Team with the Starting QB with the highest completion % (over 10 throws)",
+      "winner": "SweetDizzzzzle"
+    },
+    "13": {
+      "name": "Coffee's For Closers",
+      "desc": "Team that beats its opponent by the smallest margin of victory",
+      "winner": "BMoreBallers88"
+    },
+    "14": {
+      "name": "TieBreaker",
+      "desc": "Most Accrued Points from 2 randomly chosen positions",
+      "winner": ""
+    }
+  },
+  "2021": {
+    "1": {
+      "name": "I'm flying, Jack!",
+      "desc": "Team with the highest score (starters only)",
+      "winner": "jhuntmadd"
+    },
+    "2": {
+      "name": "Look At These TDs",
+      "desc": "Team with the most offensive touchdowns scored",
+      "winner": "jhuntmadd"
+    },
+    "3": {
+      "name": "Endzones that way -->",
+      "desc": "Team with the worst performing defense (active or bench)",
+      "winner": "BMoreBallers88"
+    },
+    "4": {
+      "name": "Blackjack",
+      "desc": "Team with a starter closest to 21 points without going over",
+      "winner": "RReclam"
+    },
+    "5": {
+      "name": "The Replacements",
+      "desc": "Team with the highest total points for their bench",
+      "winner": "bgmaddox"
+    },
+    "6": {
+      "name": "Like A Boss",
+      "desc": "Team with the biggest margin of victory",
+      "winner": "bgmaddox"
+    },
+    "7": {
+      "name": "Campus Rush Week",
+      "desc": "Total rush yards for team (active or bench)",
+      "winner": "BillyRayGonnaGetcha"
+    },
+    "8": {
+      "name": "Soothsayer",
+      "desc": "Players submit guesses for their total points by Thursday afternoon. Team closest to projection wins.",
+      "winner": "RReclam"
+    },
+    "9": {
+      "name": "Keeping it Tight",
+      "desc": "Team with best performing tight end (active or bench)",
+      "winner": "jhuntmadd"
+    },
+    "10": {
+      "name": "NFL Franchise Week",
+      "desc": "Team with the highest point total of players from the same franchise (active or bench)",
+      "winner": "BMoreBallers88"
+    },
+    "11": {
+      "name": "Please not the Jets (Trade Deadline Week)",
+      "desc": "Team with the most trades this season wins",
+      "winner": "YouthPastor & bgmaddox"
+    },
+    "12": {
+      "name": "Go Long",
+      "desc": "Team with the Starting QB with the highest completion % (over 10 throws)",
+      "winner": "RascalHazard"
+    },
+    "13": {
+      "name": "Coffee's For Closers",
+      "desc": "Team that beats its opponent by the smallest margin of victory",
+      "winner": "BMoreBallers88"
+    },
+    "14": {
+      "name": "Breaking of the Tie (if needed)",
+      "desc": "Choose 3 non-QB players. Highest combined total wins.",
+      "winner": "jhuntmadd"
+    }
+  },
+  "2022": {
+    "1": {
+      "name": "I'm flying, Jack!",
+      "desc": "Team with the highest score (starters only)",
+      "winner": "JTizzzzle"
+    },
+    "2": {
+      "name": "Look At These TDs",
+      "desc": "Team with the most offensive touchdowns scored",
+      "winner": "bgmaddox"
+    },
+    "3": {
+      "name": "Endzones that way -->",
+      "desc": "Team with the worst performing defense (active or bench)",
+      "winner": "jhuntmadd"
+    },
+    "4": {
+      "name": "Blackjack",
+      "desc": "Team with a starter closest to 21 points without going over",
+      "winner": "DirtyCommie"
+    },
+    "5": {
+      "name": "The Replacements",
+      "desc": "Team with the highest total points for their bench",
+      "winner": "bgmaddox"
+    },
+    "6": {
+      "name": "Like A Boss",
+      "desc": "Team with the biggest margin of victory",
+      "winner": "DirtyCommie"
+    },
+    "7": {
+      "name": "Campus Rush Week",
+      "desc": "Total rush yards for team (active or bench)",
+      "winner": "bgmaddox"
+    },
+    "8": {
+      "name": "Soothsayer",
+      "desc": "Players submit guesses for their total points by Thursday afternoon. Team closest to projection wins.",
+      "winner": "RascalHazard"
+    },
+    "9": {
+      "name": "Keeping it Tight",
+      "desc": "Team with best performing tight end (active or bench)",
+      "winner": "RossLikeSauce"
+    },
+    "10": {
+      "name": "NFL Franchise Week",
+      "desc": "Team with the highest point total of players from the same franchise (active or bench)",
+      "winner": "sgmaddox"
+    },
+    "11": {
+      "name": "Please not the Jets (Trade Deadline Week)",
+      "desc": "Team with the most trades this season wins",
+      "winner": "BMoreBallers88 & RReclam & jhuntmadd"
+    },
+    "12": {
+      "name": "Go Long",
+      "desc": "Team with the Starting QB with the highest completion % (over 10 throws)",
+      "winner": "eegrady"
+    },
+    "13": {
+      "name": "Coffee's For Closers",
+      "desc": "Team that beats its opponent by the smallest margin of victory",
+      "winner": "JTizzzzle"
+    },
+    "14": {
+      "name": "Breaking of the Tie (if needed)",
+      "desc": "Choose 3 non-QB players. Highest combined total wins.",
+      "winner": ""
+    }
+  },
+  "2023": {
+    "1": {
+      "name": "I'm flying, Jack!",
+      "desc": "Team with the highest score (starters only)",
+      "winner": "BMoreBallers88"
+    },
+    "2": {
+      "name": "Look At These TDs",
+      "desc": "Team with the most offensive touchdowns scored",
+      "winner": "DirtyCommie"
+    },
+    "3": {
+      "name": "Endzones that way -->",
+      "desc": "Team with the worst performing defense (active or bench)",
+      "winner": "jhuntmadd & bgmaddox"
+    },
+    "4": {
+      "name": "Blackjack",
+      "desc": "Team with a starter closest to 21 points without going over",
+      "winner": "BMoreBallers88"
+    },
+    "5": {
+      "name": "The Replacements",
+      "desc": "Team with the highest total points for their bench",
+      "winner": "jhuntmadd"
+    },
+    "6": {
+      "name": "Like A Boss",
+      "desc": "Team with the biggest margin of victory",
+      "winner": "RReclam"
+    },
+    "7": {
+      "name": "Campus Rush Week",
+      "desc": "Total rush yards for team (active or bench)",
+      "winner": "jlglover"
+    },
+    "8": {
+      "name": "Soothsayer",
+      "desc": "Players submit guesses for their total points by Saturday afternoon. Team closest to projection wins.",
+      "winner": "BMoreBallers88"
+    },
+    "9": {
+      "name": "Keeping it Tight",
+      "desc": "Team with best performing tight end (active or bench)",
+      "winner": "eegrady"
+    },
+    "10": {
+      "name": "NFL Franchise Week",
+      "desc": "Team with the highest point total of players from the same franchise (active or bench)",
+      "winner": "BMoreBallers88"
+    },
+    "11": {
+      "name": "Please not the Jets (Trade Deadline Week)",
+      "desc": "Team with the most trades this season wins",
+      "winner": "BMoreBallers88"
+    },
+    "12": {
+      "name": "Go Long",
+      "desc": "Team with the Starting QB with the highest completion % (over 10 throws)",
+      "winner": "RascalHazard"
+    },
+    "13": {
+      "name": "Coffee's For Closers",
+      "desc": "Team that beats its opponent by the smallest margin of victory",
+      "winner": ""
+    },
+    "14": {
+      "name": "Breaking of the Tie (if needed)",
+      "desc": "Choose 3 non-QB players. Highest combined total wins.",
+      "winner": ""
+    }
+  },
+  "2024": {
+    "1": {
+      "name": "I'm flying, Jack!",
+      "desc": "Team with the highest score (starters only)",
+      "winner": "jlglover"
+    },
+    "2": {
+      "name": "Look At These TDs",
+      "desc": "Team with the most offensive touchdowns scored",
+      "winner": "bgmaddox"
+    },
+    "3": {
+      "name": "Endzones that way -->",
+      "desc": "Team with the worst performing defense (active or bench)",
+      "winner": "JTizzzzle"
+    },
+    "4": {
+      "name": "Blackjack",
+      "desc": "Team with a starter closest to 21 points without going over",
+      "winner": "jhuntmadd"
+    },
+    "5": {
+      "name": "The Replacements",
+      "desc": "Team with the highest total points for their bench",
+      "winner": "sgmaddox"
+    },
+    "6": {
+      "name": "Like A Boss",
+      "desc": "Team with the biggest margin of victory",
+      "winner": "bgmaddox"
+    },
+    "7": {
+      "name": "Campus Rush Week",
+      "desc": "Total rush yards for team (active or bench)",
+      "winner": "eegrady"
+    },
+    "8": {
+      "name": "Soothsayer",
+      "desc": "Players submit guesses for their total points by Thursday afternoon. Team closest to projection wins.",
+      "winner": "sgmaddox"
+    },
+    "9": {
+      "name": "Keeping it Tight",
+      "desc": "Team with best performing tight end (active or bench)",
+      "winner": "JTizzzzle"
+    },
+    "10": {
+      "name": "NFL Franchise Week",
+      "desc": "Team with the highest point total of players from the same franchise (active or bench)",
+      "winner": "RossLikeSauce"
+    },
+    "11": {
+      "name": "Please not the Jets (Trade Deadline Week)",
+      "desc": "Team with the most trades this season wins",
+      "winner": "jlglover"
+    },
+    "12": {
+      "name": "Go Long",
+      "desc": "Team with the Starting QB with the highest completion % (over 10 throws)",
+      "winner": "RossLikeSauce"
+    },
+    "13": {
+      "name": "Coffee's For Closers",
+      "desc": "Team that beats its opponent by the smallest margin of victory",
+      "winner": "RReclam"
+    },
+    "14": {
+      "name": "Breaking of the Tie (if needed)",
+      "desc": "Choose 3 non-QB players. Highest combined total wins.",
+      "winner": "RossLikeSauce"
+    }
+  },
+  "2025": {
+    "1": {
+      "name": "I'm Flying, Jack!",
+      "desc": "Team with the highest score (starters only)",
+      "winner": "cosmodromedary"
+    },
+    "2": {
+      "name": "Look At These TDs",
+      "desc": "Team with the most offensive touchdowns scored",
+      "winner": "DirtyCommie"
+    },
+    "3": {
+      "name": "Big Helpers, Too",
+      "desc": "Most combined points with starting D/ST & Kicker",
+      "winner": "jhuntmadd"
+    },
+    "4": {
+      "name": "Blackjack",
+      "desc": "Team with a starter closest to 21 points without going over",
+      "winner": "sgmaddox & jhuntmadd"
+    },
+    "5": {
+      "name": "The Replacements",
+      "desc": "Team with the highest total points for their bench",
+      "winner": "DirtyCommie"
+    },
+    "6": {
+      "name": "The Boom & Bust",
+      "desc": "Largest point differential between single highest and lowest-scoring starter",
+      "winner": "eegrady"
+    },
+    "7": {
+      "name": "Campus Rush Week",
+      "desc": "Highest total rush yards for team (active or bench)",
+      "winner": "bgmaddox"
+    },
+    "8": {
+      "name": "All Hands on Deck",
+      "desc": "Team with the most starting players who score over 15 points",
+      "winner": "bgmaddox"
+    },
+    "9": {
+      "name": "The Old Man & Young Buck",
+      "desc": "Best combined score from a starting player over 30 and a rookie",
+      "winner": "JTizzzzle"
+    },
+    "10": {
+      "name": "NFL Franchise Week",
+      "desc": "Team with highest point total of players from the same NFL franchise (active or bench)",
+      "winner": "DirtyCommie"
+    },
+    "11": {
+      "name": "Please Not the Jets",
+      "desc": "Trade Deadline Week — team with the most trades this season wins",
+      "winner": "jhuntmadd & BMoreBallers88"
+    },
+    "12": {
+      "name": "Go Long",
+      "desc": "Starting QB with the highest completion % (over 10 throws)",
+      "winner": "bgmaddox"
+    },
+    "13": {
+      "name": "Coffee's For Closers",
+      "desc": "Team that beats its opponent by the smallest margin of victory",
+      "winner": ""
+    },
+    "14": {
+      "name": "Breaking of the Tie",
+      "desc": "If needed — choose 3 non-QB players; highest combined total wins",
+      "winner": ""
+    }
+  }
+}
