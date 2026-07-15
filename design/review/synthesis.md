@@ -14,7 +14,7 @@ Inputs: `phase-1-notebook-parity.md`, `phase-2-core-library.md`, `phase-3-webapp
 | 1 | Housekeeping & safety net | ✅ done — commits `be22214`/`d8d1f28`/`c52e1f8`; suite green (was 171, now 178) |
 | 2 | ID-based joins (name-join fan-out) | ✅ done — commit `448b256`; all season caches rebuilt; 7 regression tests added |
 | 3 | Optimal-lineup family (`Week.OptimalTeams`, `LineupEfficiency`, LuckChart median) | ✅ done — commit `ff5a3a1`; all season caches rebuilt; 12 regression tests added (`tests/test_optimal.py`). Note: the "copy `Season.OptimalTeams` pooled-flex" advice was wrong — pooled top-6 allows illegal position mixes (e.g. 4 WRs); the correct optimum is positional bests + best remaining FLEX, now used in both Week and Season versions |
-| 4 | All-Time completeness & loading limbo | not started |
+| 4 | All-Time completeness & loading limbo | ✅ done — commit `e509b30`; eager startup load of all years, `OptimalScoresByYear` restored on cache load (efficiency badges live), boot poller re-arms on year switch/refresh, All-Time/Playoffs placeholders self-retry, callbacks read `_data` snapshots, H2H default pair renders on open; 3 regression tests added; no cache rebuild needed (restore reads existing pickles) |
 | 5 | Secrets & deploy posture | ✅ done early (pre-push) — commit `19d6b1d`; secrets in `.env`, credentials rotated, `/debug-error` gated, debug opt-in. Remaining if deploying: systemd `Environment=` on the Pi |
 | 6 | Front-end quick wins (CSS vars, mobile nav, D3 leaks) | not started |
 | 7 | Config to data files + I/O hardening | not started |
