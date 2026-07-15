@@ -855,8 +855,8 @@ class Week:
         Dict_to_Add[self.week] = self.WeeklyNoMatches.reset_index()
         
         
-    def OptimalTeams(self):    
-        OptimalDF = self.Breakout
+    def OptimalTeams(self):
+        OptimalDF = self.Breakout.drop_duplicates(subset=['team', 'player_id'])
 
         position_counts = {
             'QB': 1,
@@ -868,59 +868,27 @@ class Week:
         }
         # Define which positions are eligible for the FLEX spot
         flex_eligible_positions = ['RB', 'WR', 'TE']
+        num_flex_spots = 1
 
-        OptGroups = OptimalDF.groupby(['team', 'position'])
-        DreamGroups = OptimalDF.groupby('position')
-        core_lineup_df = pd.DataFrame()
-        dream_lineup_df = pd.DataFrame()
+        # With a single FLEX slot the true optimum is positional bests first,
+        # then the best remaining flex-eligible player
+        lineup_list = []
+        for team_name, team_df in OptimalDF.groupby('team'):
+            starters = pd.DataFrame()
+            for pos, count in position_counts.items():
+                top_players = team_df[team_df['position'] == pos].nlargest(count, 'points')
+                starters = pd.concat([starters, top_players])
 
-        for name, group in OptGroups:
-            position = name[1]
-            # Use .get() to safely handle positions not in your dictionary (e.g., FLEX)
-            # It will default to 0 if the position isn't found.
-            num_players = position_counts.get(position, 0)
+            flex_pool = team_df[
+                team_df['position'].isin(flex_eligible_positions) &
+                ~team_df.index.isin(starters.index)
+            ]
+            flex = flex_pool.nlargest(num_flex_spots, 'points')
 
-            if num_players > 0:
-                topPlayers = group.sort_values('points', ascending=False).head(num_players)
-                core_lineup_df = pd.concat([core_lineup_df, topPlayers])
+            lineup_list.append(pd.concat([starters, flex]))
 
-        for position, group in DreamGroups:
-            position = name[1]
-            
-            num_players = position_counts.get(position, 0)
-
-            if num_players > 0:
-                dreamPlayers = group.sort_values('points', ascending=False).head(num_players)
-                dream_lineup_df = pd.concat([dream_lineup_df, dreamPlayers])
-
-        # Create a pool of players who are NOT in the core lineup
-        flex_pool_df = OptimalDF.drop(core_lineup_df.index)
-        flex_dream_pool_df = OptimalDF.drop(dream_lineup_df.index)
-
-        # Filter this pool to only include FLEX-eligible positions
-        flex_pool_df = flex_pool_df[flex_pool_df['position'].isin(flex_eligible_positions)]
-        flex_dream_pool_df = flex_dream_pool_df[flex_dream_pool_df['position'].isin(flex_eligible_positions)]
-
-        # For each team, find the single highest-scoring player in the flex_pool_df
-        # The .loc[...idxmax()] pattern is a very efficient way to do this
-        flex_players_df = flex_pool_df.loc[flex_pool_df.groupby('recent_team')['points'].idxmax()]
-        flex_dream_pool_df = flex_dream_pool_df.loc[flex_dream_pool_df['points'].idxmax()]
-
-        # For clarity, let's add a column to show where each player started
-        core_lineup_df['starting_position'] = core_lineup_df['position']
-        flex_players_df['starting_position'] = 'FLEX'
-        dream_lineup_df['starting_position'] = dream_lineup_df['position']
-        flex_dream_pool_df['starting_position'] = 'FLEX'
-
-        # Concatenate the two DataFrames to get the final, complete optimal lineup
-        final_optimal_lineup = pd.concat([core_lineup_df, flex_players_df])
-        if self.year != CURRENT_SEASON:
-            final_dream_team = pd.concat([dream_lineup_df, flex_dream_pool_df])
-            self.DreamTeamDF = final_dream_team
-
-        # Sort for a clean final view
-        final_optimal_lineup = final_optimal_lineup.sort_values(
-            by=['recent_team', 'starting_position'], 
+        final_optimal_lineup = pd.concat(lineup_list).sort_values(
+            by=['team', 'position'],
             ascending=True
         )
 
@@ -940,20 +908,6 @@ class Week:
         Dict_to_Add_To = OptimalScoresByYear[self.year]
         Dict_to_Add_To[self.week] = self.OptimalScoresDF
         
-    def LuckScore(self):
-        SeasonObject = Season_Dict[self.year]
-        WeekRange = [1,self.week+1]
-        Season = SeasonObject.Matches
-        Season = Season[Season['Week'].isin(WeekRange)]
-        self.AverageScores = Season.groupby('Team')['Total'].mean().round(1).rename('Averages')   
-
-        Averages = self.AverageScores
-        Scores = self.WeeklyNoMatches['Total'].round(1)
-        Combo = pd.concat([Averages, Scores], axis = 1)
-        Combo['Luck'] = (Combo['Total'] - Combo['Averages']).round(1)
-        self.LuckScores = Combo
-        
-
     #
     # GRAPHS
     #
@@ -1371,19 +1325,18 @@ class Season:
                 top_player = team_df[team_df['position'] == pos].nlargest(position_counts[pos], 'points')
                 non_flex_starters = pd.concat([non_flex_starters, top_player])
 
-            # --- Part B: Handle the combined RB/WR/TE/FLEX pool ---
-            
-            # Create one big pool of all FLEX-eligible players for the team
-            flex_pool = team_df[team_df['position'].isin(flex_eligible_positions)]
-            
-            # Determine the total number of starters to take from this pool
-            total_flex_group_spots = (position_counts['RB'] + 
-                                    position_counts['WR'] + 
-                                    position_counts['TE'] + 
-                                    num_flex_spots)
+            # --- Part B: Fill RB/WR/TE slots, then best remaining as FLEX ---
+            # (a pooled top-N here can produce illegal position mixes, e.g. 4 WRs)
+            positional_starters = pd.DataFrame()
+            for pos in flex_eligible_positions:
+                top_at_pos = team_df[team_df['position'] == pos].nlargest(position_counts[pos], 'points')
+                positional_starters = pd.concat([positional_starters, top_at_pos])
 
-            # Find the best N players from this combined pool
-            top_flex_group_players = flex_pool.nlargest(total_flex_group_spots, 'points')
+            flex_pool = team_df[
+                team_df['position'].isin(flex_eligible_positions) &
+                ~team_df.index.isin(positional_starters.index)
+            ]
+            top_flex_group_players = pd.concat([positional_starters, flex_pool.nlargest(num_flex_spots, 'points')])
             
             # --- Part C: Combine and build the team's final optimal lineup ---
             team_optimal_lineup = pd.concat([non_flex_starters, top_flex_group_players])
@@ -1537,14 +1490,6 @@ class Season:
 
         WeekObj.OptimalTeams()
         OptimalScores = WeekObj.OptimalScoresDict
-        
-        if team != None:
-            team_score = Scores[team]
-            team_average = AverageScores[team]
-            Power = PowerPercents[team]
-            CurrentRank = PowerRanks[team]
-            PreviousRank = PreviousRanks[team]
-
 
         self.StatusDict = {'Scores':Scores, 'AverageScores':AverageScores, 'LeagueAverage' : LeagueAverage, 'PowerRanks': PowerRanks, 'PreviousRanks': PreviousRanks,
                       'PowerPercents':PowerPercentDict, 'OptimalScores': OptimalScores} 
@@ -1670,8 +1615,8 @@ class Season:
                     , opacity=0.5,
                     line=dict(color="gold", width=2, dash="dash"))
 
-        figScat.add_shape(type="line", x0=df_week['Opp YTD'].min()-15, x1=df_week['Opp YTD'].max()+15, 
-                    y0=median_opp, y1=median_opp, opacity=0.5,
+        figScat.add_shape(type="line", x0=df_week['Opp YTD'].min()-15, x1=df_week['Opp YTD'].max()+15,
+                    y0=median_score, y1=median_score, opacity=0.5,
                     line=dict(color="gold", width=2, dash="dash"))
 
         figScat.update_traces(textposition='top center')
@@ -3034,9 +2979,10 @@ class Season:
         if self.Matches is None or self.Matches.empty:
             return pd.DataFrame()
 
+        # week_x is the fantasy week; week_NFL is NaN for DEF and unmatched players
         week_data = self.BreakoutSeason[
-            self.BreakoutSeason['week_NFL'] == float(week)
-        ].copy()
+            self.BreakoutSeason['week_x'] == week
+        ].drop_duplicates(subset=['team', 'player_id']).copy()
         if week_data.empty:
             return pd.DataFrame()
 
