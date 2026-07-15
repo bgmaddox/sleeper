@@ -4,34 +4,36 @@ Legacy League — Fantasy Football Web App
 Run locally: python app.py  → http://localhost:8050
 Deploy:      gunicorn app:server
 
-SECTION MAP (for targeted edits — grep the # ── markers to jump directly)
-  L58   NFL Stadium Coordinates   — static lat/lon lookup dict
-  L96   Config                    — SECRET_KEY, AVAILABLE_YEARS, theme map
-  L153  Plotly template           — _register_template()
-  L164  Dash / Flask setup        — app, server
-  L176  Auth                      — login route, token helpers, auth gate middleware
-  L311  Data store                — _load_bg, _ensure, _season/_weeks/_matches/_breakout, eager load
-  L388  Helpers                   — _strip, _empty, _card, loading placeholders, etc.
-  L753  League Digest card        — _digest() builds the weekly summary card
-  L857  Layout                    — full app HTML/component tree (html.Div structure)
-  L975  Core callbacks            — boot, year/week/team controls, retry tick, tab router
-  L1289 URL deep-link             — parse ?tab=&year=&week= on initial load
-  L1376 Playoff Odds              — _playoff_key_games_card(), _playoff_odds_card()
-  L1503 Tab: This Week            — _tab_week()
-  L1588 Tab: Season               — _tab_season()
-  L1734 Tab: Players              — _tab_players()
-  L1837 Tab: All-Time             — _tab_alltime()
-  L1907 Tab: Head-to-Head         — _tab_h2h_shell() (inner _h2h() callback at L2356)
-  L1936 Tab: Playoffs             — _tab_playoffs() (winners + losers bracket cards)
-  L2080 Tab: Side Bets            — _tab_sidebets()
-  L2217 Tab: Survivor             — _tab_survivor(), _survivor_win_margin() callback
-  L2451 Toggle callbacks          — luck/timeline/pfa/freq/bench/bump/violin/top-players/playoff-view
-  L2783 D3 store population       — _populate_d3_stores() (snake draft, schedule, matchups)
-  L3070 D3: Bubble Map            — _populate_bubble_data()
-  L3166 D3: Draft Board           — _populate_draft_data()
-  L3229 D3: State Choropleth      — _populate_choropleth_data()
-  L3325 D3: Chord Diagram         — _populate_chord_data()
-  L3409 Run                       — if __name__ == '__main__'
+SECTION MAP — grep the "# ── <name>" marker to jump to a section (no line
+numbers on purpose; they drift). Sections appear in this order:
+
+  NFL Stadium Coordinates                    — static lat/lon lookup dict
+  Config                                     — SECRET_KEY, AVAILABLE_YEARS, theme map
+  Plotly template                            — _register_template()
+  Dash / Flask setup                         — app, server
+  Auth                                       — login route, token helpers, auth gate middleware
+  Data store                                 — _load_bg, _ensure, _season/_weeks/_matches/_breakout, eager load
+  Helpers                                    — _strip, _empty, _card, loading placeholders, etc.
+  League Digest card                         — _digest() builds the weekly summary card
+  Layout                                     — full app HTML/component tree (html.Div structure)
+  Callbacks                                  — boot, year/week/team controls, retry tick, tab router
+  URL deep-link: parse ?tab=&year=&week=     — deep linking on initial load
+  Tab: This Week                             — _tab_week(), playoff odds + key-games cards
+  Tab: Season                                — _tab_season()
+  Tab: Players                               — _tab_players()
+  Tab: All-Time                              — _tab_alltime()
+  Tab: Head-to-Head (shell + inner callback) — _tab_h2h_shell(), _h2h()
+  Tab: Playoffs                              — _tab_playoffs() (winners + losers bracket cards)
+  Tab: Side Bets                             — _tab_sidebets()
+  Tab: Survivor                              — _tab_survivor(), _survivor_win_margin() callback
+  Toggle callbacks                           — luck/timeline/pfa/freq/bench/bump/violin/top-players/playoff-view
+  D3 store population                        — _populate_d3_stores() (snake draft, schedule, matchups)
+  Clientside callbacks (D3 rendering)        — wires D3 renderers to their stores
+  D3 store population — Bubble Map           — _populate_bubble_data()
+  D3 store population — Draft Board          — _populate_draft_data()
+  D3 store population — State Choropleth     — _populate_choropleth_data()
+  D3 store population — Chord Diagram        — _populate_chord_data()
+  Run                                        — if __name__ == '__main__'
 """
 
 import sys

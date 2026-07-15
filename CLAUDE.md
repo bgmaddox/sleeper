@@ -62,7 +62,7 @@ webapp/             — The live Dash web app (active development)
     d3.min.js       — D3 v7 library
 Data/               — NFL player stats CSVs
 Photos&Videos/      — League logos and media assets
-Sleeper_v2.ipynb    — Authoritative notebook (source of sleeper_core.py methods)
+Sleeper_v3.ipynb    — Thin wrapper notebook: imports sleeper_core + data_loader for interactive charts (no logic of its own)
 scripts/            — One-shot utility scripts (e.g. parse_sidebet_xlsx.py)
 design/             — Active planning docs (roadmap.md)
 archive/            — Superseded files: old dashboards, completed plans, prototypes
@@ -134,4 +134,4 @@ Seasonal config lives in `config/*.json` (`roster_ids.json`, `league_ids.json`, 
 | `Data/stats_player_week_2025.csv` | NFL weekly player stats (100+ cols incl. EPA) |
 | `Data/stats_player_regpost_2025.csv` | Regular season + postseason stats |
 
-`Sleeper_v2.ipynb` is the authoritative notebook for chart logic.
+`sleeper_core.py` is the authoritative source for all chart logic. `Sleeper_v3.ipynb` is a thin interactive wrapper around it — never copy logic into the notebook. The retired `Sleeper_v2.ipynb` lives in `archive/`; it is stale except for its PickEm cells, kept as the reference for the planned Pick 'Em webapp page.
