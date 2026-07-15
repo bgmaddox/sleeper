@@ -172,6 +172,26 @@ def fetch_survivor_users(league_id: int) -> list:
     _save_cache(key, data)
     return data
 
+def fetch_pickem_rosters(league_id: int) -> list:
+    """Pick 'Em pool rosters (weekly scores in points_by_leg metadata)."""
+    key = f"pickem_rosters_{league_id}"
+    cached = _load_cache(key)
+    if cached is not None:
+        return cached
+    data = _get_json(f"https://api.sleeper.app/v1/league/{league_id}/rosters")
+    _save_cache(key, data)
+    return data
+
+def fetch_pickem_users(league_id: int) -> list:
+    """Pick 'Em pool users (owner_id → display_name mapping)."""
+    key = f"pickem_users_{league_id}"
+    cached = _load_cache(key)
+    if cached is not None:
+        return cached
+    data = _get_json(f"https://api.sleeper.app/v1/league/{league_id}/users")
+    _save_cache(key, data)
+    return data
+
 def fetch_matchups_json(league_id: int, week: int) -> list:
     """Fetch raw Sleeper matchup JSON for a given week (cached to disk)."""
     key = f"matchups_{league_id}_{week}"
@@ -206,6 +226,17 @@ def load_survivor_for_year(year: int):
     s = core.Survivor(year)
     _save_cache(key, s)
     return s
+
+def load_pickem_for_year(year: int):
+    """Build and return a PickEm object for the given year, disk-cached."""
+    import sleeper_core as core
+    key = f"pickem_{year}"
+    cached = _load_cache(key)
+    if cached is not None:
+        return cached
+    p = core.PickEm(year)
+    _save_cache(key, p)
+    return p
 
 
 # ── High-level data loading ───────────────────────────────────────────────────

@@ -89,6 +89,7 @@ Dash callback → data_loader.load_data_for_year(year)
 - **`Playoffs(league, season)`** — resolves bracket refs, maps roster IDs → names, joins scores and best-player data
 - **`AllTimePlayoffs()`** — aggregates bracket + score data across all seasons; produces `playoff_results` and `playoff_games` dataframes for the all-time charts
 - **`SideBet(league, season, DictofWeeks)`** — per-week side bet charts (Week1–Week14 methods); reads config from `SIDE_BET_SEASONS`
+- **`PickEm(year)`** — Pick 'Em pool weekly scores parsed from roster `points_by_leg` metadata; score race / weekly heatmap / leaderboard charts
 - **`PlayoffCalculator`** — computes per-team playoff probabilities via bitmask enumeration; drives the Playoff Calculator card on This Week tab
 
 Global dicts populated as objects are built:
@@ -101,6 +102,7 @@ Key config dicts (loaded at import from `config/*.json` — edit the JSON, not t
 - `roster_ids` — year → {roster_num: username} for 2019–2025 (`config/roster_ids.json`)
 - `SIDE_BET_SEASONS` — year → {week → {name, desc, winner}} for 2019–2025 (`config/side_bet_seasons.json`)
 - `SURVIVOR_LEAGUE_IDS` — year → Sleeper survivor league ID, 2024–2025 (`config/league_ids.json`)
+- `PICKEM_LEAGUE_IDS` — year → Sleeper pick 'em league ID, 2025 (`config/league_ids.json`)
 
 ### Dashboard tabs
 
@@ -112,6 +114,7 @@ Key config dicts (loaded at import from `config/*.json` — edit the JSON, not t
 6. **Side Bets** — season scoreboard (D3 leaderboard), week navigator, per-week challenge cards with charts; supports all years in `SIDE_BET_SEASONS` (2019–2025)
 7. **Survivor** — survivor pool pick history and elimination tracking (2024–2025)
 8. **Head-to-Head** — all-time matchup history between two selected teams
+9. **Pick 'Em** — weekly pick 'em pool: cumulative score race, weekly scores heatmap, season leaderboard (2025)
 
 ### Theming
 
@@ -134,4 +137,4 @@ Seasonal config lives in `config/*.json` (`roster_ids.json`, `league_ids.json`, 
 | `Data/stats_player_week_2025.csv` | NFL weekly player stats (100+ cols incl. EPA) |
 | `Data/stats_player_regpost_2025.csv` | Regular season + postseason stats |
 
-`sleeper_core.py` is the authoritative source for all chart logic. `Sleeper_v3.ipynb` is a thin interactive wrapper around it — never copy logic into the notebook. The retired `Sleeper_v2.ipynb` lives in `archive/`; it is stale except for its PickEm cells, kept as the reference for the planned Pick 'Em webapp page.
+`sleeper_core.py` is the authoritative source for all chart logic. `Sleeper_v3.ipynb` is a thin interactive wrapper around it — never copy logic into the notebook. The retired `Sleeper_v2.ipynb` lives in `archive/` and is fully stale (its PickEm logic was ported to `sleeper_core.PickEm` in Session 11).

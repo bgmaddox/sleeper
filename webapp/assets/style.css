@@ -657,7 +657,7 @@ html, body {
 
 .tab--week::before, .tab--season::before, .tab--players::before,
 .tab--alltime::before, .tab--h2h::before, .tab--survivor::before,
-.tab--playoffs::before, .tab--sidebets::before {
+.tab--playoffs::before, .tab--sidebets::before, .tab--pickem::before {
   content: '';
   display: inline-block;
   width: 15px;
@@ -681,7 +681,8 @@ html, body {
 .tab--h2h.tab--selected::before,
 .tab--survivor.tab--selected::before,
 .tab--playoffs.tab--selected::before,
-.tab--sidebets.tab--selected::before { background-color: var(--accent); }
+.tab--sidebets.tab--selected::before,
+.tab--pickem.tab--selected::before { background-color: var(--accent); }
 
 .tab--week:hover::before,
 .tab--season:hover::before,
@@ -690,7 +691,8 @@ html, body {
 .tab--h2h:hover::before,
 .tab--survivor:hover::before,
 .tab--playoffs:hover::before,
-.tab--sidebets:hover::before { background-color: var(--text-main); }
+.tab--sidebets:hover::before,
+.tab--pickem:hover::before { background-color: var(--text-main); }
 
 /* Football */
 .tab--week::before {
@@ -732,6 +734,12 @@ html, body {
 .tab--playoffs::before {
   -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='2' y='4' width='4' height='3'/%3E%3Crect x='2' y='10' width='4' height='3'/%3E%3Crect x='2' y='16' width='4' height='3'/%3E%3Crect x='10' y='7' width='4' height='3'/%3E%3Crect x='10' y='16' width='4' height='3'/%3E%3Crect x='18' y='11' width='4' height='3'/%3E%3Cline x1='6' y1='5.5' x2='10' y2='5.5'/%3E%3Cline x1='6' y1='11.5' x2='8' y2='11.5'/%3E%3Cline x1='8' y1='5.5' x2='8' y2='11.5'/%3E%3Cline x1='8' y1='8.5' x2='10' y2='8.5'/%3E%3Cline x1='6' y1='17.5' x2='10' y2='17.5'/%3E%3Cline x1='14' y1='8.5' x2='16' y2='8.5'/%3E%3Cline x1='14' y1='17.5' x2='16' y2='17.5'/%3E%3Cline x1='16' y1='8.5' x2='16' y2='17.5'/%3E%3Cline x1='16' y1='12.5' x2='18' y2='12.5'/%3E%3C/svg%3E");
   mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='2' y='4' width='4' height='3'/%3E%3Crect x='2' y='10' width='4' height='3'/%3E%3Crect x='2' y='16' width='4' height='3'/%3E%3Crect x='10' y='7' width='4' height='3'/%3E%3Crect x='10' y='16' width='4' height='3'/%3E%3Crect x='18' y='11' width='4' height='3'/%3E%3Cline x1='6' y1='5.5' x2='10' y2='5.5'/%3E%3Cline x1='6' y1='11.5' x2='8' y2='11.5'/%3E%3Cline x1='8' y1='5.5' x2='8' y2='11.5'/%3E%3Cline x1='8' y1='8.5' x2='10' y2='8.5'/%3E%3Cline x1='6' y1='17.5' x2='10' y2='17.5'/%3E%3Cline x1='14' y1='8.5' x2='16' y2='8.5'/%3E%3Cline x1='14' y1='17.5' x2='16' y2='17.5'/%3E%3Cline x1='16' y1='8.5' x2='16' y2='17.5'/%3E%3Cline x1='16' y1='12.5' x2='18' y2='12.5'/%3E%3C/svg%3E");
+}
+
+/* Clipboard with checkmark (pick 'em) */
+.tab--pickem::before {
+  -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='5' y='4' width='14' height='18' rx='1.5'/%3E%3Crect x='9' y='2' width='6' height='4' rx='1'/%3E%3Cpolyline points='8.5,12 11,14.5 15.5,9.5'/%3E%3Cline x1='8.5' y1='18' x2='15.5' y2='18'/%3E%3C/svg%3E");
+  mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='5' y='4' width='14' height='18' rx='1.5'/%3E%3Crect x='9' y='2' width='6' height='4' rx='1'/%3E%3Cpolyline points='8.5,12 11,14.5 15.5,9.5'/%3E%3Cline x1='8.5' y1='18' x2='15.5' y2='18'/%3E%3C/svg%3E");
 }
 
 /* Dice (side bets) */

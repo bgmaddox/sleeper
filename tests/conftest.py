@@ -106,6 +106,15 @@ def survivor_2024():
 
 
 @pytest.fixture(scope="session")
+def pickem_2025():
+    """PickEm object for 2025 season. Skips if cache is missing."""
+    path = dl._cache_path("pickem_2025")
+    if not os.path.exists(path):
+        pytest.skip("pickem 2025 cache not found — run data_loader.load_pickem_for_year(2025) once to build it")
+    return dl.load_pickem_for_year(2025)
+
+
+@pytest.fixture(scope="session")
 def playoff_calc_2024(season_2024):
     """PlayoffCalculator for 2024 season at as_of_week=12 (weeks 1–11 complete, weeks 12–14 remaining)."""
     league, season, _ = season_2024

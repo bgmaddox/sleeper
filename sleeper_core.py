@@ -309,6 +309,7 @@ position_list = list(positions.values())
 _league_ids = _load_config('league_ids.json')
 leagueNumbers_Dict = _intkeys(_league_ids['leagues'])          # {year: sleeper_league_id}
 SURVIVOR_LEAGUE_IDS = _intkeys(_league_ids['survivor_leagues'])
+PICKEM_LEAGUE_IDS = _intkeys(_league_ids['pickem_leagues'])
 
 AVAILABLE_YEARS = sorted(leagueNumbers_Dict)
 
@@ -5773,6 +5774,146 @@ class Survivor:
             legend=dict(title='Year'),
             margin=dict(t=80, l=140, r=20, b=50),
             height=max(300, 50 * len(player_order)),
+        )
+        return fig
+
+
+# ── Pick 'Em Pool ─────────────────────────────────────────────────────────────
+
+class PickEm:
+    """Parses Sleeper Pick 'Em pool data.
+
+    Sleeper stores each player's weekly score (number of correct picks) in
+    roster metadata `points_by_leg` — the full season is available there.
+    `previous_picks` only retains the most recent week, so per-pick detail
+    is not reconstructible historically; all charts derive from weekly scores.
+    """
+
+    def __init__(self, year: int):
+        import data_loader
+        self.year = year
+        league_id = PICKEM_LEAGUE_IDS[year]
+        rosters = data_loader.fetch_pickem_rosters(league_id)
+        users   = data_loader.fetch_pickem_users(league_id)
+        self.user_map = {u['user_id']: u['display_name'] for u in users}
+        self._parse(rosters)
+
+    def _parse(self, rosters_json: list):
+        rows = []
+        for roster in rosters_json:
+            owner_id = roster.get('owner_id')
+            username = self.user_map.get(owner_id, owner_id)
+            points_by_leg = (roster.get('metadata') or {}).get('points_by_leg') or {}
+            # Week 0 anchor so cumulative lines start at the origin
+            rows.append({'username': username, 'week': 0, 'points': 0.0})
+            for leg_key, points in points_by_leg.items():
+                rows.append({
+                    'username': username,
+                    'week': int(leg_key.split(':')[-1]),
+                    'points': float(points),
+                })
+
+        data = (
+            pd.DataFrame(rows, columns=['username', 'week', 'points'])
+            .astype({'week': int, 'points': float})
+            .sort_values(['username', 'week'])
+            .reset_index(drop=True)
+        )
+        data['ScoreYTD'] = data.groupby('username')['points'].cumsum()
+        self.Data = data
+
+        played = data[data['week'] > 0]
+        totals = (
+            played.groupby('username')['points'].sum()
+            .sort_values(ascending=False)
+        )
+        # Weeks won: share of weekly first place (ties split evenly)
+        weeks_won = pd.Series(0.0, index=totals.index)
+        for _, wk_df in played.groupby('week'):
+            winners = wk_df[wk_df['points'] == wk_df['points'].max()]['username']
+            for name in winners:
+                weeks_won[name] += 1.0 / len(winners)
+        self.Totals = totals
+        self.WeeksWon = weeks_won
+        self.n_weeks = int(played['week'].max()) if not played.empty else 0
+
+    # ── Chart methods ─────────────────────────────────────────────────────────
+
+    def score_race_fig(self) -> go.Figure:
+        """Cumulative correct picks per player, week by week."""
+        if self.Data.empty:
+            return go.Figure(layout=go.Layout(template='gridiron_ink'))
+        fig = px.line(
+            self.Data, x='week', y='ScoreYTD', color='username',
+            template='gridiron_ink', line_shape='spline', markers=True,
+            title="<b>Pick 'Em Score Race</b>",
+            category_orders={'username': list(self.Totals.index)},
+        )
+        fig.update_traces(
+            line=dict(width=3), marker=dict(size=7, symbol='diamond'),
+            hovertemplate='Week %{x}: %{y} correct<extra>%{fullData.name}</extra>',
+        )
+        fig.update_xaxes(title='Week', dtick=1)
+        fig.update_yaxes(title='Correct Picks (YTD)')
+        fig.update_layout(legend=dict(
+            orientation='h', yanchor='bottom', y=1.02,
+            xanchor='right', x=1, title='',
+        ))
+        return fig
+
+    def weekly_points_fig(self) -> go.Figure:
+        """Annotated heatmap: rows=players, cols=weeks, cells=correct picks."""
+        if self.n_weeks == 0:
+            return go.Figure(layout=go.Layout(template='gridiron_ink'))
+        played = self.Data[self.Data['week'] > 0]
+        # Leader at top; heatmap y-axis draws bottom-up, so reverse
+        player_order = list(self.Totals.index)[::-1]
+        weeks = list(range(1, self.n_weeks + 1))
+        grid = played.pivot_table(index='username', columns='week', values='points')
+        z, text = [], []
+        for name in player_order:
+            row = grid.loc[name] if name in grid.index else pd.Series(dtype=float)
+            z.append([row.get(wk) for wk in weeks])
+            text.append(['' if pd.isna(row.get(wk)) else f'{row.get(wk):g}' for wk in weeks])
+        fig = go.Figure(go.Heatmap(
+            z=z, x=weeks, y=player_order,
+            text=text, texttemplate='%{text}',
+            colorscale=[[0, '#1C3C54'], [1, '#2EE6A8']],
+            showscale=False, xgap=2, ygap=2,
+            hovertemplate='%{y} — Week %{x}: %{z} correct<extra></extra>',
+        ))
+        fig.update_layout(
+            template='gridiron_ink',
+            title=dict(text='<b>Weekly Scores</b>', x=0.5),
+            xaxis=dict(title='Week', dtick=1, side='top'),
+            yaxis=dict(title=None),
+            margin=dict(t=80, l=140, r=20, b=20),
+        )
+        return fig
+
+    def leaderboard_fig(self) -> go.Figure:
+        """Horizontal bar of season totals, annotated with weeks won."""
+        if self.Totals.empty:
+            return go.Figure(layout=go.Layout(template='gridiron_ink'))
+        order = list(self.Totals.index)[::-1]  # leader at top
+        totals = self.Totals[order]
+        labels = [
+            f'{totals[name]:g}  ({self.WeeksWon[name]:g} wk won)'
+            for name in order
+        ]
+        fig = go.Figure(go.Bar(
+            y=order, x=totals.values, orientation='h',
+            marker_color=[coastal_colorway[i % len(coastal_colorway)]
+                          for i in range(len(order))][::-1],
+            text=labels, textposition='outside', cliponaxis=False,
+            hovertemplate='%{y}: %{x} correct picks<extra></extra>',
+        ))
+        fig.update_layout(
+            template='gridiron_ink',
+            title=dict(text='<b>Season Leaderboard</b>', x=0.5),
+            xaxis=dict(title='Total Correct Picks'),
+            yaxis=dict(title=None),
+            margin=dict(t=80, l=140, r=110, b=50),
         )
         return fig
 

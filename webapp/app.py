@@ -26,6 +26,7 @@ numbers on purpose; they drift). Sections appear in this order:
   Tab: Playoffs                              — _tab_playoffs() (winners + losers bracket cards)
   Tab: Side Bets                             — _tab_sidebets()
   Tab: Survivor                              — _tab_survivor(), _survivor_win_margin() callback
+  Tab: Pick 'Em                              — _tab_pickem()
   Toggle callbacks                           — luck/timeline/pfa/freq/bench/bump/violin/top-players/playoff-view
   D3 store population                        — _populate_d3_stores() (snake draft, schedule, matchups)
   Clientside callbacks (D3 rendering)        — wires D3 renderers to their stores
@@ -964,6 +965,7 @@ app.layout = html.Div([
             dcc.Tab(label='Playoffs',     value='tab-playoffs',  className='tab tab--playoffs',  selected_className='tab--selected'),
             dcc.Tab(label='Side Bets',    value='tab-sidebets',  className='tab tab--sidebets',  selected_className='tab--selected'),
             dcc.Tab(label='Survivor',     value='tab-survivor',  className='tab tab--survivor',  selected_className='tab--selected'),
+            dcc.Tab(label="Pick 'Em",     value='tab-pickem',    className='tab tab--pickem',    selected_className='tab--selected'),
         ]),
 
         dcc.Loading(
@@ -1285,6 +1287,7 @@ def _render_tab(tab, year, week, teams, _retry):
     if tab == 'tab-playoffs':  return _tab_playoffs(year)
     if tab == 'tab-sidebets': return _tab_sidebets(year)
     if tab == 'tab-survivor': return _tab_survivor(year)
+    if tab == 'tab-pickem':   return _tab_pickem(year)
     return html.Div('Unknown tab')
 
 
@@ -1311,7 +1314,8 @@ def _parse_url(search):
     tab_map = {'week': 'tab-week', 'season': 'tab-season',
                'players': 'tab-players', 'alltime': 'tab-alltime',
                'h2h': 'tab-h2h', 'playoffs': 'tab-playoffs',
-               'sidebets': 'tab-sidebets', 'survivor': 'tab-survivor'}
+               'sidebets': 'tab-sidebets', 'survivor': 'tab-survivor',
+               'pickem': 'tab-pickem'}
     if tab is not no_update:
         tab = tab_map.get(tab, no_update)
     return tab, year
@@ -2357,6 +2361,63 @@ def _survivor_win_margin(username, survivor_year):
         return fig
     except Exception as e:
         return _err(str(e))
+
+
+# ── Tab: Pick 'Em ─────────────────────────────────────────────────────────────
+
+def _tab_pickem(year):
+    pickem_year = year if year in core.PICKEM_LEAGUE_IDS else max(core.PICKEM_LEAGUE_IDS)
+
+    try:
+        pe = dl.load_pickem_for_year(pickem_year)
+    except Exception as e:
+        traceback.print_exc()
+        return html.Div(f"Could not load Pick 'Em data: {e}", className='error-msg-card')
+
+    n_players = len(pe.Totals)
+    status_label = 'Season Complete' if pe.n_weeks >= 18 else f'Through Week {pe.n_weeks}'
+    leader = pe.Totals.index[0] if n_players else '—'
+
+    def _pchart(method, h=None):
+        try:
+            fig = getattr(pe, method)()
+            if h:
+                fig.update_layout(height=h)
+            fig.update_layout(title=None, width=None)
+            return dcc.Graph(figure=fig, config={'displayModeBar': False, 'responsive': True},
+                             style={'width': '100%'})
+        except Exception as e:
+            return dcc.Graph(figure=_err(str(e)), config={'displayModeBar': False, 'responsive': True},
+                             style={'width': '100%'})
+
+    row1 = html.Div([
+        html.Div('Score Race', className='chart-title'),
+        html.Div('Cumulative correct picks per player, week by week', className='chart-subtitle'),
+        _pchart('score_race_fig', h=480),
+    ], className='chart-card chart-col-full')
+
+    row2 = html.Div([
+        html.Div('Weekly Scores', className='chart-title'),
+        html.Div('Correct picks each week — brighter is better', className='chart-subtitle'),
+        _pchart('weekly_points_fig', h=max(300, 55 * n_players)),
+    ], className='chart-card chart-col-full')
+
+    row3 = html.Div([
+        html.Div('Season Leaderboard', className='chart-title'),
+        html.Div('Total correct picks, with weekly first-place finishes (ties split)', className='chart-subtitle'),
+        _pchart('leaderboard_fig', h=max(280, 55 * n_players)),
+    ], className='chart-card chart-col-full')
+
+    return html.Div([
+        html.Div([
+            html.Div("Pick 'Em Pool", className='chart-title'),
+            html.Div(f'{pickem_year} · {n_players} players · {status_label} · Leader: {leader}',
+                     className='chart-subtitle'),
+        ], className='chart-card chart-col-full', style={'paddingBottom': '8px'}),
+        html.Div([row1], className='charts-row'),
+        html.Div([row2], className='charts-row'),
+        html.Div([row3], className='charts-row'),
+    ])
 
 
 @app.callback(
