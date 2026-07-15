@@ -2,11 +2,19 @@
    All functions receive serialized Python data via Dash dcc.Store.
    Return window.dash_clientside.no_update always (output is the div's data-rendered attr). */
 
-/* Retry helper — waits up to maxMs for a DOM element to appear, then calls fn(el). */
+/* Retry helper — waits up to maxMs for a DOM element to appear, then calls fn(el).
+   Each new wait for the same id cancels any earlier pending wait (last one wins),
+   so repeated store updates while a tab is unmounted can't queue up stacked renders. */
+var _waitTokens = {};
 function _waitForEl(id, fn, maxMs) {
-    var el = document.getElementById(id);
-    if (el) { fn(el); return; }
-    if (maxMs > 0) setTimeout(function() { _waitForEl(id, fn, maxMs - 100); }, 100);
+    var token = (_waitTokens[id] || 0) + 1;
+    _waitTokens[id] = token;
+    (function poll(remaining) {
+        if (_waitTokens[id] !== token) return;   /* superseded by a newer wait */
+        var el = document.getElementById(id);
+        if (el) { fn(el); return; }
+        if (remaining > 0) setTimeout(function() { poll(remaining - 100); }, 100);
+    })(maxMs);
 }
 
 window.dash_clientside = window.dash_clientside || {};
@@ -241,6 +249,9 @@ renderScoreRace: function(data, tabValue) {
         return window.dash_clientside.no_update;
     }
     try {
+    /* Tear down the previous render's autoplay timer and hover listeners —
+       the container element survives re-renders, so they'd accumulate otherwise */
+    if (container._raceCleanup) container._raceCleanup();
     container.innerHTML = '';
 
     d3.select(container).style('position', 'relative');
@@ -338,10 +349,20 @@ renderScoreRace: function(data, tabValue) {
     }, 800);
 
     // Pause on hover
-    container.addEventListener('mouseenter', function() { playing[0] = false; });
-    container.addEventListener('mouseleave', function() {
+    var onEnter = function() { playing[0] = false; };
+    var onLeave = function() {
         if (currentFrame[0] < totalWeeks - 1) playing[0] = true;
-    });
+    };
+    container.addEventListener('mouseenter', onEnter);
+    container.addEventListener('mouseleave', onLeave);
+
+    container._raceCleanup = function() {
+        timer.stop();
+        playing[0] = false;
+        container.removeEventListener('mouseenter', onEnter);
+        container.removeEventListener('mouseleave', onLeave);
+        container._raceCleanup = null;
+    };
 
     } catch(e) { console.error('[ScoreRace]', e); }
     return window.dash_clientside.no_update;

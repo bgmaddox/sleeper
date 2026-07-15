@@ -134,7 +134,7 @@ gridiron_ink_template.layout = go.Layout(
     legend_title_font_color=ink_text_color,
     title=dict(
             font=dict(
-                size=45,
+                size=24,
                 variant="petite-caps",
                 shadow = 'auto'
             ),
@@ -148,12 +148,12 @@ gridiron_ink_template.layout = go.Layout(
             ),
     title_subtitle=dict(
             font=dict(
-                size=30,
+                size=15,
                 #variant="small-caps",
-                
+
             )),
     # --- Sizes ---
-    height=1000,
+    height=580,
     uniformtext_minsize=12,
     uniformtext_mode='hide',
     showlegend=False,
@@ -208,7 +208,7 @@ gridiron_ink_template.layout = go.Layout(
     ),
 
     # --- Margins ---
-    margin=dict(t=130, b=100, l= 80, r=40) ,# Add more space for a prominent title
+    margin=dict(t=60, b=100, l= 80, r=40) ,# Room for title without wasting card space
 
 
 )
