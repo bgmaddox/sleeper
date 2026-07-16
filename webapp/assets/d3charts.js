@@ -17,6 +17,119 @@ function _waitForEl(id, fn, maxMs) {
     })(maxMs);
 }
 
+/* ── Theme — single-sourced from the CSS :root variables in style.css.
+   Read lazily (renderers run long after stylesheets load) and cached. ─────── */
+var _themeCache = null;
+function _theme() {
+    if (_themeCache) return _themeCache;
+    var cs = getComputedStyle(document.documentElement);
+    function v(name, fallback) {
+        var val = cs.getPropertyValue(name).trim();
+        return val || fallback;
+    }
+    _themeCache = {
+        bgDeep:  v('--bg-deep',    '#0d1e2e'),
+        bgPanel: v('--bg-panel',   '#163146'),
+        bgCard:  v('--bg-card',    '#1a3a52'),
+        accent:  v('--accent',     '#FFC300'),
+        text:    v('--text-main',  '#BDE2FF'),
+        muted:   v('--text-muted', '#6a9abf'),
+        border:  v('--border',     '#2e526e'),
+        danger:  v('--danger',     '#F94144'),
+        success: v('--success',    '#90BE6D'),
+        grid:    v('--chart-grid', '#3D5E78'),
+        font:    v('--font-main',  "'Courier New', Courier, monospace"),
+    };
+    return _themeCache;
+}
+
+/* Container guard — returns the element, or schedules a retry of the renderer
+   via _waitForEl and returns null so the caller can bail out. */
+function _getContainer(id, renderFn, args, maxMs) {
+    var el = document.getElementById(id);
+    if (el) return el;
+    _waitForEl(id, function() {
+        renderFn.apply(window.dash_clientside.d3charts, args);
+    }, maxMs);
+    return null;
+}
+
+/* Clears the container, positions it for absolute tooltips, and appends a
+   transparent SVG. With opts.margin returns {svg, g, width, height} where g is
+   the translated plot group and width/height are the inner plot size; without
+   a margin, {svg, width, height} at full container size. */
+function _setupChart(container, opts) {
+    opts = opts || {};
+    container.innerHTML = '';
+    d3.select(container).style('position', 'relative');
+    var m = opts.margin;
+    var width, height, svg;
+    if (m) {
+        width  = container.clientWidth  - m.left - m.right;
+        height = container.clientHeight - m.top  - m.bottom;
+        if (width  <= 0) width  = opts.fallbackW || 700;
+        if (height <= 0) height = opts.fallbackH || 440;
+        svg = d3.select(container).append('svg')
+            .attr('width',  width  + m.left + m.right)
+            .attr('height', height + m.top  + m.bottom)
+            .style('background', 'transparent');
+        var g = svg.append('g').attr('transform', 'translate(' + m.left + ',' + m.top + ')');
+        return { svg: svg, g: g, width: width, height: height };
+    }
+    width  = container.clientWidth  || opts.fallbackW || 800;
+    height = container.clientHeight || opts.fallbackH || 460;
+    svg = d3.select(container).append('svg')
+        .attr('width', width).attr('height', height)
+        .style('background', 'transparent');
+    return { svg: svg, width: width, height: height };
+}
+
+/* Standard chart tooltip div; extraStyles overrides/extends (e.g. max-width). */
+function _makeTooltip(container, extraStyles) {
+    var T = _theme();
+    var tip = d3.select(container).append('div')
+        .style('position', 'absolute')
+        .style('pointer-events', 'none')
+        .style('background', T.bgCard)
+        .style('border', '1px solid ' + T.border)
+        .style('border-radius', '6px')
+        .style('padding', '8px 12px')
+        .style('font-family', T.font)
+        .style('font-size', '12px')
+        .style('color', T.text)
+        .style('opacity', 0)
+        .style('z-index', 10);
+    if (extraStyles) {
+        Object.keys(extraStyles).forEach(function(k) { tip.style(k, extraStyles[k]); });
+    }
+    return tip;
+}
+
+/* Standard axis styling: themed tick text, tick lines, and domain line. */
+function _styleAxis(axisG) {
+    var T = _theme();
+    axisG.selectAll('text').style('fill', T.text).style('font-family', T.font).style('font-size', '11px');
+    axisG.selectAll('line').style('stroke', T.grid);
+    axisG.select('.domain').style('stroke', T.grid);
+    return axisG;
+}
+
+/* Standard Albers USA projection sized to the panel. */
+function _albersProjection(width, height) {
+    return d3.geoAlbersUsa()
+        .scale(Math.min(width / 960, height / 600) * 1070 * 0.85)
+        .translate([width / 2, height / 2]);
+}
+
+/* Fallback message when the us-atlas TopoJSON fetch fails. */
+function _mapUnavailable(svg, width, height) {
+    var T = _theme();
+    svg.append('text').attr('x', width / 2).attr('y', height / 2)
+        .attr('text-anchor', 'middle')
+        .style('fill', T.text).style('font-family', T.font).style('font-size', '14px')
+        .text('Map unavailable — check network connection');
+}
+
 window.dash_clientside = window.dash_clientside || {};
 
 window.dash_clientside.d3charts = {
@@ -25,30 +138,16 @@ window.dash_clientside.d3charts = {
 renderSnakeGraph: function(data, tabValue, mode) {
     if (tabValue !== 'tab-season') return window.dash_clientside.no_update;
     if (!data) return window.dash_clientside.no_update;
-    var container = document.getElementById('d3-snake-container');
-    if (!container) {
-        var _fn = window.dash_clientside.d3charts.renderSnakeGraph.bind(window.dash_clientside.d3charts);
-        _waitForEl('d3-snake-container', function() { _fn(data, tabValue, mode); }, 3000);
-        return window.dash_clientside.no_update;
-    }
-    container.innerHTML = '';
-
+    var container = _getContainer('d3-snake-container', window.dash_clientside.d3charts.renderSnakeGraph, [data, tabValue, mode], 3000);
+    if (!container) return window.dash_clientside.no_update;
+    var T = _theme();
     var usePoints = (mode === 'points') && data.cumulative_pts;
     var fullSeriesMap = usePoints ? data.cumulative_pts : data.series;
     var yLabel    = usePoints ? 'Points' : 'Wins';
 
     var margin = {top: 20, right: 140, bottom: 40, left: usePoints ? 70 : 50};
-    var width  = container.clientWidth  - margin.left - margin.right;
-    var height = container.clientHeight - margin.top  - margin.bottom;
-    if (width <= 0) width  = 700;
-    if (height <= 0) height = 440;
-
-    var svg = d3.select(container).append('svg')
-        .attr('width',  width  + margin.left + margin.right)
-        .attr('height', height + margin.top  + margin.bottom)
-        .style('background', 'transparent');
-
-    var g = svg.append('g').attr('transform', 'translate(' + margin.left + ',' + margin.top + ')');
+    var dims = _setupChart(container, {margin: margin, fallbackH: 440});
+    var svg = dims.svg, g = dims.g, width = dims.width, height = dims.height;
 
     // Clip data at current_week
     var allWeeks = data.weeks;
@@ -71,7 +170,7 @@ renderSnakeGraph: function(data, tabValue, mode) {
     // Gridlines
     g.append('g').attr('class', 'grid')
         .call(d3.axisLeft(y).tickSize(-width).tickFormat(''))
-        .selectAll('line').style('stroke', '#3D5E78').style('stroke-opacity', 0.5);
+        .selectAll('line').style('stroke', T.grid).style('stroke-opacity', 0.5);
     g.select('.grid .domain').remove();
 
     // X Axis
@@ -79,12 +178,7 @@ renderSnakeGraph: function(data, tabValue, mode) {
         .call(d3.axisBottom(x)
             .tickValues(weeks.filter(function(w) { return w > 0; }))
             .tickFormat(function(d) { return 'Wk ' + d; }));
-    xAxisG.selectAll('text')
-        .style('fill', '#BDE2FF')
-        .style('font-family', 'Courier New')
-        .style('font-size', '11px');
-    xAxisG.selectAll('line').style('stroke', '#3D5E78');
-    xAxisG.select('.domain').style('stroke', '#3D5E78');
+    _styleAxis(xAxisG);
 
     // Y Axis label
     g.append('text')
@@ -92,8 +186,8 @@ renderSnakeGraph: function(data, tabValue, mode) {
         .attr('x', -height / 2)
         .attr('y', -(margin.left - 14))
         .attr('text-anchor', 'middle')
-        .style('fill', '#6a9abf')
-        .style('font-family', 'Courier New')
+        .style('fill', T.muted)
+        .style('font-family', T.font)
         .style('font-size', '11px')
         .text(yLabel);
 
@@ -102,12 +196,7 @@ renderSnakeGraph: function(data, tabValue, mode) {
     var yTicks   = usePoints ? 6 : (maxVal + 1);
     var yAxisG = g.append('g')
         .call(d3.axisLeft(y).ticks(yTicks).tickFormat(yAxisFmt));
-    yAxisG.selectAll('text')
-        .style('fill', '#BDE2FF')
-        .style('font-family', 'Courier New')
-        .style('font-size', '11px');
-    yAxisG.selectAll('line').style('stroke', '#3D5E78');
-    yAxisG.select('.domain').style('stroke', '#3D5E78');
+    _styleAxis(yAxisG);
 
     // Line generator
     var line = d3.line()
@@ -169,7 +258,7 @@ renderSnakeGraph: function(data, tabValue, mode) {
             .attr('y', lbl.adjY)
             .attr('dy', '0.35em')
             .style('fill', lbl.color)
-            .style('font-family', 'Courier New')
+            .style('font-family', T.font)
             .style('font-size', '11px')
             .style('font-weight', 'bold')
             .text(lbl.team)
@@ -179,24 +268,11 @@ renderSnakeGraph: function(data, tabValue, mode) {
     });
 
     // Tooltip div
-    var tooltip = d3.select(container).append('div')
-        .style('position', 'absolute')
-        .style('pointer-events', 'none')
-        .style('background', '#1a3a52')
-        .style('border', '1px solid #2e526e')
-        .style('border-radius', '6px')
-        .style('padding', '8px 12px')
-        .style('font-family', 'Courier New')
-        .style('font-size', '12px')
-        .style('color', '#BDE2FF')
-        .style('opacity', 0)
-        .style('z-index', 10);
+    var tooltip = _makeTooltip(container);
 
-    // Make container relatively positioned for absolute tooltip
-    d3.select(container).style('position', 'relative');
 
     var crosshair = g.append('line')
-        .attr('stroke', '#3D5E78')
+        .attr('stroke', T.grid)
         .attr('stroke-width', 1)
         .attr('stroke-dasharray', '4')
         .attr('y1', 0)
@@ -218,7 +294,7 @@ renderSnakeGraph: function(data, tabValue, mode) {
         }).sort(function(a, b) { return b.val - a.val; });
 
         var suffix = usePoints ? ' pts' : ' wins';
-        var html = '<div style="color:#FFC300;font-weight:bold;margin-bottom:4px">Week ' + weeks[weekIdx] + '</div>';
+        var html = '<div style="color:' + T.accent + ';font-weight:bold;margin-bottom:4px">Week ' + weeks[weekIdx] + '</div>';
         ranked.forEach(function(r) {
             var display = usePoints ? r.val.toFixed(1) : r.val;
             html += '<div><span style="color:' + r.color + '">' + r.team + '</span>: ' + display + suffix + '</div>';
@@ -242,31 +318,17 @@ renderSnakeGraph: function(data, tabValue, mode) {
 renderScoreRace: function(data, tabValue) {
     if (tabValue !== 'tab-season') return window.dash_clientside.no_update;
     if (!data) return window.dash_clientside.no_update;
-    var container = document.getElementById('d3-race-container');
-    if (!container) {
-        var _fn = window.dash_clientside.d3charts.renderScoreRace.bind(window.dash_clientside.d3charts);
-        _waitForEl('d3-race-container', function() { _fn(data, tabValue); }, 20000);
-        return window.dash_clientside.no_update;
-    }
+    var container = _getContainer('d3-race-container', window.dash_clientside.d3charts.renderScoreRace, [data, tabValue], 20000);
+    if (!container) return window.dash_clientside.no_update;
+    var T = _theme();
     try {
     /* Tear down the previous render's autoplay timer and hover listeners —
        the container element survives re-renders, so they'd accumulate otherwise */
     if (container._raceCleanup) container._raceCleanup();
-    container.innerHTML = '';
-
-    d3.select(container).style('position', 'relative');
 
     var margin = {top: 20, right: 160, bottom: 50, left: 50};
-    var width  = container.clientWidth  - margin.left - margin.right;
-    var height = container.clientHeight - margin.top  - margin.bottom;
-    if (width <= 0) width  = 700;
-    if (height <= 0) height = 430;
-
-    var svg = d3.select(container).append('svg')
-        .attr('width',  width  + margin.left + margin.right)
-        .attr('height', height + margin.top  + margin.bottom)
-        .style('background', 'transparent');
-    var g = svg.append('g').attr('transform', 'translate(' + margin.left + ',' + margin.top + ')');
+    var dims = _setupChart(container, {margin: margin, fallbackH: 430});
+    var svg = dims.svg, g = dims.g, width = dims.width, height = dims.height;
 
     var colorMap = {};
     data.teams.forEach(function(t, i) { colorMap[t] = data.colors[i]; });
@@ -288,17 +350,15 @@ renderScoreRace: function(data, tabValue) {
     // X Axis
     var xAxisG = g.append('g').attr('transform', 'translate(0,' + height + ')')
         .call(d3.axisBottom(x).ticks(5).tickFormat(function(d) { return d.toFixed(0); }));
-    xAxisG.selectAll('text').style('fill', '#BDE2FF').style('font-family', 'Courier New').style('font-size', '11px');
-    xAxisG.selectAll('line').style('stroke', '#3D5E78');
-    xAxisG.select('.domain').style('stroke', '#3D5E78');
+    _styleAxis(xAxisG);
 
     // Week counter label
     var weekLabel = g.append('text')
         .attr('x', width)
         .attr('y', height - 10)
         .attr('text-anchor', 'end')
-        .style('fill', '#FFC300')
-        .style('font-family', 'Courier New')
+        .style('fill', T.accent)
+        .style('font-family', T.font)
         .style('font-size', '28px')
         .style('font-weight', 'bold')
         .style('opacity', 0.3)
@@ -322,7 +382,7 @@ renderScoreRace: function(data, tabValue) {
 
         var labels = g.selectAll('.race-label').data(frameData, function(d) { return d.team; });
         labels.enter().append('text').attr('class', 'race-label')
-            .style('font-family', 'Courier New')
+            .style('font-family', T.font)
             .style('font-size', '12px')
             .style('font-weight', 'bold')
             .merge(labels)
@@ -372,33 +432,18 @@ renderScoreRace: function(data, tabValue) {
 renderHeatmap: function(data, tabValue) {
     if (tabValue !== 'tab-season') return window.dash_clientside.no_update;
     if (!data) return window.dash_clientside.no_update;
-    var container = document.getElementById('d3-heatmap-container');
-    if (!container) {
-        var _fn = window.dash_clientside.d3charts.renderHeatmap.bind(window.dash_clientside.d3charts);
-        _waitForEl('d3-heatmap-container', function() { _fn(data, tabValue); }, 20000);
-        return window.dash_clientside.no_update;
-    }
+    var container = _getContainer('d3-heatmap-container', window.dash_clientside.d3charts.renderHeatmap, [data, tabValue], 20000);
+    if (!container) return window.dash_clientside.no_update;
+    var T = _theme();
     try {
-    container.innerHTML = '';
-
-    d3.select(container).style('position', 'relative');
-
     var nTeams = data.teams.length;
     var nWeeks = data.weeks.length;
     var margin = {top: 30, right: 20, bottom: 20, left: 100};
-    var width  = container.clientWidth  - margin.left - margin.right;
-    var height = container.clientHeight - margin.top  - margin.bottom;
-    if (width <= 0) width  = 700;
-    if (height <= 0) height = 360;
+    var dims = _setupChart(container, {margin: margin, fallbackH: 360});
+    var svg = dims.svg, g = dims.g, width = dims.width, height = dims.height;
 
     var cellW = width  / nWeeks;
     var cellH = height / nTeams;
-
-    var svg = d3.select(container).append('svg')
-        .attr('width',  width  + margin.left + margin.right)
-        .attr('height', height + margin.top  + margin.bottom)
-        .style('background', 'transparent');
-    var g = svg.append('g').attr('transform', 'translate(' + margin.left + ',' + margin.top + ')');
 
     // Color scale: diverging red→neutral→green centered on 0 deviation
     var color = d3.scaleDiverging(d3.interpolateRdYlGn).domain([-0.25, 0, 0.25]);
@@ -408,8 +453,8 @@ renderHeatmap: function(data, tabValue) {
         .attr('x', function(d, i) { return i * cellW + cellW / 2; })
         .attr('y', -8)
         .attr('text-anchor', 'middle')
-        .style('fill', '#BDE2FF')
-        .style('font-family', 'Courier New')
+        .style('fill', T.text)
+        .style('font-family', T.font)
         .style('font-size', '10px')
         .text(function(d) { return 'W' + d; });
 
@@ -419,25 +464,14 @@ renderHeatmap: function(data, tabValue) {
         .attr('y', function(d, i) { return i * cellH + cellH / 2; })
         .attr('dy', '0.35em')
         .attr('text-anchor', 'end')
-        .style('fill', function(d) { return (data.teamcolors && data.teamcolors[d]) ? data.teamcolors[d] : '#BDE2FF'; })
-        .style('font-family', 'Courier New')
+        .style('fill', function(d) { return (data.teamcolors && data.teamcolors[d]) ? data.teamcolors[d] : T.text; })
+        .style('font-family', T.font)
         .style('font-size', '11px')
         .style('font-weight', 'bold')
         .text(function(d) { return d; });
 
     // Tooltip
-    var tooltip = d3.select(container).append('div')
-        .style('position', 'absolute')
-        .style('pointer-events', 'none')
-        .style('background', '#1a3a52')
-        .style('border', '1px solid #2e526e')
-        .style('border-radius', '6px')
-        .style('padding', '8px 12px')
-        .style('font-family', 'Courier New')
-        .style('font-size', '12px')
-        .style('color', '#BDE2FF')
-        .style('opacity', 0)
-        .style('z-index', 10);
+    var tooltip = _makeTooltip(container);
 
     // Cells — animate column by column
     data.teams.forEach(function(team, ti) {
@@ -476,7 +510,7 @@ renderHeatmap: function(data, tabValue) {
                 .attr('cx', wi * cellW + cellW - 6)
                 .attr('cy', ti * cellH + 6)
                 .attr('r', 3)
-                .attr('fill', cell.won ? '#90BE6D' : '#F94144')
+                .attr('fill', cell.won ? T.success : T.danger)
                 .attr('opacity', 0)
                 .transition().delay(wi * 60 + 200).duration(200)
                 .attr('opacity', 1);
@@ -491,27 +525,14 @@ renderHeatmap: function(data, tabValue) {
 renderBubbleMap: function(data, tabValue) {
     if (tabValue !== 'tab-week') return window.dash_clientside.no_update;
     if (!data || !data.teams || !data.teams.length) return window.dash_clientside.no_update;
-    var container = document.getElementById('d3-bubble-container');
-    if (!container) {
-        var _fn = window.dash_clientside.d3charts.renderBubbleMap.bind(window.dash_clientside.d3charts);
-        _waitForEl('d3-bubble-container', function() { _fn(data, tabValue); }, 8000);
-        return window.dash_clientside.no_update;
-    }
-    container.innerHTML = '';
-
-    d3.select(container).style('position', 'relative');
-
-    var width  = container.clientWidth  || 800;
-    var height = container.clientHeight || 460;
-
-    var svg = d3.select(container).append('svg')
-        .attr('width', width).attr('height', height)
-        .style('background', 'transparent');
+    var container = _getContainer('d3-bubble-container', window.dash_clientside.d3charts.renderBubbleMap, [data, tabValue], 8000);
+    if (!container) return window.dash_clientside.no_update;
+    var T = _theme();
+    var dims = _setupChart(container, {fallbackW: 800, fallbackH: 460});
+    var svg = dims.svg, width = dims.width, height = dims.height;
 
     // Albers USA projection
-    var projection = d3.geoAlbersUsa()
-        .scale(Math.min(width / 960, height / 600) * 1070 * 0.85)
-        .translate([width / 2, height / 2]);
+    var projection = _albersProjection(width, height);
 
     var path = d3.geoPath().projection(projection);
 
@@ -530,17 +551,12 @@ renderBubbleMap: function(data, tabValue) {
             .data(topojson.feature(us, us.objects.states).features)
             .enter().append('path')
             .attr('d', path)
-            .attr('fill', '#163146')
-            .attr('stroke', '#2e526e')
+            .attr('fill', T.bgPanel)
+            .attr('stroke', T.border)
             .attr('stroke-width', 0.5);
 
         // Draw bubbles
-        var tooltip = d3.select(container).append('div')
-            .style('position', 'absolute').style('pointer-events', 'none')
-            .style('background', '#1a3a52').style('border', '1px solid #2e526e')
-            .style('border-radius', '6px').style('padding', '8px 12px')
-            .style('font-family', 'Courier New').style('font-size', '12px')
-            .style('color', '#BDE2FF').style('opacity', 0).style('z-index', 10);
+        var tooltip = _makeTooltip(container);
 
         data.teams.forEach(function(d) {
             var coords = projection([d.lon, d.lat]);
@@ -551,7 +567,7 @@ renderBubbleMap: function(data, tabValue) {
                 .attr('r', 0)
                 .attr('fill', colorScale(deviation(d)))
                 .attr('fill-opacity', 0.75)
-                .attr('stroke', '#BDE2FF').attr('stroke-width', 0.5)
+                .attr('stroke', T.text).attr('stroke-width', 0.5)
                 .on('mouseover', function(event) {
                     var dev = deviation(d);
                     tooltip.html(
@@ -572,7 +588,7 @@ renderBubbleMap: function(data, tabValue) {
             svg.append('text')
                 .attr('x', coords[0]).attr('y', coords[1])
                 .attr('dy', '0.35em').attr('text-anchor', 'middle')
-                .style('fill', '#0d1e2e').style('font-family', 'Courier New')
+                .style('fill', T.bgDeep).style('font-family', T.font)
                 .style('font-size', Math.min(10, r(d.fantasy_pts) * 0.55) + 'px')
                 .style('font-weight', 'bold').style('pointer-events', 'none')
                 .style('opacity', 0)
@@ -581,10 +597,7 @@ renderBubbleMap: function(data, tabValue) {
                 .style('opacity', r(d.fantasy_pts) > 12 ? 1 : 0);
         });
     }).catch(function(err) {
-        svg.append('text').attr('x', width/2).attr('y', height/2)
-            .attr('text-anchor', 'middle')
-            .style('fill', '#BDE2FF').style('font-family', 'Courier New').style('font-size', '14px')
-            .text('Map unavailable — check network connection');
+        _mapUnavailable(svg, width, height);
     });
 
     return window.dash_clientside.no_update;
@@ -594,40 +607,27 @@ renderBubbleMap: function(data, tabValue) {
 renderDraftBoard: function(data, tabValue) {
     if (tabValue !== 'tab-season') return window.dash_clientside.no_update;
     if (!data || !data.picks || !data.picks.length) return window.dash_clientside.no_update;
-    var container = document.getElementById('d3-draft-container');
-    if (!container) {
-        var _fn = window.dash_clientside.d3charts.renderDraftBoard.bind(window.dash_clientside.d3charts);
-        _waitForEl('d3-draft-container', function() { _fn(data, tabValue); }, 20000);
-        return window.dash_clientside.no_update;
-    }
-    container.innerHTML = '';
-
-    d3.select(container).style('position', 'relative');
-
+    var container = _getContainer('d3-draft-container', window.dash_clientside.d3charts.renderDraftBoard, [data, tabValue], 20000);
+    if (!container) return window.dash_clientside.no_update;
+    var T = _theme();
     var picks = data.picks;
     var rounds = d3.max(picks, function(d) { return d.round; });
     // Figure out picks per round
     var picksPerRound = Math.ceil(picks.length / rounds);
 
     var margin = {top: 40, right: 20, bottom: 20, left: 20};
-    var width  = container.clientWidth  - margin.left - margin.right || 760;
-    var height = container.clientHeight - margin.top  - margin.bottom || 500;
+    var dims = _setupChart(container, {margin: margin, fallbackW: 760, fallbackH: 500});
+    var svg = dims.svg, g = dims.g, width = dims.width, height = dims.height;
 
     var cellW = Math.floor(width  / picksPerRound);
     var cellH = Math.floor(height / rounds);
-
-    var svg = d3.select(container).append('svg')
-        .attr('width',  width  + margin.left + margin.right)
-        .attr('height', height + margin.top  + margin.bottom)
-        .style('background', 'transparent');
-    var g = svg.append('g').attr('transform', 'translate(' + margin.left + ',' + margin.top + ')');
 
     // Column headers (pick slots)
     for (var slot = 1; slot <= picksPerRound; slot++) {
         g.append('text')
             .attr('x', (slot - 1) * cellW + cellW / 2).attr('y', -12)
             .attr('text-anchor', 'middle')
-            .style('fill', '#6a9abf').style('font-family', 'Courier New').style('font-size', '10px')
+            .style('fill', T.muted).style('font-family', T.font).style('font-size', '10px')
             .text(slot);
     }
 
@@ -636,18 +636,13 @@ renderDraftBoard: function(data, tabValue) {
         g.append('text')
             .attr('x', -4).attr('y', (rnd - 1) * cellH + cellH / 2)
             .attr('dy', '0.35em').attr('text-anchor', 'end')
-            .style('fill', '#6a9abf').style('font-family', 'Courier New').style('font-size', '10px')
+            .style('fill', T.muted).style('font-family', T.font).style('font-size', '10px')
             .text('R' + rnd);
     }
 
-    var tierColors = { elite: '#FFC300', solid: '#90BE6D', average: '#BDE2FF', bust: '#F94144' };
+    var tierColors = { elite: T.accent, solid: T.success, average: T.text, bust: T.danger };
 
-    var tooltip = d3.select(container).append('div')
-        .style('position', 'absolute').style('pointer-events', 'none')
-        .style('background', '#1a3a52').style('border', '1px solid #2e526e')
-        .style('border-radius', '6px').style('padding', '8px 12px')
-        .style('font-family', 'Courier New').style('font-size', '12px')
-        .style('color', '#BDE2FF').style('opacity', 0).style('z-index', 10);
+    var tooltip = _makeTooltip(container);
 
     // Animate picks in snake order
     picks.forEach(function(pick, i) {
@@ -678,14 +673,14 @@ renderDraftBoard: function(data, tabValue) {
         cell.append('text')
             .attr('x', (cellW - 2) / 2).attr('y', (cellH - 2) / 2 - 4)
             .attr('dy', '0.35em').attr('text-anchor', 'middle')
-            .style('fill', '#BDE2FF').style('font-family', 'Courier New')
+            .style('fill', T.text).style('font-family', T.font)
             .style('font-size', Math.min(10, cellW / 7) + 'px')
             .text(shortName);
 
         cell.append('text')
             .attr('x', (cellW - 2) / 2).attr('y', (cellH - 2) / 2 + 8)
             .attr('text-anchor', 'middle')
-            .style('fill', pick.color).style('font-family', 'Courier New')
+            .style('fill', pick.color).style('font-family', T.font)
             .style('font-size', Math.min(8, cellW / 9) + 'px')
             .text(pick.position);
 
@@ -710,7 +705,7 @@ renderDraftBoard: function(data, tabValue) {
                 g.selectAll('g').each(function(_, idx) {
                     var p = picks[idx];
                     if (!p) return;
-                    var tColor = tierColors[p.tier] || '#BDE2FF';
+                    var tColor = tierColors[p.tier] || T.text;
                     d3.select(this).select('rect')
                         .transition().duration(600).delay(idx * 30)
                         .attr('fill', tColor)
@@ -723,16 +718,16 @@ renderDraftBoard: function(data, tabValue) {
 
     // Legend
     var legendData = [
-        {label: 'Elite (200+ pts)', color: '#FFC300'},
-        {label: 'Solid (120–199)', color: '#90BE6D'},
-        {label: 'Average (60–119)', color: '#BDE2FF'},
-        {label: 'Bust (<60)',  color: '#F94144'},
+        {label: 'Elite (200+ pts)', color: T.accent},
+        {label: 'Solid (120–199)', color: T.success},
+        {label: 'Average (60–119)', color: T.text},
+        {label: 'Bust (<60)',  color: T.danger},
     ];
     var legend = svg.append('g').attr('transform', 'translate(' + (margin.left + width - 200) + ', 8)');
     legendData.forEach(function(d, i) {
         legend.append('rect').attr('x', 0).attr('y', i * 14).attr('width', 10).attr('height', 10).attr('fill', d.color).attr('rx', 2);
         legend.append('text').attr('x', 14).attr('y', i * 14 + 5).attr('dy', '0.35em')
-            .style('fill', '#BDE2FF').style('font-family', 'Courier New').style('font-size', '10px')
+            .style('fill', T.text).style('font-family', T.font).style('font-size', '10px')
             .text(d.label);
     });
 
@@ -743,17 +738,11 @@ renderDraftBoard: function(data, tabValue) {
 renderChoropleth: function(data, tabValue) {
     if (tabValue !== 'tab-alltime') return window.dash_clientside.no_update;
     if (!data || !data.states || !data.states.length) return window.dash_clientside.no_update;
-    var container = document.getElementById('d3-choropleth-container');
-    if (!container) {
-        var _fn = window.dash_clientside.d3charts.renderChoropleth.bind(window.dash_clientside.d3charts);
-        _waitForEl('d3-choropleth-container', function() { _fn(data, tabValue); }, 20000);
-        return window.dash_clientside.no_update;
-    }
-    container.innerHTML = '';
-    d3.select(container).style('position', 'relative');
-
-    var width  = container.clientWidth  || 820;
-    var height = container.clientHeight || 480;
+    var container = _getContainer('d3-choropleth-container', window.dash_clientside.d3charts.renderChoropleth, [data, tabValue], 20000);
+    if (!container) return window.dash_clientside.no_update;
+    var T = _theme();
+    var dims = _setupChart(container, {fallbackW: 820, fallbackH: 480});
+    var svg = dims.svg, width = dims.width, height = dims.height;
 
     // FIPS → state data lookup (TopoJSON uses numeric IDs matching FIPS)
     var stateMap = {};
@@ -762,25 +751,13 @@ renderChoropleth: function(data, tabValue) {
     // sqrt scale so mid-range states aren't washed out by CA/FL/TX
     var colorScale = d3.scaleSequentialSqrt()
         .domain([0, data.max_pts])
-        .interpolator(d3.interpolateRgb('#1a3a52', '#FFC300'));
+        .interpolator(d3.interpolateRgb(T.bgCard, T.accent));
 
-    var svg = d3.select(container).append('svg')
-        .attr('width', width).attr('height', height)
-        .style('background', 'transparent');
-
-    var projection = d3.geoAlbersUsa()
-        .scale(Math.min(width / 960, height / 600) * 1070 * 0.85)
-        .translate([width / 2, height / 2]);
+    var projection = _albersProjection(width, height);
     var path = d3.geoPath().projection(projection);
 
     // Tooltip
-    var tooltip = d3.select(container).append('div')
-        .style('position', 'absolute').style('pointer-events', 'none')
-        .style('background', '#1a3a52').style('border', '1px solid #2e526e')
-        .style('border-radius', '6px').style('padding', '9px 13px')
-        .style('font-family', 'Courier New').style('font-size', '12px')
-        .style('color', '#BDE2FF').style('opacity', 0).style('z-index', 10)
-        .style('max-width', '200px').style('line-height', '1.6');
+    var tooltip = _makeTooltip(container, {'padding': '9px 13px', 'max-width': '200px', 'line-height': '1.6'});
 
     d3.json('https://cdn.jsdelivr.net/npm/us-atlas@3/states-10m.json').then(function(us) {
         var features = topojson.feature(us, us.objects.states).features;
@@ -792,9 +769,9 @@ renderChoropleth: function(data, tabValue) {
             .attr('d', path)
             .attr('fill', function(d) {
                 var s = stateMap[d.id];
-                return s ? colorScale(s.total_pts) : '#163146';
+                return s ? colorScale(s.total_pts) : T.bgPanel;
             })
-            .attr('stroke', '#0d1e2e')
+            .attr('stroke', T.bgDeep)
             .attr('stroke-width', 0.5)
             .style('cursor', function(d) { return stateMap[d.id] ? 'pointer' : 'default'; })
             .on('mouseover', function(event, d) {
@@ -808,13 +785,13 @@ renderChoropleth: function(data, tabValue) {
                 tooltip.html(
                     '<b>' + s.name + '</b><br>' +
                     'Total: <b>' + s.total_pts.toFixed(1) + ' pts</b><br>' +
-                    '<span style="color:#6a9abf">' + teamLines + '</span>'
+                    '<span style="color:' + T.muted + '">' + teamLines + '</span>'
                 ).style('opacity', 1)
                  .style('left', (event.offsetX + 14) + 'px')
                  .style('top',  (event.offsetY - 10) + 'px');
                 d3.select(this)
                     .raise()
-                    .attr('stroke', '#FFC300')
+                    .attr('stroke', T.accent)
                     .attr('stroke-width', 1.8);
             })
             .on('mousemove', function(event) {
@@ -823,7 +800,7 @@ renderChoropleth: function(data, tabValue) {
             })
             .on('mouseleave', function(event, d) {
                 tooltip.style('opacity', 0);
-                d3.select(this).attr('stroke', '#0d1e2e').attr('stroke-width', 0.5);
+                d3.select(this).attr('stroke', T.bgDeep).attr('stroke-width', 0.5);
             });
 
         // ── State mesh (crisp interior borders) ───────────────────────────
@@ -831,7 +808,7 @@ renderChoropleth: function(data, tabValue) {
             .datum(topojson.mesh(us, us.objects.states, function(a, b) { return a !== b; }))
             .attr('d', path)
             .attr('fill', 'none')
-            .attr('stroke', '#0d1e2e')
+            .attr('stroke', T.bgDeep)
             .attr('stroke-width', 0.4);
 
         // ── Gradient legend bar (bottom-right) ────────────────────────────
@@ -845,9 +822,9 @@ renderChoropleth: function(data, tabValue) {
             .attr('id', 'choro-gradient')
             .attr('x1', '0%').attr('x2', '100%');
         grad.append('stop').attr('offset', '0%')
-            .attr('stop-color', '#1a3a52');
+            .attr('stop-color', T.bgCard);
         grad.append('stop').attr('offset', '100%')
-            .attr('stop-color', '#FFC300');
+            .attr('stop-color', T.accent);
 
         var legG = svg.append('g').attr('transform', 'translate(' + legX + ',' + legY + ')');
 
@@ -857,12 +834,12 @@ renderChoropleth: function(data, tabValue) {
             .attr('width', legW + 20).attr('height', legH + 44)
             .attr('rx', 6)
             .attr('fill', 'rgba(13,30,46,0.88)')
-            .attr('stroke', '#2e526e').attr('stroke-width', 1);
+            .attr('stroke', T.border).attr('stroke-width', 1);
 
         legG.append('text')
             .attr('x', 0).attr('y', -8)
-            .style('fill', '#6a9abf')
-            .style('font-family', 'Courier New')
+            .style('fill', T.muted)
+            .style('font-family', T.font)
             .style('font-size', '9px')
             .style('letter-spacing', '1.2px')
             .text('ALL-TIME FANTASY PTS');
@@ -870,20 +847,20 @@ renderChoropleth: function(data, tabValue) {
         legG.append('rect')
             .attr('width', legW).attr('height', legH).attr('rx', 2)
             .attr('fill', 'url(#choro-gradient)')
-            .attr('stroke', '#2e526e').attr('stroke-width', 0.5);
+            .attr('stroke', T.border).attr('stroke-width', 0.5);
 
         legG.append('text')
             .attr('x', 0).attr('y', legH + 14)
-            .style('fill', '#6a9abf')
-            .style('font-family', 'Courier New')
+            .style('fill', T.muted)
+            .style('font-family', T.font)
             .style('font-size', '9px')
             .text('0');
 
         legG.append('text')
             .attr('x', legW).attr('y', legH + 14)
             .attr('text-anchor', 'end')
-            .style('fill', '#6a9abf')
-            .style('font-family', 'Courier New')
+            .style('fill', T.muted)
+            .style('font-family', T.font)
             .style('font-size', '9px')
             .text(data.max_pts.toFixed(0) + ' pts');
 
@@ -893,20 +870,17 @@ renderChoropleth: function(data, tabValue) {
         legG.append('line')
             .attr('x1', midX).attr('x2', midX)
             .attr('y1', legH).attr('y2', legH + 5)
-            .attr('stroke', '#6a9abf').attr('stroke-width', 1);
+            .attr('stroke', T.muted).attr('stroke-width', 1);
         legG.append('text')
             .attr('x', midX).attr('y', legH + 14)
             .attr('text-anchor', 'middle')
-            .style('fill', '#6a9abf')
-            .style('font-family', 'Courier New')
+            .style('fill', T.muted)
+            .style('font-family', T.font)
             .style('font-size', '9px')
             .text(midPts.toFixed(0));
 
     }).catch(function() {
-        svg.append('text').attr('x', width / 2).attr('y', height / 2)
-            .attr('text-anchor', 'middle')
-            .style('fill', '#BDE2FF').style('font-family', 'Courier New').style('font-size', '14px')
-            .text('Map unavailable — check network connection');
+        _mapUnavailable(svg, width, height);
     });
 
     return window.dash_clientside.no_update;
@@ -916,17 +890,11 @@ renderChoropleth: function(data, tabValue) {
 renderTerritoryMap: function(data, tabValue) {
     if (tabValue !== 'tab-alltime') return window.dash_clientside.no_update;
     if (!data || !data.nfl_teams || !data.nfl_teams.length) return window.dash_clientside.no_update;
-    var container = document.getElementById('d3-territory-container');
-    if (!container) {
-        var _fn = window.dash_clientside.d3charts.renderTerritoryMap.bind(window.dash_clientside.d3charts);
-        _waitForEl('d3-territory-container', function() { _fn(data, tabValue); }, 20000);
-        return window.dash_clientside.no_update;
-    }
-    container.innerHTML = '';
-    d3.select(container).style('position', 'relative');
-
-    var width    = container.clientWidth  || 820;
-    var height   = container.clientHeight || 580;
+    var container = _getContainer('d3-territory-container', window.dash_clientside.d3charts.renderTerritoryMap, [data, tabValue], 20000);
+    if (!container) return window.dash_clientside.no_update;
+    var T = _theme();
+    var dims = _setupChart(container, {fallbackW: 820, fallbackH: 580});
+    var svg = dims.svg, width = dims.width, height = dims.height;
     var nflTeams = data.nfl_teams;
     var owners   = data.fantasy_owners;
     var colors   = data.colors;
@@ -951,23 +919,12 @@ renderTerritoryMap: function(data, tabValue) {
     var offsets = { NYG: [-10, -8], NYJ: [10, 8], LA: [-10, 0], LAC: [10, 0] };
 
     // ── SVG setup ─────────────────────────────────────────────────────────
-    var svg = d3.select(container).append('svg')
-        .attr('width', width).attr('height', height)
-        .style('background', 'transparent');
 
-    var projection = d3.geoAlbersUsa()
-        .scale(Math.min(width / 960, height / 600) * 1070 * 0.85)
-        .translate([width / 2, height / 2]);
+    var projection = _albersProjection(width, height);
     var path = d3.geoPath().projection(projection);
 
     // ── Tooltip ───────────────────────────────────────────────────────────
-    var tooltip = d3.select(container).append('div')
-        .style('position', 'absolute').style('pointer-events', 'none')
-        .style('background', '#1a3a52').style('border', '1px solid #2e526e')
-        .style('border-radius', '6px').style('padding', '9px 13px')
-        .style('font-family', 'Courier New').style('font-size', '12px')
-        .style('color', '#BDE2FF').style('opacity', 0).style('z-index', 10)
-        .style('max-width', '220px').style('line-height', '1.5');
+    var tooltip = _makeTooltip(container, {'padding': '9px 13px', 'max-width': '220px', 'line-height': '1.5'});
 
     // ── Load TopoJSON then render ─────────────────────────────────────────
     d3.json('https://cdn.jsdelivr.net/npm/us-atlas@3/states-10m.json').then(function(us) {
@@ -977,8 +934,8 @@ renderTerritoryMap: function(data, tabValue) {
             .data(topojson.feature(us, us.objects.states).features)
             .enter().append('path')
             .attr('d', path)
-            .attr('fill', '#163146')
-            .attr('stroke', '#2e526e')
+            .attr('fill', T.bgPanel)
+            .attr('stroke', T.border)
             .attr('stroke-width', 0.6);
 
         // State borders (inner borders between states)
@@ -986,7 +943,7 @@ renderTerritoryMap: function(data, tabValue) {
             .datum(topojson.mesh(us, us.objects.states, function(a, b) { return a !== b; }))
             .attr('d', path)
             .attr('fill', 'none')
-            .attr('stroke', '#2e526e')
+            .attr('stroke', T.border)
             .attr('stroke-width', 0.4);
 
         // ── Draw one circle per NFL team ──────────────────────────────────
@@ -1005,7 +962,7 @@ renderTerritoryMap: function(data, tabValue) {
             var cx = proj[0] + off[0];
             var cy = proj[1] + off[1];
             var r  = rScale(info.top.pts);
-            var ownerColor = colors[info.top.owner] || '#BDE2FF';
+            var ownerColor = colors[info.top.owner] || T.text;
 
             // Contested: top margin < 12% of total → dashed stroke
             var margin = info.runner ? info.top.pts - info.runner.pts : info.top.pts;
@@ -1015,23 +972,23 @@ renderTerritoryMap: function(data, tabValue) {
                 .attr('cx', cx).attr('cy', cy).attr('r', 0)
                 .attr('fill', ownerColor)
                 .attr('fill-opacity', 0.82)
-                .attr('stroke', isContested ? '#FFC300' : '#0d1e2e')
+                .attr('stroke', isContested ? T.accent : T.bgDeep)
                 .attr('stroke-width', isContested ? 2.5 : 1.5)
                 .attr('stroke-dasharray', isContested ? '4,2' : null)
                 .style('cursor', 'pointer')
                 .on('mouseover', function(event) {
                     var runnerLine = info.runner && info.runner.pts > 0
-                        ? '<br><span style="color:#6a9abf">2nd: ' + info.runner.owner
+                        ? '<br><span style="color:' + T.muted + '">2nd: ' + info.runner.owner
                             + ' · ' + info.runner.pts.toFixed(1) + ' pts</span>'
                         : '';
                     var contestedBadge = isContested
-                        ? '<br><span style="color:#FFC300">⚡ Contested territory</span>'
+                        ? '<br><span style="color:' + T.accent + '">⚡ Contested territory</span>'
                         : '';
                     tooltip.html(
                         '<b style="color:' + ownerColor + '">' + team + '</b><br>' +
                         '🏆 <b>' + info.top.owner + '</b> · ' + info.top.pts.toFixed(1) + ' pts' +
                         runnerLine + contestedBadge +
-                        '<br><span style="color:#3D5E78">Total from ' + team + ': ' + info.total.toFixed(1) + '</span>'
+                        '<br><span style="color:' + T.grid + '">Total from ' + team + ': ' + info.total.toFixed(1) + '</span>'
                     ).style('opacity', 1)
                      .style('left', (event.offsetX + 14) + 'px')
                      .style('top',  (event.offsetY - 10) + 'px');
@@ -1048,8 +1005,8 @@ renderTerritoryMap: function(data, tabValue) {
             circleG.append('text')
                 .attr('x', cx).attr('y', cy).attr('dy', '0.35em')
                 .attr('text-anchor', 'middle')
-                .style('fill', '#0d1e2e')
-                .style('font-family', 'Courier New')
+                .style('fill', T.bgDeep)
+                .style('font-family', T.font)
                 .style('font-size', Math.min(9, r * 0.55) + 'px')
                 .style('font-weight', 'bold')
                 .style('pointer-events', 'none')
@@ -1072,25 +1029,25 @@ renderTerritoryMap: function(data, tabValue) {
             .attr('width', legW).attr('height', legH)
             .attr('rx', 6).attr('ry', 6)
             .attr('fill', 'rgba(13,30,46,0.88)')
-            .attr('stroke', '#2e526e').attr('stroke-width', 1);
+            .attr('stroke', T.border).attr('stroke-width', 1);
 
         legG.append('text')
             .attr('x', legPad).attr('y', legPad + 6)
-            .style('fill', '#6a9abf')
-            .style('font-family', 'Courier New')
+            .style('fill', T.muted)
+            .style('font-family', T.font)
             .style('font-size', '9px')
             .style('letter-spacing', '1.5px')
             .style('text-transform', 'uppercase')
             .text('Fantasy Owner');
 
         owners.forEach(function(owner, i) {
-            var oc = colors[owner] || '#BDE2FF';
+            var oc = colors[owner] || T.text;
             var gy = legPad + 16 + i * legRowH;
             legG.append('circle').attr('cx', legPad + 5).attr('cy', gy + 4)
                 .attr('r', 5).attr('fill', oc);
             legG.append('text').attr('x', legPad + 15).attr('y', gy + 4).attr('dy', '0.35em')
-                .style('fill', '#BDE2FF')
-                .style('font-family', 'Courier New')
+                .style('fill', T.text)
+                .style('font-family', T.font)
                 .style('font-size', '11px')
                 .text(owner);
         });
@@ -1099,16 +1056,13 @@ renderTerritoryMap: function(data, tabValue) {
         svg.append('text')
             .attr('x', width / 2).attr('y', height - 8)
             .attr('text-anchor', 'middle')
-            .style('fill', '#3D5E78')
-            .style('font-family', 'Courier New')
+            .style('fill', T.grid)
+            .style('font-family', T.font)
             .style('font-size', '10px')
             .text('Circle size = pts from that franchise · Dashed gold border = contested (<8% margin)');
 
     }).catch(function() {
-        svg.append('text').attr('x', width / 2).attr('y', height / 2)
-            .attr('text-anchor', 'middle')
-            .style('fill', '#BDE2FF').style('font-family', 'Courier New').style('font-size', '14px')
-            .text('Map unavailable — check network connection');
+        _mapUnavailable(svg, width, height);
     });
 
     return window.dash_clientside.no_update;
@@ -1118,19 +1072,13 @@ renderTerritoryMap: function(data, tabValue) {
 renderArcMap: function(data, tabValue, mode) {
     if (tabValue !== 'tab-alltime') return window.dash_clientside.no_update;
     if (!data || !data.nfl_teams || !data.nfl_teams.length) return window.dash_clientside.no_update;
-    var container = document.getElementById('d3-arc-container');
-    if (!container) {
-        var _fn = window.dash_clientside.d3charts.renderArcMap.bind(window.dash_clientside.d3charts);
-        _waitForEl('d3-arc-container', function() { _fn(data, tabValue, mode); }, 20000);
-        return window.dash_clientside.no_update;
-    }
-    container.innerHTML = '';
-    d3.select(container).style('position', 'relative');
-
+    var container = _getContainer('d3-arc-container', window.dash_clientside.d3charts.renderArcMap, [data, tabValue, mode], 20000);
+    if (!container) return window.dash_clientside.no_update;
+    var T = _theme();
     mode = mode || 'top';
 
-    var width    = container.clientWidth  || 860;
-    var height   = container.clientHeight || 580;
+    var dims = _setupChart(container, {fallbackW: 860, fallbackH: 580});
+    var svg = dims.svg, width = dims.width, height = dims.height;
     var nflTeams = data.nfl_teams;
     var owners   = data.fantasy_owners;
     var colors   = data.colors;
@@ -1182,9 +1130,6 @@ renderArcMap: function(data, tabValue, mode) {
     });
 
     // ── SVG ───────────────────────────────────────────────────────────────
-    var svg = d3.select(container).append('svg')
-        .attr('width', width).attr('height', height)
-        .style('background', 'transparent');
 
     // Clip map content to left panel so fills don't bleed into label area
     var defs = svg.append('defs');
@@ -1197,13 +1142,7 @@ renderArcMap: function(data, tabValue, mode) {
     var geoPath = d3.geoPath().projection(projection);
 
     // ── Tooltip ───────────────────────────────────────────────────────────
-    var tooltip = d3.select(container).append('div')
-        .style('position', 'absolute').style('pointer-events', 'none')
-        .style('background', '#1a3a52').style('border', '1px solid #2e526e')
-        .style('border-radius', '6px').style('padding', '9px 13px')
-        .style('font-family', 'Courier New').style('font-size', '12px')
-        .style('color', '#BDE2FF').style('opacity', 0).style('z-index', 10)
-        .style('max-width', '210px').style('line-height', '1.6');
+    var tooltip = _makeTooltip(container, {'padding': '9px 13px', 'max-width': '210px', 'line-height': '1.6'});
 
     d3.json('https://cdn.jsdelivr.net/npm/us-atlas@3/states-10m.json').then(function(us) {
         var features = topojson.feature(us, us.objects.states).features;
@@ -1214,8 +1153,8 @@ renderArcMap: function(data, tabValue, mode) {
             .data(features)
             .enter().append('path')
             .attr('d', geoPath)
-            .attr('fill', '#163146')
-            .attr('stroke', '#2e526e')
+            .attr('fill', T.bgPanel)
+            .attr('stroke', T.border)
             .attr('stroke-width', 0.5);
 
         svg.append('path')
@@ -1223,26 +1162,26 @@ renderArcMap: function(data, tabValue, mode) {
             .datum(topojson.mesh(us, us.objects.states, function(a, b) { return a !== b; }))
             .attr('d', geoPath)
             .attr('fill', 'none')
-            .attr('stroke', '#0d1e2e')
+            .attr('stroke', T.bgDeep)
             .attr('stroke-width', 0.35);
 
         // ── Divider ───────────────────────────────────────────────────────
         svg.append('line')
             .attr('x1', divX).attr('x2', divX)
             .attr('y1', 16).attr('y2', height - 16)
-            .attr('stroke', '#2e526e').attr('stroke-width', 0.6);
+            .attr('stroke', T.border).attr('stroke-width', 0.6);
 
         // ── Owner labels (right panel) ────────────────────────────────────
         owners.forEach(function(owner) {
-            var oc = colors[owner] || '#BDE2FF';
+            var oc = colors[owner] || T.text;
             var y  = ownerY[owner];
             svg.append('circle')
                 .attr('cx', labelX + 5).attr('cy', y).attr('r', 5)
-                .attr('fill', oc).attr('stroke', '#0d1e2e').attr('stroke-width', 1);
+                .attr('fill', oc).attr('stroke', T.bgDeep).attr('stroke-width', 1);
             svg.append('text')
                 .attr('x', labelX + 14).attr('y', y).attr('dy', '0.35em')
-                .style('fill', '#BDE2FF')
-                .style('font-family', 'Courier New')
+                .style('fill', T.text)
+                .style('font-family', T.font)
                 .style('font-size', '11px')
                 .text(owner);
         });
@@ -1269,7 +1208,7 @@ renderArcMap: function(data, tabValue, mode) {
         arcsSorted.forEach(function(arc, idx) {
             var pos = stadiumPos[arc.team];
             if (!pos) return;
-            var oc = colors[arc.owner] || '#BDE2FF';
+            var oc = colors[arc.owner] || T.text;
             var x1 = pos[0], y1 = pos[1];
             var x2 = labelX, y2 = ownerY[arc.owner];
             var dx = x2 - x1;
@@ -1331,12 +1270,12 @@ renderArcMap: function(data, tabValue, mode) {
             var ti     = nflTeams.indexOf(team);
             var row    = matrix[ti] || [];
             var maxOi  = row.reduce(function(best, v, i) { return v > (row[best] || 0) ? i : best; }, 0);
-            var dotCol = colors[owners[maxOi]] || '#BDE2FF';
+            var dotCol = colors[owners[maxOi]] || T.text;
 
             svg.append('circle')
                 .attr('cx', pos[0]).attr('cy', pos[1]).attr('r', 3.5)
                 .attr('fill', dotCol)
-                .attr('stroke', '#0d1e2e').attr('stroke-width', 1)
+                .attr('stroke', T.bgDeep).attr('stroke-width', 1)
                 .style('pointer-events', 'none');
         });
 
@@ -1344,16 +1283,13 @@ renderArcMap: function(data, tabValue, mode) {
         svg.append('text')
             .attr('x', mapW / 2).attr('y', height - 8)
             .attr('text-anchor', 'middle')
-            .style('fill', '#3D5E78')
-            .style('font-family', 'Courier New')
+            .style('fill', T.grid)
+            .style('font-family', T.font)
             .style('font-size', '10px')
             .text('Arc width = all-time fantasy pts · Dot color = dominant owner · Hover arc for details');
 
     }).catch(function() {
-        svg.append('text').attr('x', width / 2).attr('y', height / 2)
-            .attr('text-anchor', 'middle')
-            .style('fill', '#BDE2FF').style('font-family', 'Courier New').style('font-size', '14px')
-            .text('Map unavailable — check network connection');
+        _mapUnavailable(svg, width, height);
     });
 
     return window.dash_clientside.no_update;
@@ -1363,18 +1299,11 @@ renderArcMap: function(data, tabValue, mode) {
 renderChordDiagram: function(data, tabValue) {
     if (tabValue !== 'tab-alltime') return window.dash_clientside.no_update;
     if (!data || !data.nfl_teams || !data.nfl_teams.length) return window.dash_clientside.no_update;
-    var container = document.getElementById('d3-chord-container');
-    if (!container) {
-        var _fn = window.dash_clientside.d3charts.renderChordDiagram.bind(window.dash_clientside.d3charts);
-        _waitForEl('d3-chord-container', function() { _fn(data, tabValue); }, 20000);
-        return window.dash_clientside.no_update;
-    }
-    container.innerHTML = '';
-
-    d3.select(container).style('position', 'relative');
-
-    var width  = container.clientWidth  || 760;
-    var height = container.clientHeight || 600;
+    var container = _getContainer('d3-chord-container', window.dash_clientside.d3charts.renderChordDiagram, [data, tabValue], 20000);
+    if (!container) return window.dash_clientside.no_update;
+    var T = _theme();
+    var dims = _setupChart(container, {fallbackW: 760, fallbackH: 600});
+    var svg = dims.svg, width = dims.width, height = dims.height;
     var outerR = Math.min(width, height) / 2 - 90;
     var innerR = outerR - 24;
 
@@ -1397,28 +1326,18 @@ renderChordDiagram: function(data, tabValue) {
     });
 
     // Color scheme
-    var nflColor  = '#3D5E78';  // steel blue for all NFL teams
-    var ownerColor = function(idx) { return colors[owners[idx]] || '#BDE2FF'; };
+    var nflColor  = T.grid;  // steel blue for all NFL teams
+    var ownerColor = function(idx) { return colors[owners[idx]] || T.text; };
 
     var chord = d3.chord().padAngle(0.04).sortSubgroups(d3.descending)(sq);
     var arc   = d3.arc().innerRadius(innerR).outerRadius(outerR);
     var ribbon = d3.ribbon().radius(innerR);
 
-    var svg = d3.select(container).append('svg')
-        .attr('width', width).attr('height', height)
-        .style('background', 'transparent');
-
     var g = svg.append('g')
         .attr('transform', 'translate(' + width/2 + ',' + height/2 + ')');
 
     // Tooltip
-    var tooltip = d3.select(container).append('div')
-        .style('position', 'absolute').style('pointer-events', 'none')
-        .style('background', '#1a3a52').style('border', '1px solid #2e526e')
-        .style('border-radius', '6px').style('padding', '8px 12px')
-        .style('font-family', 'Courier New').style('font-size', '12px')
-        .style('color', '#BDE2FF').style('opacity', 0).style('z-index', 10)
-        .style('max-width', '220px');
+    var tooltip = _makeTooltip(container, {'max-width': '220px'});
 
     // Outer arcs (group segments)
     var group = g.append('g').selectAll('g')
@@ -1430,7 +1349,7 @@ renderChordDiagram: function(data, tabValue) {
         .attr('fill', function(d) {
             return d.index < nfl ? nflColor : ownerColor(d.index - nfl);
         })
-        .attr('stroke', '#0d1e2e')
+        .attr('stroke', T.bgDeep)
         .attr('stroke-width', 0.5)
         .attr('opacity', 0.85)
         .on('mouseover', function(event, d) {
@@ -1462,9 +1381,9 @@ renderChordDiagram: function(data, tabValue) {
         })
         .attr('text-anchor', function(d) { return d.angle > Math.PI ? 'end' : 'start'; })
         .style('fill', function(d) {
-            return d.index < nfl ? '#6a9abf' : (colors[owners[d.index - nfl]] || '#BDE2FF');
+            return d.index < nfl ? T.muted : (colors[owners[d.index - nfl]] || T.text);
         })
-        .style('font-family', 'Courier New')
+        .style('font-family', T.font)
         .style('font-size', function(d) { return d.index < nfl ? '9px' : '11px'; })
         .style('font-weight', function(d) { return d.index < nfl ? 'normal' : 'bold'; })
         .text(function(d) { return d.index < nfl ? nflTeams[d.index] : owners[d.index - nfl]; });
@@ -1480,7 +1399,7 @@ renderChordDiagram: function(data, tabValue) {
             var ownerIdx = d.source.index >= nfl ? d.source.index - nfl : d.target.index - nfl;
             return ownerColor(ownerIdx);
         })
-        .attr('stroke', '#0d1e2e')
+        .attr('stroke', T.bgDeep)
         .attr('stroke-width', 0.3)
         .attr('opacity', 0)
         .on('mouseover', function(event, d) {

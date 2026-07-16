@@ -424,6 +424,17 @@ def _empty(msg='Loading…', h=400):
 def _err(msg): return _empty(f'⚠ {msg}')
 
 
+def _graph(fig, responsive=True, **kwargs):
+    """Standard chart graph: no modebar, full width. Extra kwargs pass to dcc.Graph (e.g. id=)."""
+    return dcc.Graph(figure=fig, config={'displayModeBar': False, 'responsive': responsive},
+                     style={'width': '100%'}, **kwargs)
+
+
+def _err_graph(e):
+    """Standard error graph for a failed chart build."""
+    return _graph(_err(str(e)))
+
+
 def _card(fig, title='', half=False, subtitle=''):
     cls = 'chart-col-half' if half else 'chart-col-full'
     kids = []
@@ -431,8 +442,7 @@ def _card(fig, title='', half=False, subtitle=''):
         kids.append(html.Div(title, className='chart-title'))
     if subtitle:
         kids.append(html.Div(subtitle, className='chart-subtitle'))
-    kids.append(dcc.Graph(figure=fig, config={'displayModeBar': False, 'responsive': True},
-                          style={'width': '100%'}))
+    kids.append(_graph(fig))
     return html.Div(kids, className=f'chart-card {cls}')
 
 
@@ -1349,10 +1359,9 @@ def _sidebet_card(year, week, week_obj):
                 fig = getattr(sb, method_name)(week_obj)
             fig.update_layout(title=None, width=None, height=560,
                               margin=dict(t=20, b=80, l=220, r=40))
-            chart_el = dcc.Graph(figure=fig, config={'displayModeBar': False, 'responsive': True},
-                                 style={'width': '100%'})
+            chart_el = _graph(fig)
         except Exception as e:
-            chart_el = dcc.Graph(figure=_err(str(e)), config={'displayModeBar': False, 'responsive': True}, style={'width': '100%'})
+            chart_el = _err_graph(e)
     else:
         chart_el = html.Div(f'Chart not yet available for Week {week}.',
                             className='chart-subtitle', style={'padding': '24px 0'})
@@ -1452,14 +1461,9 @@ def _playoff_odds_card(prob_data, year, week):
         locked = _empty(f'Projections unlock Week {EARLY}')
         locked.update_layout(height=260)
         return _wrap(
-            dcc.Graph(figure=locked, config={'displayModeBar': False, 'responsive': True},
-                      style={'width': '100%'}),
+            _graph(locked),
             subtitle=f'Projections unlock Week {EARLY}',
         )
-
-    def _err_graph(msg):
-        return dcc.Graph(figure=_err(msg), config={'displayModeBar': False, 'responsive': True},
-                         style={'width': '100%'})
 
     if prob_data is None:
         return _wrap(_err_graph('Playoff probability data not available'))
@@ -1480,11 +1484,9 @@ def _playoff_odds_card(prob_data, year, week):
     try:
         bar_fig = core.PlayoffCalculator.PlayoffOddsBar(snapshots, teamcolors=teamcolors)
         _strip(bar_fig, 480).update_layout(margin=dict(t=20, b=60, l=160, r=100))
-        initial_chart = dcc.Graph(figure=bar_fig, config={'displayModeBar': False, 'responsive': True},
-                                  style={'width': '100%'})
+        initial_chart = _graph(bar_fig)
     except Exception as e:
-        initial_chart = dcc.Graph(figure=_err(str(e)), config={'displayModeBar': False, 'responsive': True},
-                                  style={'width': '100%'})
+        initial_chart = _err_graph(e)
 
     active_toggle = dcc.RadioItems(
         id='playoff-view-toggle',
@@ -1541,9 +1543,9 @@ def _tab_week(year, week, teams):
     try:
         fig = week_obj.PointsOverTheWeekend()
         _strip(fig, 950).update_layout(margin=dict(t=80, b=100, l=80, r=40))
-        initial_timeline = dcc.Graph(figure=fig, config={'displayModeBar': False, 'responsive': True}, style={'width': '100%'})
+        initial_timeline = _graph(fig)
     except Exception as e:
-        initial_timeline = dcc.Graph(figure=_err(str(e)), config={'displayModeBar': False, 'responsive': True}, style={'width': '100%'})
+        initial_timeline = _err_graph(e)
     cards.append(html.Div([
         html.Div(f'Week {week} · Points Timeline', className='chart-title'),
         html.Div('How scores accumulated by day through the matchup window', className='chart-subtitle'),
@@ -1556,9 +1558,9 @@ def _tab_week(year, week, teams):
 
     try:
         fig = sf.LuckChart(week)
-        initial_luck = dcc.Graph(figure=_strip(fig, 660), config={'displayModeBar': False, 'responsive': True}, style={'width': '100%'})
+        initial_luck = _graph(_strip(fig, 660))
     except Exception as e:
-        initial_luck = dcc.Graph(figure=_err(str(e)), config={'displayModeBar': False, 'responsive': True}, style={'width': '100%'})
+        initial_luck = _err_graph(e)
     cards.append(html.Div([
         html.Div('Luck Chart', className='chart-title'),
         html.Div('Expected wins based on scoring — separates lucky records from genuinely dominant ones', className='chart-subtitle'),
@@ -1616,9 +1618,9 @@ def _tab_season(year, week, teams):
     try:
         fig = sf.SeasonPointsForAgainst()
         _strip(fig, 680).update_layout(margin=dict(l=250, t=60, b=80))
-        initial_pfa = dcc.Graph(figure=fig, config={'displayModeBar': False, 'responsive': True}, style={'width': '100%'})
+        initial_pfa = _graph(fig)
     except Exception as e:
-        initial_pfa = dcc.Graph(figure=_err(str(e)), config={'displayModeBar': False, 'responsive': True}, style={'width': '100%'})
+        initial_pfa = _err_graph(e)
     cards.append(html.Div([
         html.Div('Points For & Against', className='chart-title'),
         html.Div('Total points scored vs allowed — identifies dominant teams from lucky ones', className='chart-subtitle'),
@@ -1640,10 +1642,10 @@ def _tab_season(year, week, teams):
     try:
         fig = sf.ScoreFrequencyGraph(week)
         fig.update_layout(title=None, width=None, height=680)
-        initial_freq = dcc.Graph(figure=fig, config={'displayModeBar': False, 'responsive': True}, style={'width': '100%'})
+        initial_freq = _graph(fig)
     except Exception as e:
         traceback.print_exc()
-        initial_freq = dcc.Graph(figure=_err(str(e)), config={'displayModeBar': False, 'responsive': True}, style={'width': '100%'})
+        initial_freq = _err_graph(e)
     cards.append(html.Div([
         html.Div('Scoring Frequency', className='chart-title'),
         html.Div('Distribution of game scores — reveals scoring tiers and outliers', className='chart-subtitle'),
@@ -1658,9 +1660,9 @@ def _tab_season(year, week, teams):
     try:
         fig = sf.BrawnyBench()
         fig.update_layout(title=None, width=None, height=580)
-        initial_bench = dcc.Graph(figure=fig, config={'displayModeBar': False, 'responsive': True}, style={'width': '100%'})
+        initial_bench = _graph(fig)
     except Exception as e:
-        initial_bench = dcc.Graph(figure=_err(str(e)), config={'displayModeBar': False, 'responsive': True}, style={'width': '100%'})
+        initial_bench = _err_graph(e)
     cards.append(html.Div([
         html.Div('Brawny Benches', className='chart-title'),
         html.Div('Points left on the bench — wasted potential from sub-optimal lineup decisions', className='chart-subtitle'),
@@ -1701,10 +1703,10 @@ def _tab_season(year, week, teams):
 
     try:
         fig = sf.WaiverWireBump(mode='rank')
-        initial_bump = dcc.Graph(figure=_strip(fig, 660), config={'displayModeBar': False, 'responsive': True}, style={'width': '100%'})
+        initial_bump = _graph(_strip(fig, 660))
     except Exception as e:
         traceback.print_exc()
-        initial_bump = dcc.Graph(figure=_err(str(e)), config={'displayModeBar': False, 'responsive': True}, style={'width': '100%'})
+        initial_bump = _err_graph(e)
     cards.append(html.Div([
         html.Div('Top Scorers · Points Race', className='chart-title'),
         html.Div('Weekly rank (or points) progression of the top fantasy scorers this season', className='chart-subtitle'),
@@ -1759,10 +1761,10 @@ def _tab_players(year, week, teams):
     try:
         fig = sf.ViolinPlayer(week, Starters=True)
         fig.update_layout(title=None, width=None, height=1000)
-        initial_violin = dcc.Graph(figure=fig, config={'displayModeBar': False, 'responsive': True}, style={'width': '100%'})
+        initial_violin = _graph(fig)
     except Exception as e:
         traceback.print_exc()
-        initial_violin = dcc.Graph(figure=_err(str(e)), config={'displayModeBar': False, 'responsive': True}, style={'width': '100%'})
+        initial_violin = _err_graph(e)
     cards.append(html.Div([
         html.Div('Scoring Distribution', className='chart-title'),
         html.Div('Score spread per player — the box shows the typical range, dots are weekly outings. Switch to By Position to compare positional depth across teams.', className='chart-subtitle'),
@@ -1777,7 +1779,7 @@ def _tab_players(year, week, teams):
 
     try:
         fig = sf.ScoreTrends()
-        graph = dcc.Graph(figure=_strip(fig, 600), config={'displayModeBar': False, 'responsive': False}, style={'width': '100%'})
+        graph = _graph(_strip(fig, 600), responsive=False)
         cards.append(html.Div([
             html.Div('Weekly Score Trends', className='chart-title'),
             html.Div('Each player\'s fantasy output week by week — spot hot streaks and fades', className='chart-subtitle'),
@@ -1801,9 +1803,9 @@ def _tab_players(year, week, teams):
 
     try:
         fig = sf.TopPlayers('QB', 50)
-        initial_top = dcc.Graph(figure=_strip(fig, 580), config={'displayModeBar': False, 'responsive': True}, style={'width': '100%'})
+        initial_top = _graph(_strip(fig, 580))
     except Exception as e:
-        initial_top = dcc.Graph(figure=_err(str(e)), config={'displayModeBar': False, 'responsive': True}, style={'width': '100%'})
+        initial_top = _err_graph(e)
     cards.append(html.Div([
         html.Div('Top Players · Cumulative Points', className='chart-title'),
         html.Div('Highest-scoring rostered players by position — ranked by total fantasy points this season', className='chart-subtitle'),
@@ -2195,10 +2197,9 @@ def _tab_sidebets(year):
                     fig = getattr(sb, method_name)(week_obj)
                 fig.update_layout(title=None, width=None, height=520,
                                   margin=dict(t=20, b=80, l=220, r=40))
-                chart_el = dcc.Graph(figure=fig, config={'displayModeBar': False, 'responsive': True},
-                                     style={'width': '100%'})
+                chart_el = _graph(fig)
             except Exception as e:
-                chart_el = dcc.Graph(figure=_err(str(e)), config={'displayModeBar': False, 'responsive': True}, style={'width': '100%'})
+                chart_el = _err_graph(e)
         else:
             chart_el = html.Div(f'Chart not yet available for Week {wk}.',
                                 className='chart-subtitle', style={'padding': '20px 0'})
@@ -2260,11 +2261,9 @@ def _tab_survivor(year):
             if margin:
                 fig.update_layout(margin=margin)
             fig.update_layout(title=None, width=None)
-            return dcc.Graph(figure=fig, config={'displayModeBar': False, 'responsive': True},
-                             style={'width': '100%'})
+            return _graph(fig)
         except Exception as e:
-            return dcc.Graph(figure=_err(str(e)), config={'displayModeBar': False, 'responsive': True},
-                             style={'width': '100%'})
+            return _err_graph(e)
 
     # Row 1: Pick Matrix (full width)
     row1 = html.Div([
@@ -2296,13 +2295,9 @@ def _tab_survivor(year):
     try:
         initial_margin_fig = surv.win_margin_fig(default_player)
         initial_margin_fig.update_layout(title=None, width=None, height=400)
-        initial_margin = dcc.Graph(id='survivor-win-margin-graph', figure=initial_margin_fig,
-                                   config={'displayModeBar': False, 'responsive': True},
-                                   style={'width': '100%'})
+        initial_margin = _graph(initial_margin_fig, id='survivor-win-margin-graph')
     except Exception as e:
-        initial_margin = dcc.Graph(id='survivor-win-margin-graph', figure=_err(str(e)),
-                                   config={'displayModeBar': False, 'responsive': True},
-                                   style={'width': '100%'})
+        initial_margin = _graph(_err(str(e)), id='survivor-win-margin-graph')
 
     row3_margin = html.Div([
         html.Div('Win Margins', className='chart-title'),
@@ -2321,11 +2316,9 @@ def _tab_survivor(year):
     try:
         longevity_fig = surv.longevity_leaderboard_fig(all_survivors)
         longevity_fig.update_layout(title=None, width=None, height=max(300, 50 * n_players))
-        longevity_el = dcc.Graph(figure=longevity_fig, config={'displayModeBar': False, 'responsive': True},
-                                 style={'width': '100%'})
+        longevity_el = _graph(longevity_fig)
     except Exception as e:
-        longevity_el = dcc.Graph(figure=_err(str(e)), config={'displayModeBar': False, 'responsive': True},
-                                 style={'width': '100%'})
+        longevity_el = _err_graph(e)
 
     row3_longevity = html.Div([
         html.Div('Longevity Leaderboard', className='chart-title'),
@@ -2384,11 +2377,9 @@ def _tab_pickem(year):
             if h:
                 fig.update_layout(height=h)
             fig.update_layout(title=None, width=None)
-            return dcc.Graph(figure=fig, config={'displayModeBar': False, 'responsive': True},
-                             style={'width': '100%'})
+            return _graph(fig)
         except Exception as e:
-            return dcc.Graph(figure=_err(str(e)), config={'displayModeBar': False, 'responsive': True},
-                             style={'width': '100%'})
+            return _err_graph(e)
 
     row1 = html.Div([
         html.Div('Score Race', className='chart-title'),
@@ -2554,8 +2545,7 @@ def _update_playoff_odds_chart(mode, year, week):
             fig = core.PlayoffCalculator.PlayoffOddsTrajectory(
                 prob_data, teamcolors=teamcolors, year=year)
             fig.update_layout(title=None, width=None)
-        return dcc.Graph(figure=fig, config={'displayModeBar': False, 'responsive': True},
-                         style={'width': '100%'})
+        return _graph(fig)
     except Exception as e:
         return _err(str(e))
 
@@ -2578,7 +2568,7 @@ def _update_luck_chart(mode, year, week, teams):
     try:
         if mode == 'ytd':
             fig = sf.LuckChart(week)
-            return dcc.Graph(figure=_strip(fig, 660), config={'displayModeBar': False, 'responsive': True}, style={'width': '100%'})
+            return _graph(_strip(fig, 660))
 
         # This Week Only — scatter of single-week scores vs opponent scores
         sf.WeeklyWins(week)
@@ -2626,7 +2616,7 @@ def _update_luck_chart(mode, year, week, teams):
             xaxis=dict(title_font=dict(color='#F94144', shadow='none'), tickfont=dict(size=16, family='Courier New')),
             yaxis=dict(title_font=dict(color='#90BE6D', shadow='none'), tickfont=dict(size=16, family='Courier New')),
         )
-        return dcc.Graph(figure=fig, config={'displayModeBar': False, 'responsive': True}, style={'width': '100%'})
+        return _graph(fig)
     except Exception as e:
         return html.Div(f'Error: {e}', style={'color': '#F94144', 'padding': '20px'})
 
@@ -2647,7 +2637,7 @@ def _update_timeline_chart(mode, year, week):
     try:
         fig = week_obj.PointsOverTheWeekend(animate=(mode == 'animated'))
         _strip(fig, 950).update_layout(margin=dict(t=80, b=100, l=80, r=40))
-        return dcc.Graph(figure=fig, config={'displayModeBar': False, 'responsive': True}, style={'width': '100%'})
+        return _graph(fig)
     except Exception as e:
         return html.Div(f'Error: {e}', style={'color': '#F94144', 'padding': '20px'})
 
@@ -2676,7 +2666,7 @@ def _update_pfa_chart(mode, year, teams):
                 annotation_font_color='#FFC300',
                 annotation_position='top',
             )
-        return dcc.Graph(figure=fig, config={'displayModeBar': False, 'responsive': True}, style={'width': '100%'})
+        return _graph(fig)
     except Exception as e:
         return html.Div(f'Error: {e}', style={'color': '#F94144', 'padding': '20px'})
 
@@ -2717,7 +2707,7 @@ def _update_freq_chart(mode, year, week, teams):
         fig.update_traces(
             hovertemplate='Score range: <b>%{x}</b><br>Count: <b>%{y}</b><extra></extra>'
         )
-        return dcc.Graph(figure=fig, config={'displayModeBar': False, 'responsive': True}, style={'width': '100%'})
+        return _graph(fig)
     except Exception as e:
         return html.Div(f'Error: {e}', style={'color': '#F94144', 'padding': '20px'})
 
@@ -2768,7 +2758,7 @@ def _update_bench_chart(mode, year, week, teams):
                 xaxis=dict(dtick=1, title=dict(text='Week', standoff=15)),
                 yaxis=dict(title='Bench Points'),
             )
-        return dcc.Graph(figure=fig, config={'displayModeBar': False, 'responsive': True}, style={'width': '100%'})
+        return _graph(fig)
     except Exception as e:
         return html.Div(f'Error: {e}', style={'color': '#F94144', 'padding': '20px'})
 
@@ -2788,7 +2778,7 @@ def _update_bump_chart(mode, year, teams):
     sf = _filter_season(season, teams)
     try:
         fig = sf.WaiverWireBump(mode=mode)
-        return dcc.Graph(figure=_strip(fig, 660), config={'displayModeBar': False, 'responsive': True}, style={'width': '100%'})
+        return _graph(_strip(fig, 660))
     except Exception as e:
         return html.Div(f'Error: {e}', style={'color': '#F94144', 'padding': '20px'})
 
@@ -2815,7 +2805,7 @@ def _update_violin(mode, year, week, teams):
         else:
             fig = sf.ViolinPosition(Starters=(mode == 'pos_starters'))
             fig.update_layout(title=None, width=None, height=1200)
-        return dcc.Graph(figure=fig, config={'displayModeBar': False, 'responsive': True}, style={'width': '100%'})
+        return _graph(fig)
     except Exception as e:
         return html.Div(f'Error: {e}', style={'color': '#F94144', 'padding': '20px'})
 
@@ -2842,7 +2832,7 @@ def _update_top_players(position, thresh, year, week, teams):
     thresh = thresh if thresh is not None else _POS_THRESHOLDS.get(position, 50)
     try:
         fig = sf.TopPlayers(position, thresh)
-        return dcc.Graph(figure=_strip(fig, 580), config={'displayModeBar': False, 'responsive': True}, style={'width': '100%'})
+        return _graph(_strip(fig, 580))
     except Exception as e:
         return html.Div(f'Error: {e}', style={'color': '#F94144', 'padding': '20px'})
 

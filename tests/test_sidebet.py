@@ -182,7 +182,7 @@ class TestNoFigShow:
             source = f.read()
 
         # Extract only the SideBet class block
-        match = re.search(r'^class SideBet:.*', source, re.MULTILINE | re.DOTALL)
+        match = re.search(r'^class SideBet\b.*', source, re.MULTILINE | re.DOTALL)
         assert match, "Could not locate SideBet class in sleeper_core.py"
         sidebet_block = match.group(0)
 

@@ -496,7 +496,46 @@ class League:
         self.draft = draft_json_normal
         return self.draft
     
-class Week:
+class TeamColorsMixin:
+    """Shared team-color handling: SetTeamColors + y-axis tick-label recoloring.
+
+    Default color source is get_slot_teamcolors(self.year); subclasses keyed
+    differently (AllTime, SideBet) override _default_teamcolors.
+    """
+
+    def _default_teamcolors(self):
+        return get_slot_teamcolors(self.year)
+
+    def SetTeamColors(self, color_dict: dict = None):
+        self.teamcolors = self._default_teamcolors() if color_dict is None else color_dict
+
+    @staticmethod
+    def _recolor_yaxis(fig, teamcolors):
+        """Restyle a figure's y-axis tick labels with per-team colors.
+
+        Labels are read from the first trace's y values — more reliable than
+        'categoryarray' for getting the list of teams on the axis.
+        """
+        if not fig.data or fig.data[0].y is None:
+            return fig
+        y_axis_labels = fig.data[0].y
+        styled_labels = [
+            f"<span style='color:{teamcolors.get(label, 'white')}'>{label}</span>"
+            for label in y_axis_labels
+        ]
+        fig.update_yaxes(tickvals=y_axis_labels, ticktext=styled_labels)
+        return fig
+
+    def UpdateColors(self, fig):
+        """Color the y-axis tick labels using this object's teamcolors."""
+        return self._recolor_yaxis(fig, self.teamcolors)
+
+    def UpdateColors2(self, WeekObj, fig):
+        """Color the y-axis tick labels using another object's teamcolors."""
+        return self._recolor_yaxis(fig, WeekObj.teamcolors)
+
+
+class Week(TeamColorsMixin):
     def __init__(self,week, league):
         self.week = week
         self.league = league
@@ -526,41 +565,6 @@ class Week:
         week_response.raise_for_status()
         self.json = week_response.json()
 
-    def SetTeamColors(self, color_dict:dict = None):
-        self.teamcolors = get_slot_teamcolors(self.year)
-        if color_dict is not None:
-            self.teamcolors = color_dict
-    
-    def UpdateColors(self ,fig):
-        """
-        Updates the y-axis tick labels of a figure to use team-specific colors.
-        """
-        # --- THE FIX ---
-        # Instead of 'categoryarray', we get labels directly from the figure's data trace.
-        # This is a more reliable way to access the list of teams on the y-axis.
-        if not fig.data or fig.data[0].y is None:
-            # Failsafe in case the figure has no data
-            return fig
-
-        y_axis_labels = fig.data[0].y
-        
-        # Create a new list of HTML-styled labels with the correct colors.
-        styled_labels = []
-        for label in y_axis_labels:
-            # Look up the color for the team from your dictionary
-            color = self.teamcolors.get(label, 'white') # Default to white if not found
-            styled_labels.append(f"<span style='color:{color}'>{label}</span>")
-
-        # Update the y-axis to use the new styled text.
-        # 'tickvals' provides the original labels to map against.
-        # 'ticktext' provides the new, styled labels to display.
-        fig.update_yaxes(
-            tickvals=y_axis_labels,
-            ticktext=styled_labels
-        )
-                
-        return fig
-    
     def PlayerBreakout(self):
         # Initialize an empty list to hold the rows
         JSON_data = self.json
@@ -1091,7 +1095,7 @@ class Week:
         
     
     
-class Season:
+class Season(TeamColorsMixin):
     def __init__(self, league):
         self.league = league
         self.id = self.league.id
@@ -1131,41 +1135,6 @@ class Season:
     def SetBest(self,TotalYTD):
         self.Best = self.BreakoutSeason[self.BreakoutSeason['TotalYTD'] > TotalYTD]
         print(f'Best set at {self.Best}')
-
-    def SetTeamColors(self, color_dict:dict = None):
-        self.teamcolors = get_slot_teamcolors(self.year)
-        if color_dict is not None:
-            self.teamcolors = color_dict
-        
-    def UpdateColors(self ,fig):
-        """
-        Updates the y-axis tick labels of a figure to use team-specific colors.
-        """
-        # --- THE FIX ---
-        # Instead of 'categoryarray', we get labels directly from the figure's data trace.
-        # This is a more reliable way to access the list of teams on the y-axis.
-        if not fig.data or fig.data[0].y is None:
-            # Failsafe in case the figure has no data
-            return fig
-
-        y_axis_labels = fig.data[0].y
-        
-        # Create a new list of HTML-styled labels with the correct colors.
-        styled_labels = []
-        for label in y_axis_labels:
-            # Look up the color for the team from your dictionary
-            color = self.teamcolors.get(label, 'white') # Default to white if not found
-            styled_labels.append(f"<span style='color:{color}'>{label}</span>")
-
-        # Update the y-axis to use the new styled text.
-        # 'tickvals' provides the original labels to map against.
-        # 'ticktext' provides the new, styled labels to display.
-        fig.update_yaxes(
-            tickvals=y_axis_labels,
-            ticktext=styled_labels
-        )
-                
-        return fig
 
     def AllMatchesConcat(self):
         
@@ -3618,7 +3587,7 @@ class AllTimePlayoffs:
         return fig
 
 
-class AllTime:
+class AllTime(TeamColorsMixin):
     def __init__(self):
                
         self.MatchProcessing()
@@ -3651,10 +3620,8 @@ class AllTime:
         self.Breakout_Playoffs = self.Breakout[self.Breakout.Season == 'Playoff']
         self.Breakout_Regular = self.Breakout[self.Breakout.Season == 'Regular']
     
-    def SetTeamColors(self, color_dict:dict = None):
-        self.teamcolors = get_alltime_teamcolors()
-        if color_dict is not None:
-            self.teamcolors = color_dict
+    def _default_teamcolors(self):
+        return get_alltime_teamcolors()
 
     
     def OppWinPercentage(self, team, opp):
@@ -4181,52 +4148,17 @@ class AllTime:
         
         
         
-class SideBet:
+class SideBet(TeamColorsMixin):
     def __init__(self,League,Season, DictofWeeks = None, ):
-               
+
         self.DictofWeeks = DictofWeeks
         self.League = League
         self.Season = Season
-        
+
         self.SetTeamColors()
 
-    
-    
-    
-    def UpdateColors2(self,WeekObj ,fig):
-        """
-        Updates the y-axis tick labels of a figure to use team-specific colors.
-        """
-        # --- THE FIX ---
-        # Instead of 'categoryarray', we get labels directly from the figure's data trace.
-        # This is a more reliable way to access the list of teams on the y-axis.
-        if not fig.data or fig.data[0].y is None:
-            # Failsafe in case the figure has no data
-            return fig
-
-        y_axis_labels = fig.data[0].y
-        
-        # Create a new list of HTML-styled labels with the correct colors.
-        styled_labels = []
-        for label in y_axis_labels:
-            # Look up the color for the team from your dictionary
-            color = WeekObj.teamcolors.get(label, 'white') # Default to white if not found
-            styled_labels.append(f"<span style='color:{color}'>{label}</span>")
-
-        # Update the y-axis to use the new styled text.
-        # 'tickvals' provides the original labels to map against.
-        # 'ticktext' provides the new, styled labels to display.
-        fig.update_yaxes(
-            tickvals=y_axis_labels,
-            ticktext=styled_labels
-        )
-                
-        return fig
-    
-    def SetTeamColors(self, color_dict:dict = None):
-        self.teamcolors = get_slot_teamcolors(self.League.year)
-        if color_dict is not None:
-            self.teamcolors = color_dict
+    def _default_teamcolors(self):
+        return get_slot_teamcolors(self.League.year)
 
     def get_week_config(self, week: int) -> dict:
         """Returns {"name": ..., "desc": ..., "winner": ...} for the given week, or empty defaults."""
