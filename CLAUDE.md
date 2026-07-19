@@ -43,6 +43,10 @@ cd webapp && source ../.venv/bin/activate && python app.py
 
 Always kill before restarting. Confirm with `curl -s -o /dev/null -w "%{http_code}" http://localhost:8050/login` (expect 200).
 
+## Deployment (Raspberry Pi)
+
+Live at `https://rachett.tail504ae5.ts.net/legacy/` (Tailscale Funnel, public) and `rachett.local/legacy` (LAN via Caddy). Pi runs `sleeper.service`: gunicorn (1 worker, 4 threads) on `127.0.0.1:8503`, app dir `/home/bgmaddox/apps/Sleeper` with its own `.venv/` (deps pinned to match local). Secrets + `URL_BASE_PATHNAME=/legacy/` live in the Pi's `.env` — **do not blindly rsync the local `.env` over it**. Deploy: commit/push, then `ssh rachett 'bash ~/deploy.sh sleeper'`. `.cache/` and `Data/` are rsynced, not git-tracked — re-rsync after rebuilding caches locally.
+
 Run the server in the background so the session stays interactive. After code changes, kill and restart — there is no hot reload.
 
 Activate the venv if running other scripts: `source .venv/bin/activate` (Python 3.12, venv at `Sleeper Project/.venv/`).
