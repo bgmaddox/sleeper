@@ -291,6 +291,12 @@ def _login_route():
     return render_template_string(_LOGIN_HTML, error=False, logo=LOGO_URL, login_url=LOGIN_URL)
 
 
+if URL_BASE != '/':
+    @server.route('/')
+    def _root_redirect():
+        return redirect(URL_BASE)
+
+
 @server.route('/debug-error', methods=['POST'])
 def _debug_error():
     from flask import jsonify
