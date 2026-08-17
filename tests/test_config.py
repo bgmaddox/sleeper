@@ -17,11 +17,58 @@ CONFIG_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file
 
 class TestConfigFiles:
     def test_config_files_exist_and_parse(self):
-        for fname in ("roster_ids.json", "league_ids.json", "side_bet_seasons.json"):
+        for fname in ("roster_ids.json", "league_ids.json", "side_bet_seasons.json",
+                      "aliases.json"):
             path = os.path.join(CONFIG_DIR, fname)
             assert os.path.exists(path), f"missing {fname}"
             with open(path, encoding="utf-8") as f:
                 json.load(f)  # raises on invalid JSON
+
+
+class TestSeasonRolloverIntegrity:
+    """Adding a season is a config-only edit; these catch a half-finished one."""
+
+    def test_every_league_year_has_a_roster_map(self):
+        missing = [y for y in core.AVAILABLE_YEARS if not core.roster_ids.get(y)]
+        assert not missing, f"years in league_ids.json with no roster_ids entry: {missing}"
+
+    def test_roster_slots_are_contiguous_from_one(self):
+        """League size varies by year (2020 had 10 teams), but slots are always
+        1..N with no gaps — colors are assigned by slot index."""
+        wrong = {y: sorted(slots) for y, slots in core.roster_ids.items()
+                 if sorted(slots) != list(range(1, len(slots) + 1))}
+        assert not wrong, f"non-contiguous roster slots: {wrong}"
+
+    def test_no_duplicate_managers_within_a_season(self):
+        dupes = {y: names for y, slots in core.roster_ids.items()
+                 if len(set(names := list(slots.values()))) != len(names)}
+        assert not dupes, f"duplicate manager in a single season: {dupes}"
+
+    def test_current_season_is_a_known_year(self):
+        assert core.CURRENT_SEASON in core.AVAILABLE_YEARS
+
+    def test_current_season_is_the_latest(self):
+        """CURRENT_SEASON gates optimal-lineup and coloring for the in-progress year;
+        if it lags behind the newest league ID the new season is treated as finished."""
+        assert core.CURRENT_SEASON == max(core.AVAILABLE_YEARS)
+
+    def test_webapp_current_year_matches_core(self):
+        """webapp/app.py derives CURRENT_YEAR from core — guard against re-hardcoding."""
+        import re
+        app_path = os.path.join(os.path.dirname(CONFIG_DIR), "webapp", "app.py")
+        with open(app_path, encoding="utf-8") as f:
+            src = f.read()
+        m = re.search(r"^CURRENT_YEAR\s*=\s*(.+)$", src, re.M)
+        assert m, "CURRENT_YEAR assignment not found in webapp/app.py"
+        assert "core.CURRENT_SEASON" in m.group(1), \
+            f"CURRENT_YEAR should derive from core.CURRENT_SEASON, got: {m.group(1).strip()}"
+
+    def test_per_year_global_dicts_cover_every_year(self):
+        """Week.__init__ indexes these bare — a missing year is a hard KeyError."""
+        for name, d in [("AllMatchesDict", core.AllMatchesDict),
+                        ("AllBreakoutDict", core.AllBreakoutDict),
+                        ("OptimalScoresByYear", core.OptimalScoresByYear)]:
+            assert sorted(d) == core.AVAILABLE_YEARS, f"{name} does not cover AVAILABLE_YEARS"
 
 
 class TestRosterIds:
@@ -63,7 +110,7 @@ class TestLeagueIds:
         }
 
     def test_available_years_derived(self):
-        assert core.AVAILABLE_YEARS == list(range(2019, 2026))
+        assert core.AVAILABLE_YEARS == list(range(2019, 2027))
 
 
 class TestSideBetSeasons:

@@ -165,6 +165,142 @@ class TestPlayerLookup:
         assert not bad, f"Non-string values in player_names: {list(bad.items())[:5]}"
 
 
+# ── Preseason (renewed season, no weeks played) ───────────────────────────────
+
+class TestPreseasonSeason:
+    """A renewed-but-unplayed season must load without raising and must not be
+    cached. There is no TTL on season pickles, so caching an empty preseason
+    would freeze the year as permanently empty."""
+
+    def test_empty_season_concat_does_not_raise(self):
+        """pd.concat([]) raises ValueError; Season.Update must survive zero weeks."""
+        year = core.CURRENT_SEASON
+        saved_matches = dict(core.AllMatchesDict.get(year, {}))
+        saved_breakout = dict(core.AllBreakoutDict.get(year, {}))
+        try:
+            core.AllMatchesDict[year] = {}
+            core.AllBreakoutDict[year] = {}
+            season = core.Season.__new__(core.Season)
+            season.year = year
+            season.AllMatchesConcat()
+            season.BreakoutConcat()
+            assert season.Matches.empty
+            assert season.BreakoutSeason.empty
+            assert season.Starters.empty
+            # Empty-but-typed: downstream filters/groupbys need the columns.
+            for col in ("Team", "Total", "Week"):
+                assert col in season.Matches.columns
+            for col in ("player", "points", "starter"):
+                assert col in season.BreakoutSeason.columns
+        finally:
+            core.AllMatchesDict[year] = saved_matches
+            core.AllBreakoutDict[year] = saved_breakout
+
+    def test_empty_season_is_not_cached(self, tmp_path, monkeypatch):
+        """load_data_for_year must skip _save_cache when no weeks were played."""
+        fake_cache = tmp_path / ".cache"
+        fake_cache.mkdir()
+        monkeypatch.setattr(dl, "CACHE_DIR", str(fake_cache))
+
+        saved = []
+        monkeypatch.setattr(dl, "_save_cache", lambda k, v: saved.append(k))
+        monkeypatch.setattr(dl, "_load_cache", lambda k: None)
+        # No weeks played: the raw matchup JSON is all matchup_id=None.
+        monkeypatch.setattr(dl, "fetch_matchups_json",
+                            lambda lid, w: [{"matchup_id": None, "roster_id": 1}])
+
+        class _Stub:
+            def __init__(self, *a, **k): pass
+            def Update(self): pass
+        monkeypatch.setattr(core, "League", _Stub)
+        monkeypatch.setattr(core, "Season", _Stub)
+
+        _, _, weeks = dl.load_data_for_year(core.CURRENT_SEASON, verbose=False)
+        assert weeks == {}, "preseason should yield no weeks"
+        # Only the season pickle is at issue here. Unrelated keys (e.g. the
+        # 'nfl_players' lookup, seeded on first call) may legitimately be written.
+        season_writes = [k for k in saved if k.startswith("season_data_")]
+        assert season_writes == [], \
+            f"empty season must not be cached, but wrote: {season_writes}"
+
+    def test_week_is_not_constructed_for_unplayed_week(self, monkeypatch):
+        """Week() raises KeyError on preseason roster stubs, so the emptiness
+        check must happen on the raw JSON before construction."""
+        monkeypatch.setattr(dl, "_load_cache", lambda k: None)
+        monkeypatch.setattr(dl, "_save_cache", lambda k, v: None)
+        monkeypatch.setattr(dl, "fetch_matchups_json",
+                            lambda lid, w: [{"matchup_id": None, "roster_id": 1}])
+
+        built = []
+
+        class _Stub:
+            def __init__(self, *a, **k): pass
+            def Update(self): pass
+
+        def _boom(*a, **k):
+            built.append(a)
+            raise AssertionError("Week must not be constructed for an unplayed week")
+
+        monkeypatch.setattr(core, "League", _Stub)
+        monkeypatch.setattr(core, "Season", _Stub)
+        monkeypatch.setattr(core, "Week", _boom)
+
+        dl.load_data_for_year(core.CURRENT_SEASON, verbose=False)
+        assert built == []
+
+
+# ── Cache durability ──────────────────────────────────────────────────────────
+
+class TestCacheDurability:
+    """Writes must be atomic and reads must tolerate damage.
+
+    Non-atomic writes corrupted 43 cache files in one session when the app server
+    and a test run warmed the same keys concurrently. The Pi serves this under
+    gunicorn with several threads and eagerly loads every season on boot, so the
+    same overlap happens there.
+    """
+
+    def test_truncated_pickle_reads_as_miss(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(dl, "CACHE_DIR", str(tmp_path))
+        path = dl._cache_path("busted_key")
+        open(path, "wb").close()          # zero-byte file, as seen in the wild
+        assert os.path.exists(path)
+        assert dl._load_cache("busted_key") is None, "must not raise EOFError"
+
+    def test_unreadable_pickle_is_removed(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(dl, "CACHE_DIR", str(tmp_path))
+        path = dl._cache_path("busted_key")
+        with open(path, "wb") as f:
+            f.write(b"\x80\x04 not a real pickle")
+        dl._load_cache("busted_key")
+        assert not os.path.exists(path), "a bad cache file should be dropped"
+
+    def test_save_is_atomic_no_partial_on_failure(self, tmp_path, monkeypatch):
+        """If pickling raises mid-write, the destination must be untouched."""
+        monkeypatch.setattr(dl, "CACHE_DIR", str(tmp_path))
+        dl._save_cache("k", {"good": True})
+        path = dl._cache_path("k")
+
+        class Unpicklable:
+            def __reduce__(self):
+                raise RuntimeError("boom")
+
+        with pytest.raises(RuntimeError):
+            dl._save_cache("k", Unpicklable())
+        assert dl._load_cache("k") == {"good": True}, "previous value must survive"
+
+    def test_save_leaves_no_temp_files(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(dl, "CACHE_DIR", str(tmp_path))
+        dl._save_cache("k", [1, 2, 3])
+        leftovers = [p for p in os.listdir(tmp_path) if p.startswith(".tmp-")]
+        assert leftovers == [], f"temp files left behind: {leftovers}"
+
+    def test_roundtrip(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(dl, "CACHE_DIR", str(tmp_path))
+        dl._save_cache("k", {"a": [1, 2], "b": "x"})
+        assert dl._load_cache("k") == {"a": [1, 2], "b": "x"}
+
+
 # ── Cache invalidation ────────────────────────────────────────────────────────
 
 class TestCacheInvalidation:
@@ -180,8 +316,10 @@ class TestCacheInvalidation:
         fake_cache.mkdir()
         monkeypatch.setattr(dl, "CACHE_DIR", str(fake_cache))
 
-        # Write a fake season cache file
-        key = "season_data_2024_18"
+        # Write a fake season cache file at the exact path invalidate_week targets.
+        # Built via the shared key helper, so a change to the key format can't let
+        # this pass while the real refresh button silently no-ops.
+        key = dl.season_cache_key(2024)
         h = hashlib.md5(key.encode()).hexdigest()
         fake_pkl = fake_cache / f"{key}_{h}.pkl"
         fake_pkl.write_bytes(pickle.dumps({"fake": True}))
@@ -343,7 +481,7 @@ class TestBreakoutJoinIntegrity:
     """
 
     def _weeks(self, year):
-        path = dl._cache_path(f"season_data_{year}_18")
+        path = dl.season_cache_path(year)
         if not os.path.exists(path):
             pytest.skip(f"{year} cache not found")
         _, _, weeks = dl.load_data_for_year(year, verbose=False)
@@ -379,7 +517,7 @@ class TestBreakoutJoinIntegrity:
 def test_josh_allen_2023_season_total_not_inflated():
     """Regression for the 4x name-collision bug: QB Josh Allen (Sleeper id 4984)
     season total must match his raw players_points, not a multiple of it."""
-    path = dl._cache_path("season_data_2023_18")
+    path = dl.season_cache_path(2023)
     if not os.path.exists(path):
         pytest.skip("2023 cache not found")
     _, _, weeks = dl.load_data_for_year(2023, verbose=False)

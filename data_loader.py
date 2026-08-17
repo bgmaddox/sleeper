@@ -4,8 +4,10 @@
 # Subsequent loads read from .cache/ (fast).
 
 import os
+import json
 import pickle
 import hashlib
+import tempfile
 import requests
 
 CACHE_DIR = os.path.join(os.path.dirname(__file__), ".cache")
@@ -31,15 +33,78 @@ def _cache_path(key: str) -> str:
 
 def _load_cache(key: str):
     path = _cache_path(key)
-    if os.path.exists(path):
+    if not os.path.exists(path):
+        return None
+    try:
         with open(path, "rb") as f:
             return pickle.load(f)
-    return None
+    except (EOFError, pickle.UnpicklingError, AttributeError, ImportError) as e:
+        # A truncated or otherwise unreadable pickle must read as a cache miss,
+        # not crash the caller. Drop it so the next call rebuilds cleanly.
+        print(f"[cache] Discarding unreadable cache {os.path.basename(path)}: {e}")
+        try:
+            os.remove(path)
+        except OSError:
+            pass
+        return None
+
 
 def _save_cache(key: str, value):
+    """Write atomically: pickle to a temp file in the same directory, then
+    os.replace() it into place.
+
+    Writing straight to the destination leaves a truncated file visible to any
+    concurrent reader if two writers overlap or a write is interrupted — which
+    is not hypothetical here. The app eagerly loads every season on boot, the Pi
+    serves it under gunicorn with several threads, and a test run or a second
+    process warming the same key will collide. os.replace is atomic on POSIX and
+    Windows, so readers see either the old file or the new one, never a partial.
+    """
     path = _cache_path(key)
-    with open(path, "wb") as f:
-        pickle.dump(value, f)
+    fd, tmp = tempfile.mkstemp(dir=CACHE_DIR, prefix=".tmp-", suffix=".pkl")
+    try:
+        with os.fdopen(fd, "wb") as f:
+            pickle.dump(value, f)
+        os.replace(tmp, path)
+    except BaseException:
+        try:
+            os.remove(tmp)
+        except OSError:
+            pass
+        raise
+
+def _name_fingerprint(year: int) -> str:
+    """Short hash of the manager-name inputs baked into a cached season.
+
+    Cached Week/Season objects carry manager names inside their dataframes. When
+    config/roster_ids.json or config/aliases.json changes, those pickles go stale
+    in a way nothing else detects: name lookups silently fall through to
+    sentinels (blank colors, reg_season_rank=999) instead of raising. Folding the
+    names into the cache key makes a rename self-invalidating.
+    """
+    import sleeper_core as core
+    payload = json.dumps(
+        [sorted(core.roster_ids.get(year, {}).items()),
+         sorted(core.NAME_ALIASES.items())],
+        sort_keys=True,
+    )
+    return hashlib.md5(payload.encode()).hexdigest()[:8]
+
+
+def season_cache_key(year: int, max_week: int = 18) -> str:
+    """The cache key for a season pickle. Single source of truth.
+
+    load_data_for_year, invalidate_week, and the test fixtures all need this
+    string to agree. When it was rebuilt by hand in each place, adding the name
+    fingerprint broke the ↺ refresh button and every fixture at once.
+    """
+    return f"season_data_{year}_{max_week}_{_name_fingerprint(year)}"
+
+
+def season_cache_path(year: int, max_week: int = 18) -> str:
+    """Filesystem path for a season pickle. See season_cache_key."""
+    return _cache_path(season_cache_key(year, max_week))
+
 
 def clear_cache():
     """Delete all cached files."""
@@ -216,6 +281,94 @@ def fetch_nfl_schedule(year: int):
     _save_cache(key, sched)
     return sched
 
+def season_kickoff_ms(year: int):
+    """Epoch milliseconds (UTC) of the first kickoff of `year`'s Week 1, or None.
+
+    Drives the preseason countdown. Derived from the published NFL schedule
+    rather than hardcoded, so it stays correct if the schedule shifts and needs
+    no edit next season. nflverse publishes gameday/gametime in US Eastern.
+    """
+    import pandas as pd
+    try:
+        sched = fetch_nfl_schedule(year)
+        wk1 = sched[sched['week'] == 1]
+        if wk1.empty:
+            return None
+        stamps = pd.to_datetime(
+            wk1['gameday'].astype(str) + ' ' + wk1['gametime'].astype(str),
+            errors='coerce',
+        ).dropna()
+        if stamps.empty:
+            return None
+        first = stamps.min()
+        # Localize to Eastern, then convert to UTC for a browser-safe epoch.
+        if first.tzinfo is None:
+            first = first.tz_localize('America/New_York')
+        return int(first.tz_convert('UTC').timestamp() * 1000)
+    except Exception:
+        # A missing/renamed schedule column must not take down the tab.
+        return None
+
+
+def fetch_draft_json(draft_id) -> dict:
+    """Sleeper draft object.
+
+    Deliberately only cached once `start_time` is set. An unscheduled draft has
+    `start_time: null`, and with no TTL on these pickles, caching that would pin
+    the hero to "TBD" forever even after the draft was scheduled — the same trap
+    as caching an unplayed season.
+    """
+    key = f"draft_{draft_id}"
+    cached = _load_cache(key)
+    if cached is not None:
+        return cached
+    data = _get_json(f"https://api.sleeper.app/v1/draft/{draft_id}")
+    if data.get("start_time"):
+        _save_cache(key, data)
+    return data
+
+
+def _override_draft_ms(year: int):
+    """Manual draft date from config/season_dates.json, or None."""
+    import pandas as pd
+    try:
+        path = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                            "config", "season_dates.json")
+        with open(path, encoding="utf-8") as f:
+            cfg = json.load(f)
+        raw = (cfg.get(str(year)) or {}).get("draft")
+        if not raw:
+            return None
+        stamp = pd.Timestamp(raw)
+        if stamp.tzinfo is None:                      # bare local time -> Eastern
+            stamp = stamp.tz_localize("America/New_York")
+        return int(stamp.tz_convert("UTC").timestamp() * 1000)
+    except Exception:
+        # A malformed override must not take the tab down; fall through to TBD.
+        return None
+
+
+def draft_start_ms(year: int):
+    """Epoch milliseconds (UTC) of the draft, or None when it isn't scheduled.
+
+    Sleeper wins when the commissioner has set a start time there, so scheduling
+    the draft in Sleeper is all that's needed and no config edit is required.
+    config/season_dates.json is the fallback for showing a date before then.
+    """
+    import sleeper_core as core
+    try:
+        league_id = core.leagueNumbers_Dict[year]
+        settings = fetch_league_json(league_id)
+        draft_id = settings.get("draft_id")
+        if draft_id:
+            start = fetch_draft_json(draft_id).get("start_time")
+            if start:
+                return int(start)
+    except Exception:
+        pass
+    return _override_draft_ms(year)
+
+
 def load_survivor_for_year(year: int):
     """Build and return a Survivor object for the given year, disk-cached."""
     import sleeper_core as core
@@ -256,7 +409,7 @@ def load_data_for_year(year: int, max_week: int = 18, verbose: bool = True):
         core.NFLPlayerData.update(fetch_player_data())
 
     league_id = core.leagueNumbers_Dict[year]
-    cache_key = f"season_data_{year}_{max_week}"
+    cache_key = season_cache_key(year, max_week)
 
     cached = _load_cache(cache_key)
     if cached is not None:
@@ -293,6 +446,24 @@ def load_data_for_year(year: int, max_week: int = 18, verbose: bool = True):
     for w in range(1, max_week + 1):
         if verbose:
             print(f"  Week {w}/{max_week}…", end="\r")
+        # Inspect the raw matchup JSON *before* building the Week. Sleeper returns
+        # roster stubs for a league that hasn't played yet (pre_draft/preseason),
+        # and Week.PlayerBreakout() raises KeyError on those empty frames. This
+        # fetch is cached, so testing first costs nothing.
+        try:
+            raw = fetch_matchups_json(league_id, w)
+        except requests.RequestException as e:
+            raise RuntimeError(
+                f"Failed to fetch {year} week {w} from the Sleeper API: {e}"
+            ) from e
+        # No data at all = the season hasn't reached this week.
+        if not raw:
+            break
+        # Every entry matchup_id=None: Sleeper keeps returning roster score data
+        # for all NFL weeks after the fantasy season ends, and before it starts.
+        if all(m.get('matchup_id') is None for m in raw):
+            break
+
         try:
             wk = core.Week(w, league_obj)
         except requests.RequestException as e:
@@ -301,13 +472,6 @@ def load_data_for_year(year: int, max_week: int = 18, verbose: bool = True):
             raise RuntimeError(
                 f"Failed to fetch {year} week {w} from the Sleeper API: {e}"
             ) from e
-        # Only keep weeks that have data (empty matchup JSON = season hasn't reached that week)
-        if not wk.json:
-            break
-        # Skip weeks where every entry has matchup_id=None (Sleeper returns roster
-        # score data for all NFL weeks even after the fantasy season ends)
-        if all(m.get('matchup_id') is None for m in wk.json):
-            break
         weeks_dict[w] = wk
 
     if verbose:
@@ -323,9 +487,16 @@ def load_data_for_year(year: int, max_week: int = 18, verbose: bool = True):
         "matches_snap": {k: v.copy() for k, v in core.AllMatchesDict[year].items()},
         "breakout_snap": {k: v.copy() for k, v in core.AllBreakoutDict[year].items()},
     }
-    _save_cache(cache_key, payload)
-    if verbose:
-        print(f"[cache] Saved {year} to disk.")
+    # Never cache a season with no weeks. There is no TTL on these pickles, so a
+    # preseason snapshot would freeze the year as permanently empty — the app
+    # would keep serving "no data" for weeks after Week 1 was actually played,
+    # until someone hit the ↺ refresh button.
+    if weeks_dict:
+        _save_cache(cache_key, payload)
+        if verbose:
+            print(f"[cache] Saved {year} to disk.")
+    elif verbose:
+        print(f"[cache] Skipped saving {year} — no weeks played yet (preseason).")
 
     return league_obj, season_obj, weeks_dict
 
@@ -370,7 +541,7 @@ def load_playoff_probs(year: int) -> dict | None:
         if as_of_week > max_completed:
             break
 
-        week_key = f"playoff_probs_v2_{year}_{as_of_week}"
+        week_key = f"playoff_probs_v2_{year}_{as_of_week}_{_name_fingerprint(year)}"
         cached = _load_cache(week_key)
         if cached is not None:
             result[as_of_week] = cached
@@ -391,7 +562,7 @@ def invalidate_week(year: int, week: int):
     """Remove season cache for `year` so it rebuilds from the Sleeper API on next load.
     Deleting the season pickle forces all weeks (including `week`) to be re-fetched."""
     import sleeper_core as core
-    season_path = _cache_path(f"season_data_{year}_{18}")
+    season_path = season_cache_path(year)
     if os.path.exists(season_path):
         os.remove(season_path)
     print(f"Invalidated cache for {year} (will re-fetch all weeks including Week {week}).")

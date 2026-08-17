@@ -1,0 +1,5 @@
+{
+  "_comment": "Manager display-name aliases: variant -> canonical. The CURRENT Sleeper display name is canonical; historical names map onto it so seven years of history unify under one identity. Add an entry whenever a manager renames themselves on Sleeper, then re-run the tests in tests/test_aliases.py. Keys starting with '_' are ignored.",
+  "jhuntmadd": "jhmad",
+  "InfiniteJesse": "InfiniteJess"
+}

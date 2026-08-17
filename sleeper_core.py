@@ -5,6 +5,8 @@
 import os
 import pandas as pd
 import requests
+import warnings
+from urllib.error import HTTPError
 from pandas import json_normalize
 import json
 import numpy as np
@@ -36,7 +38,8 @@ def init_player_data():
         NFLPlayerData = dl.fetch_player_data()
 
 # ── Season configuration ──────────────────────────────────────────────────────
-CURRENT_SEASON = 2025   # Update once per year when the new season begins
+CURRENT_SEASON = 2026   # Update once per year when the new season begins
+                        # Must move together with webapp/app.py CURRENT_YEAR.
 
 import plotly.io as pio
 
@@ -66,12 +69,12 @@ coastal_colorway = [
 # Extended palette for all-time charts — first 12 match coastal_colorway (one per 2019 charter
 # member), then unique colors for each player who joined later, plus extras for future expansion.
 alltime_colorway = coastal_colorway + [
-    '#FF1493', # Deep Pink       — jhuntmadd (joined 2020)
+    '#FF1493', # Deep Pink       — jhmad (joined 2020, formerly jhuntmadd)
     '#ADFF2F', # Chartreuse      — RReclam (joined 2020)
     '#1E90FF', # Dodger Blue     — DirtyCommie (joined 2022)
     '#FF4500', # Orange Red      — sgmaddox (joined 2022)
     '#9932CC', # Dark Orchid     — Just_Here_For_The_Snacks (joined 2022)
-    '#00FA9A', # Spring Green    — InfiniteJesse (joined 2023)
+    '#00FA9A', # Spring Green    — InfiniteJess (joined 2023, formerly InfiniteJesse)
     '#E8A838', # Warm Amber      — cosmodromedary (joined 2025)
     '#00CED1', # Dark Turquoise  — future slot
     '#FF69B4', # Hot Pink        — future slot
@@ -266,8 +269,47 @@ def _load_config(filename):
 def _intkeys(d):
     return {int(k): v for k, v in d.items()}
 
+
+# ── Manager name aliases ─────────────────────────────────────────────────────
+# Managers rename themselves on Sleeper between seasons. Without a resolver the
+# same person splits into two identities across All-Time, Head-to-Head and Hall
+# of Fame. config/aliases.json maps every historical variant onto the CURRENT
+# display name, which is canonical.
+#
+# Every path that produces a manager name must run through canonical_name():
+# the config loaders below, League.UsersJSONtoDF (Sleeper API display_name), and
+# Survivor/PickEm.user_map. tests/test_aliases.py guards those surfaces.
+
+NAME_ALIASES = {k: v for k, v in _load_config('aliases.json').items()
+                if not k.startswith('_')}
+
+
+def canonical_name(name):
+    """Resolve a manager display name to its canonical form.
+
+    Idempotent: canonical_name(canonical_name(x)) == canonical_name(x).
+    Non-string input (None, NaN) passes through untouched so callers can apply
+    this to raw API/config values without pre-filtering.
+    """
+    if not isinstance(name, str):
+        return name
+    return NAME_ALIASES.get(name, name)
+
+
+def canonical_names_str(value, sep=' & '):
+    """Resolve a possibly-compound name string, e.g. 'jhuntmadd & BMoreBallers88'.
+
+    Side bet winners are sometimes shared by two or three managers, joined by
+    ' & '. A whole-string alias lookup silently misses every one of those, so
+    split, resolve each part, and rejoin.
+    """
+    if not isinstance(value, str) or not value:
+        return value
+    return sep.join(canonical_name(p.strip()) for p in value.split(sep))
+
+
 # {year: {roster_slot: username}}
-roster_ids = {int(y): _intkeys(slots)
+roster_ids = {int(y): {slot: canonical_name(name) for slot, name in _intkeys(slots).items()}
               for y, slots in _load_config('roster_ids.json').items()}
 
 
@@ -314,39 +356,24 @@ PICKEM_LEAGUE_IDS = _intkeys(_league_ids['pickem_leagues'])
 AVAILABLE_YEARS = sorted(leagueNumbers_Dict)
 
 # {year: {week: {"name": ..., "desc": ..., "winner": ...}}}
-SIDE_BET_SEASONS = {int(y): _intkeys(weeks)
-                    for y, weeks in _load_config('side_bet_seasons.json').items()}
+# "winner" is a manager display name, so it goes through the alias resolver too.
+SIDE_BET_SEASONS = {
+    int(y): {wk: {**cfg, 'winner': canonical_names_str(cfg.get('winner'))}
+             for wk, cfg in _intkeys(weeks).items()}
+    for y, weeks in _load_config('side_bet_seasons.json').items()
+}
 
 # ── Global Match Dicts (populated as Week objects are created) ───────────────
-Matches_2019 = {}; Matches_2020 = {}; Matches_2021 = {}; Matches_2022 = {}
-Matches_2023 = {}; Matches_2024 = {}; Matches_2025 = {}
-Breakout_Matches_2019 = {}; Breakout_Matches_2020 = {}; Breakout_Matches_2021 = {}
-Breakout_Matches_2022 = {}; Breakout_Matches_2023 = {}; Breakout_Matches_2024 = {}
-Breakout_Matches_2025 = {}
+# Derived from AVAILABLE_YEARS, so adding a season is a config/league_ids.json edit
+# and nothing else. Week.__init__ indexes these bare (AllMatchesDict[self.year]),
+# so a year present in league_ids.json but missing here would KeyError on load.
+AllMatchesDict      = {y: {} for y in AVAILABLE_YEARS}
+AllBreakoutDict     = {y: {} for y in AVAILABLE_YEARS}
+OptimalScoresByYear = {y: {} for y in AVAILABLE_YEARS}
 
-AllMatchesDict = {
-    2019: Matches_2019, 2020: Matches_2020, 2021: Matches_2021, 2022: Matches_2022,
-    2023: Matches_2023, 2024: Matches_2024, 2025: Matches_2025,
-}
-AllBreakoutDict = {
-    2019: Breakout_Matches_2019, 2020: Breakout_Matches_2020, 2021: Breakout_Matches_2021,
-    2022: Breakout_Matches_2022, 2023: Breakout_Matches_2023, 2024: Breakout_Matches_2024,
-    2025: Breakout_Matches_2025,
-}
-
-OptimalScores2019 = {}; OptimalScores2020 = {}; OptimalScores2021 = {}
-OptimalScores2022 = {}; OptimalScores2023 = {}; OptimalScores2024 = {}; OptimalScores2025 = {}
-OptimalScoresByYear = {
-    2019: OptimalScores2019, 2020: OptimalScores2020, 2021: OptimalScores2021,
-    2022: OptimalScores2022, 2023: OptimalScores2023, 2024: OptimalScores2024,
-    2025: OptimalScores2025,
-}
-
-AllSeasonsBreakoutList = [Breakout_Matches_2019, Breakout_Matches_2020, Breakout_Matches_2021,
-                           Breakout_Matches_2022, Breakout_Matches_2023, Breakout_Matches_2024,
-                           Breakout_Matches_2025]
-AllMatchesList = [Matches_2019, Matches_2020, Matches_2021, Matches_2022,
-                  Matches_2023, Matches_2024, Matches_2025]
+# Views over the same dict objects above — mutations through either name are shared.
+AllSeasonsBreakoutList = list(AllBreakoutDict.values())
+AllMatchesList         = list(AllMatchesDict.values())
 
 # Starting-lineup structure assumed by the optimal-lineup logic
 # (Week.OptimalTeams and Season.OptimalTeams hardcode these counts).
@@ -389,10 +416,7 @@ class League:
         self.StructureWeekIDs()
         # Use nflverse-data direct CSVs for all years — consistent schema (team col, not recent_team),
         # works for any future year without code changes.
-        self.WeeklyNFLData = pd.read_csv(
-            f'https://github.com/nflverse/nflverse-data/releases/download/stats_player/stats_player_week_{year}.csv',
-            low_memory=False
-        )
+        self.WeeklyNFLData = self._fetch_weekly_stats(year)
         self.StructureNFLData()
         self.Rosters = nfl.import_rosters([year])
         self.PlayerTeamImport()
@@ -400,6 +424,33 @@ class League:
         
 
         print(f'League for {self.year} created.')
+
+    _STATS_URL = ('https://github.com/nflverse/nflverse-data/releases/download/'
+                  'stats_player/stats_player_week_{year}.csv')
+
+    @classmethod
+    def _fetch_weekly_stats(cls, year):
+        """Weekly NFL player stats for `year`, empty-but-typed in the preseason.
+
+        nflverse only publishes stats_player_week_{year}.csv once the season has
+        actually started, so a renewed-but-not-yet-played season 404s here and
+        takes the whole League constructor down with it. Fall back to an empty
+        frame carrying the previous season's columns, so every downstream
+        merge/groupby sees the schema it expects and simply finds no rows.
+        """
+        try:
+            return pd.read_csv(cls._STATS_URL.format(year=year), low_memory=False)
+        except HTTPError as e:
+            if e.code != 404:
+                raise
+        warnings.warn(
+            f"nflverse has no weekly player stats for {year} yet (preseason). "
+            f"Using an empty frame with {year - 1} columns; player-level charts "
+            f"for {year} will be empty until the season starts.",
+            stacklevel=2,
+        )
+        schema = pd.read_csv(cls._STATS_URL.format(year=year - 1), nrows=0)
+        return schema.iloc[0:0].copy()
 
     def SettingsJSONtoDF(self):
         import data_loader as dl
@@ -412,6 +463,10 @@ class League:
         import data_loader as dl
         league_user_json = dl.fetch_league_users_json(self.id)
         self.Members = json_normalize(league_user_json)
+        # Normalize once, here: UserSetup() and every downstream consumer read
+        # self.Members.display_name, so this is the single choke point for
+        # API-sourced manager names.
+        self.Members['display_name'] = self.Members['display_name'].map(canonical_name)
         self.OwnerIDDict = dict(zip(self.Members.user_id, self.Members.display_name))
 
     def StructureWeekIDs(self):
@@ -1121,9 +1176,16 @@ class Season(TeamColorsMixin):
             Week = max(df_dict.keys()) if df_dict else 1
         dataframes_to_concat = [df_dict[week] for week in range(1, Week + 1) if week in df_dict]
         self.Breakout_dict = df_dict
+        if not dataframes_to_concat:
+            # Preseason — see AllMatchesConcat. Build the frame the rest of this
+            # method would have produced, with no rows.
+            Weeks = pd.DataFrame(columns=self._EMPTY_BREAKOUT_COLS + ['Score YTD', 'TotalYTD', 'Year'])
+            self.BreakoutSeason = Weeks
+            self.Starters = Weeks
+            return
         # Concatenate the selected dataframes
         Weeks= pd.concat(dataframes_to_concat, axis=0)
-        
+
         Weeks['Score YTD'] = Weeks.groupby('player')['points'].cumsum()
         Weeks['TotalYTD'] = Weeks.groupby('player')['points'].transform('sum')
         Weeks['Year'] = self.year
@@ -1136,9 +1198,20 @@ class Season(TeamColorsMixin):
         self.Best = self.BreakoutSeason[self.BreakoutSeason['TotalYTD'] > TotalYTD]
         print(f'Best set at {self.Best}')
 
+    # Columns the empty-season fallbacks below must provide so preseason code
+    # paths can filter/groupby without special-casing every call site.
+    _EMPTY_MATCH_COLS    = ['Team', 'Total', 'Week']
+    _EMPTY_BREAKOUT_COLS = ['player', 'points', 'starter', 'team', 'position']
+
     def AllMatchesConcat(self):
-        
+
         MatchDictionary = AllMatchesDict[self.year]
+        if not MatchDictionary:
+            # Preseason: the league is renewed but no week has been played, so
+            # there is nothing to concatenate. pd.concat([]) raises, which would
+            # take down the whole year load.
+            self.Matches = pd.DataFrame(columns=self._EMPTY_MATCH_COLS)
+            return
         self.Matches = pd.concat(MatchDictionary.values())
         
     def CalculateAverages(self, WeekNum):
@@ -3810,7 +3883,9 @@ class AllTime(TeamColorsMixin):
 
         # Define the subset of hosts to style differently
         special_hosts = ['SleeperGawd69']
-        special_hosts2 = ['sgmaddox', 'RReclam', 'BillyRayGonnaGetcha','jhuntmadd']
+        # Names here must be canonical (see config/aliases.json) — row['Team']
+        # arrives already resolved, so a historical variant would never match.
+        special_hosts2 = ['sgmaddox', 'RReclam', 'BillyRayGonnaGetcha','jhmad']
         special_hosts3 = ['eegrady', 'Just_Here_For_The_Snacks']
         special_hosts4 = []
         special_hosts5 = ['GurlyGirls', 'SweetDizzzzzle', 'YouthPastor']
@@ -5241,7 +5316,7 @@ class Survivor:
         league_id = SURVIVOR_LEAGUE_IDS[year]
         rosters = data_loader.fetch_survivor_rosters(league_id)
         users   = data_loader.fetch_survivor_users(league_id)
-        self.user_map = {u['user_id']: u['display_name'] for u in users}
+        self.user_map = {u['user_id']: canonical_name(u['display_name']) for u in users}
         self._parse(rosters)
 
     def _parse(self, rosters_json: list):
@@ -5727,7 +5802,7 @@ class PickEm:
         league_id = PICKEM_LEAGUE_IDS[year]
         rosters = data_loader.fetch_pickem_rosters(league_id)
         users   = data_loader.fetch_pickem_users(league_id)
-        self.user_map = {u['user_id']: u['display_name'] for u in users}
+        self.user_map = {u['user_id']: canonical_name(u['display_name']) for u in users}
         self._parse(rosters)
 
     def _parse(self, rosters_json: list):

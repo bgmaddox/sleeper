@@ -98,7 +98,7 @@ NFL_STADIUM_COORDS = {
 
 # ── Config ────────────────────────────────────────────────────────────────────
 
-CURRENT_YEAR  = 2025
+CURRENT_YEAR  = core.CURRENT_SEASON   # derived, so it can't drift from sleeper_core
 ALL_YEARS     = core.AVAILABLE_YEARS
 REGULAR_SEASON_WEEKS = 14  # weeks 15-18 are playoffs; capped until playoff feature is built
 
@@ -149,8 +149,15 @@ if not SECRET_KEY or not LEAGUE_PASS:
     )
 COOKIE_NAME   = 'll_auth'
 COOKIE_TTL    = 30 * 24 * 3600   # 30 days
-LOGO_URL      = 'https://raw.githubusercontent.com/bgmaddox/sleeper/master/LL%20logo.png'
 URL_BASE      = os.environ.get('URL_BASE_PATHNAME', '/')
+
+# Served from webapp/assets/, not an external URL. This previously pointed at
+# raw.githubusercontent.com/bgmaddox/sleeper/master/... which 404'd — the file was
+# never committed, and the repo's default branch is `main`, not `master`. Keeping
+# it local also means the logo doesn't depend on GitHub being reachable, which
+# matters behind the Pi's Tailscale Funnel. URL_BASE always carries a trailing
+# slash ('/' locally, '/legacy/' on the Pi), so this resolves under either.
+LOGO_URL      = URL_BASE + 'assets/ll-logo.png'
 
 
 # ── Plotly template ───────────────────────────────────────────────────────────
@@ -390,8 +397,11 @@ def _eager_load_all():
         _load_bg(y)
 
 
-# Pre-load all years in background at startup (warm cache: ~1s total)
-threading.Thread(target=_eager_load_all, daemon=True).start()
+# Pre-load all years in background at startup (warm cache: ~1s total).
+# SLEEPER_SKIP_EAGER_LOAD=1 lets tests import this module without hitting the
+# Sleeper API — an unplayed season is never cached, so it refetches every boot.
+if os.environ.get('SLEEPER_SKIP_EAGER_LOAD') != '1':
+    threading.Thread(target=_eager_load_all, daemon=True).start()
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -714,7 +724,151 @@ def _playoff_records_card(atp):
     ], className='chart-card chart-col-full')
 
 
-def _loading_placeholder():
+def _is_preseason(year):
+    """True when `year` loaded successfully but no week has been played yet.
+
+    Reads _data directly rather than via _weeks() so it stays side-effect free
+    (_weeks calls _ensure, which spawns loader threads).
+    """
+    year = year or CURRENT_YEAR
+    entry = _data.get(year)
+    return entry is not None and not entry.get('weeks')
+
+
+def _defending_champion(year):
+    """Manager who won the previous season, or None if it can't be resolved.
+
+    The eager loader does the current year first, so on a cold start the prior
+    season isn't in _data yet when the preseason hero renders — and since the
+    hero also disables the boot poller, nothing would re-render to pick the
+    banner up later. Read the prior season straight off disk when it's cached
+    (a pickle read, ~0.15s); if it isn't cached, warm it in the background and
+    skip the banner rather than blocking the render on an API call.
+    """
+    prev = (year or CURRENT_YEAR) - 1
+    entry = _data.get(prev)
+    if not entry:
+        try:
+            if not os.path.exists(dl.season_cache_path(prev)):
+                _ensure(prev)
+                return None
+            league, season, _weeks_ = dl.load_data_for_year(prev, verbose=False)
+            entry = {'league': league, 'season': season}
+        except Exception:
+            return None
+    try:
+        playoffs = core.Playoffs(entry['league'], entry['season'])
+        match = next((m for m in playoffs.winners.get(3, [])
+                      if m.get('placement') == 1), None)
+        return match['winner'] if match else None
+    except Exception:
+        # The hero is decoration — never let a bracket quirk break the tab.
+        return None
+
+
+_CLOCK_UNITS = [('DAYS', 'd'), ('HRS', 'h'), ('MIN', 'm'), ('SEC', 's')]
+
+
+def _countdown_block(label, target_ms, pending='TBD'):
+    """One labelled countdown.
+
+    Renders live digits when `target_ms` is a future timestamp, a "done" chip
+    once it has passed, and `pending` when the date isn't known yet. The digits
+    are filled in by assets/kickoff.js, which reads `data-kickoff` — it already
+    handles any number of countdowns on the page, so adding blocks needs no JS
+    change. A block with no date carries no `data-kickoff` and the script skips it.
+    """
+    if not target_ms:
+        body = html.Div(pending, className='ps-clock-pending')
+    elif target_ms <= time.time() * 1000:
+        body = html.Div('COMPLETE', className='ps-clock-pending ps-clock-done')
+    else:
+        body = html.Div(
+            [html.Div([
+                html.Div('--', className='ps-clock-num', **{'data-kickoff-unit': key}),
+                html.Div(unit, className='ps-clock-label'),
+            ], className='ps-clock-cell') for unit, key in _CLOCK_UNITS],
+            className='ps-clock',
+            **{'data-kickoff': str(int(target_ms))},
+        )
+    return html.Div([
+        html.Div(label, className='ps-countdown-label'),
+        body,
+    ], className='ps-countdown')
+
+
+def _preseason_hero(year):
+    """Kickoff countdown shown on This Week while a renewed season is unplayed.
+
+    Self-retiring: the moment Week 1 data lands, _is_preseason goes False and
+    this is replaced by the normal tab body. No cleanup task.
+    """
+    year = year or CURRENT_YEAR
+    kickoff_ms = dl.season_kickoff_ms(year)
+    draft_ms   = dl.draft_start_ms(year)
+    champ = _defending_champion(year)
+    teams = sorted(core.roster_ids.get(year, {}).values())
+
+    clock = html.Div([
+        _countdown_block('DRAFT', draft_ms, pending='TBD'),
+        _countdown_block('WEEK 1 KICKOFF', kickoff_ms, pending='SCHEDULE PENDING'),
+    ], className='ps-clocks')
+
+    # Football bouncing around the box, DVD-screensaver style. Decorative only,
+    # hence aria-hidden. The ball sits inside a track: the track carries the
+    # horizontal travel and the ball the vertical, because translateX
+    # percentages resolve against the element's own box (see style.css).
+    field = html.Div(html.Div([
+        html.Div(className='ps-uprights'),
+        html.Div(html.Span('🏈', className='ps-ball'), className='ps-ball-track'),
+        html.Div(className='ps-turf'),
+    ], className='ps-field'), className='ps-field-wrap', **{'aria-hidden': 'true'})
+
+    children = [
+        html.Div(f'SEASON {year}', className='ps-eyebrow'),
+        html.Div('KICKOFF', className='ps-title'),
+        field,
+        clock,   # each block renders its own live / COMPLETE / pending state
+    ]
+
+    if champ:
+        # Name the season explicitly. A bare "DEFENDING CHAMPION" is ambiguous when
+        # a season spans two calendar years, and it did mislead a reader.
+        children.append(html.Div([
+            html.Div(f'{year - 1} CHAMPION', className='ps-banner-label'),
+            html.Div(champ, className='ps-banner-name'),
+        ], className='ps-banner'))
+
+    if teams:
+        children.append(html.Div(
+            [html.Span(t, className='ps-team') for t in teams],
+            className='ps-teams'))
+
+    children.append(html.Div(
+        'Standings, charts and side bets unlock as soon as Week 1 is scored.',
+        className='ps-footnote'))
+
+    return html.Div(children, className='ps-hero')
+
+
+def _preseason_note(year=None):
+    """Compact preseason state for individual chart slots — the full hero would
+    be absurd repeated a dozen times down the page."""
+    return html.Div([
+        html.Div('🏈', className='ps-note-icon'),
+        html.Div('No games played yet', className='ps-note-title'),
+        html.Div('This chart fills in after Week 1.', className='ps-note-sub'),
+    ], className='ps-note')
+
+
+def _loading_placeholder(year=None):
+    """Spinner, or the preseason note when the year is loaded-but-empty.
+
+    Callers pass `year` so a renewed-but-unplayed season shows a real state
+    instead of spinning forever.
+    """
+    if year is not None and _is_preseason(year):
+        return _preseason_note(year)
     return html.Div([
         html.Div(className='loading-spinner'),
         'Loading season data…'
@@ -1014,14 +1168,21 @@ def _playoff_week_start(year):
     prevent_initial_call='initial_duplicate',
 )
 def _boot(_, year):
-    w = _weeks(year or CURRENT_YEAR)
+    year = year or CURRENT_YEAR
+    w = _weeks(year)
     if not w:
-        if (year or CURRENT_YEAR) in _failed_years:
+        if year in _failed_years:
             # Load failed — stop polling; the tab body shows the error state
             return no_update, no_update, no_update, no_update, no_update, True, no_update
+        if year in _data:
+            # Loaded fine, but the season has no weeks yet (preseason). Without
+            # this branch the poller can't tell "empty" from "still loading" and
+            # spins forever on a renewed-but-unplayed season.
+            pws = _playoff_week_start(year)
+            return 1, 1, 1, 1, pws, True, no_update
         return no_update, no_update, no_update, no_update, no_update, False, no_update  # keep polling
-    slider_max, default_week = _default_week(year or CURRENT_YEAR, w)
-    pws = _playoff_week_start(year or CURRENT_YEAR)
+    slider_max, default_week = _default_week(year, w)
+    pws = _playoff_week_start(year)
     return slider_max, default_week, default_week, slider_max, pws, True, None  # data ready — disable interval
 
 
@@ -1519,10 +1680,15 @@ def _playoff_odds_card(prob_data, year, week):
 
 
 def _tab_week(year, week, teams):
+    # This Week is the landing tab, so the preseason state here is the full
+    # kickoff hero rather than the compact per-chart note. Checked before
+    # _season/_week so it doesn't kick off a pointless load for an empty year.
+    if _is_preseason(year):
+        return _preseason_hero(year)
     season   = _season(year)
     week_obj = _week(year, week)
     if season is None or week_obj is None:
-        return _loading_placeholder()
+        return _loading_placeholder(year)
 
     sf    = _filter_season(season, teams)
     cards = []
@@ -1606,7 +1772,7 @@ def _tab_week(year, week, teams):
 def _tab_season(year, week, teams):
     season = _season(year)
     if season is None:
-        return _loading_placeholder()
+        return _loading_placeholder(year)
 
     sf    = _filter_season(season, teams)
     cards = []
@@ -1752,7 +1918,7 @@ def _tab_season(year, week, teams):
 def _tab_players(year, week, teams):
     season = _season(year)
     if season is None:
-        return _loading_placeholder()
+        return _loading_placeholder(year)
 
     sf    = _filter_season(season, teams)
     cards = []
@@ -2098,11 +2264,15 @@ def _tab_playoffs(year):
 # ── Tab: Side Bets ────────────────────────────────────────────────────────────
 
 def _tab_sidebets(year):
-    # Fall back to 2025 if selected year has no config
-    config_year = year if year in core.SIDE_BET_SEASONS else 2025
+    # Fall back to the most recent *populated* season if the selected year has no
+    # challenges configured yet. Presence alone isn't enough: a new season is added
+    # to config/side_bet_seasons.json as an empty dict and fills in week by week.
+    _populated = [y for y, cfg in core.SIDE_BET_SEASONS.items() if cfg]
+    config_year = (year if core.SIDE_BET_SEASONS.get(year)
+                   else (max(_populated) if _populated else year))
     sb = _sidebet(config_year)
     if sb is None:
-        return _loading_placeholder()
+        return _loading_placeholder(year)
 
     year_config = core.SIDE_BET_SEASONS[config_year]
     teamcolors  = sb.teamcolors
@@ -2569,7 +2739,7 @@ def _update_luck_chart(mode, year, week, teams):
     week = week or 1
     season = _season(year)
     if season is None:
-        return _loading_placeholder()
+        return _loading_placeholder(year)
     sf = _filter_season(season, teams)
     try:
         if mode == 'ytd':
@@ -2639,7 +2809,7 @@ def _update_timeline_chart(mode, year, week):
     week = week or 1
     week_obj = _week(year, week)
     if week_obj is None:
-        return _loading_placeholder()
+        return _loading_placeholder(year)
     try:
         fig = week_obj.PointsOverTheWeekend(animate=(mode == 'animated'))
         _strip(fig, 950).update_layout(margin=dict(t=80, b=100, l=80, r=40))
@@ -2659,7 +2829,7 @@ def _update_pfa_chart(mode, year, teams):
     year = year or CURRENT_YEAR
     season = _season(year)
     if season is None:
-        return _loading_placeholder()
+        return _loading_placeholder(year)
     sf = _filter_season(season, teams)
     try:
         fig = sf.SeasonPointsForAgainst()
@@ -2690,7 +2860,7 @@ def _update_freq_chart(mode, year, week, teams):
     week = week or 1
     season = _season(year)
     if season is None:
-        return _loading_placeholder()
+        return _loading_placeholder(year)
     sf = _filter_season(season, teams)
     try:
         matches = sf.Matches[sf.Matches['Week'].isin(range(0, week + 1))].copy()
@@ -2731,7 +2901,7 @@ def _update_bench_chart(mode, year, week, teams):
     week = week or 1
     season = _season(year)
     if season is None:
-        return _loading_placeholder()
+        return _loading_placeholder(year)
     sf = _filter_season(season, teams)
     try:
         if mode == 'season':
@@ -2780,7 +2950,7 @@ def _update_bump_chart(mode, year, teams):
     year = year or CURRENT_YEAR
     season = _season(year)
     if season is None:
-        return _loading_placeholder()
+        return _loading_placeholder(year)
     sf = _filter_season(season, teams)
     try:
         fig = sf.WaiverWireBump(mode=mode)
@@ -2802,7 +2972,7 @@ def _update_violin(mode, year, week, teams):
     week = week or 1
     season = _season(year)
     if season is None:
-        return _loading_placeholder()
+        return _loading_placeholder(year)
     sf = _filter_season(season, teams)
     try:
         if mode in ('starters', 'all'):
@@ -2833,7 +3003,7 @@ def _update_top_players(position, thresh, year, week, teams):
     week = week or 1
     season = _season(year)
     if season is None:
-        return _loading_placeholder()
+        return _loading_placeholder(year)
     sf = _filter_season(season, teams)
     thresh = thresh if thresh is not None else _POS_THRESHOLDS.get(position, 50)
     try:

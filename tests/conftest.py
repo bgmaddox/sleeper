@@ -20,7 +20,7 @@ import sleeper_core as core
 
 
 def _cache_exists(year: int) -> bool:
-    path = dl._cache_path(f"season_data_{year}_18")
+    path = dl.season_cache_path(year)
     return os.path.exists(path)
 
 

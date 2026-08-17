@@ -1281,3 +1281,334 @@ html, body {
   border-top: 1px solid var(--border);
   margin-top: 8px;
 }
+
+/* ── Preseason kickoff hero ────────────────────────────────────────────────
+   Shown on This Week while a renewed season has no weeks played. Self-retiring:
+   the tab body swaps back to normal charts the moment Week 1 is scored.
+   ────────────────────────────────────────────────────────────────────────── */
+
+/* DVD-screensaver bounce. The ball crosses the box at constant speed and
+   reflects off all four walls, so you get the same "is it going to hit the
+   corner?" tension as the old idle screens.
+
+   Done with two independent animations rather than one path: X rides the track,
+   Y rides the ball, both `linear` (constant velocity — easing would read as a
+   lob, not a bounce) and both `alternate` (the reflection). The durations are
+   deliberately incommensurate — 5.3s against 3.7s — so the two axes drift out of
+   phase and the path never repeats on any short cycle. Matching or simply-related
+   durations would lock it into a boring fixed diagonal, and an exact corner hit
+   would either happen every loop or never. Keep them awkward.
+
+   translateX percentages resolve against the element's own box, which is why X
+   lives on the track — which spans the field — and not on the 24px ball, where
+   the same percentage would be a few pixels of drift. */
+/* Both travels are derived from the box and ball dimensions rather than tuned by
+   hand, so the ball insets by exactly --ps-inset on all four walls and the
+   bounce stays centred if any of these values change. */
+@keyframes ps-drift-x {
+  from { transform: translateX(0); }
+  /* Track already sits inset on both sides, so 100% is the travel available. */
+  to   { transform: translateX(calc(100% - var(--ps-ball-size))); }
+}
+
+@keyframes ps-drift-y {
+  from { transform: translateY(0); }
+  to   { transform: translateY(calc(-1 * (var(--ps-field-h) - var(--ps-field-border) * 2
+                                          - var(--ps-inset) * 2 - var(--ps-ball-size)))); }
+}
+
+@keyframes ps-banner-raise {
+  from { transform: translateY(14px); opacity: 0; }
+  to   { transform: translateY(0);    opacity: 1; }
+}
+
+.ps-hero {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  padding: 40px 20px 52px;
+  animation: fade-up 0.5s ease both;
+}
+
+.ps-eyebrow {
+  font-family: var(--font-main);
+  font-size: 0.78rem;
+  letter-spacing: 4px;
+  color: var(--text-muted);
+  margin-bottom: 6px;
+}
+
+.ps-title {
+  font-family: var(--font-display);
+  font-size: clamp(2.2rem, 7vw, 4rem);
+  letter-spacing: 8px;
+  color: var(--accent);
+  text-shadow: 0 0 28px var(--accent-glow);
+  margin-bottom: 22px;
+}
+
+/* ── Field + football ─────────────────────────────────────────────────────── */
+
+.ps-field-wrap { width: 100%; max-width: 520px; margin-bottom: 30px; }
+
+/* The bounce needs walls to bounce off, so the field reads as an enclosed box
+   rather than an open strip — otherwise the ball looks like it's turning around
+   for no reason. */
+.ps-field {
+  /* The bounce geometry derives from these — see ps-drift-x / ps-drift-y. */
+  --ps-field-h:      150px;
+  --ps-field-border: 1px;
+  --ps-inset:        4px;    /* gap between the ball and every wall */
+  --ps-ball-size:    24px;   /* matches .ps-ball font-size; emoji renders square */
+
+  position: relative;
+  height: var(--ps-field-h);
+  width: 100%;
+  border: var(--ps-field-border) solid var(--border);
+  border-radius: var(--radius);
+  background:
+    radial-gradient(120% 100% at 50% 100%, rgba(61,94,120,0.18), transparent 70%),
+    var(--bg-input);
+  overflow: hidden;
+}
+
+.ps-turf {
+  position: absolute;
+  left: 0; right: 0; bottom: 0;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, var(--chart-grid), transparent);
+}
+
+/* Goalpost, drawn with borders so there's no image to load.
+   A goalpost opens upward: a base post rises from the turf to the crossbar,
+   and the two uprights continue up from the crossbar ends. Closing the top
+   instead (border-top) draws a doorframe, which is what this used to be. */
+.ps-uprights {
+  position: absolute;
+  right: 10%;
+  bottom: 48px;               /* crossbar height above the turf */
+  width: 74px;
+  height: 68px;               /* how far the uprights rise above the crossbar */
+  border-left: 3px solid var(--accent);
+  border-right: 3px solid var(--accent);
+  border-bottom: 3px solid var(--accent);   /* the crossbar */
+  opacity: 0.75;
+}
+.ps-uprights::after {
+  /* Base post, from the crossbar down to the turf. */
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 100%;
+  width: 3px;
+  height: 48px;
+  background: var(--accent);
+  transform: translateX(-50%);
+}
+
+/* Full-width track carries the horizontal travel; see ps-drift-x. Zero height
+   so it adds no layout of its own. */
+.ps-ball-track {
+  /* Inset on both sides rather than width:100%, so the ball keeps the same gap
+     from the left and right walls as it does from the top and bottom. */
+  position: absolute;
+  left: var(--ps-inset);
+  right: var(--ps-inset);
+  bottom: var(--ps-inset);
+  height: 0;
+  animation: ps-drift-x 5.3s linear infinite alternate;
+}
+
+.ps-ball {
+  /* Anchored, not inline. As an inline-block it inherited text-align:center from
+     .ps-hero and started at the middle of the full-width track, so the whole
+     bounce sat in the right half of the box and ran off the edge. The zero-height
+     track also made the line box hang the ball below its own baseline. Absolute
+     positioning inside the track (which is itself positioned) sidesteps both:
+     left:0 pins it to the near wall, bottom:0 rests it on the track line. */
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  font-size: var(--ps-ball-size);
+  line-height: 1;
+  /* Negative delay starts Y already mid-traverse. Without it both axes begin at
+     their `from` value, so the ball sits in a corner on load and hands you the
+     payoff before you've had a chance to hope for it. */
+  animation: ps-drift-y 3.7s linear infinite alternate -1.9s;
+}
+
+/* ── Countdown clock ──────────────────────────────────────────────────────── */
+
+/* Two countdowns side by side (draft, then Week 1). Wraps to stacked on
+   narrow screens. */
+.ps-clocks {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: flex-start;
+  gap: 14px 28px;
+  margin-bottom: 26px;
+}
+
+.ps-countdown {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+
+.ps-countdown-label {
+  font-size: 0.64rem;
+  letter-spacing: 3px;
+  color: var(--accent);
+}
+
+.ps-clock {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+/* Shown when a date isn't known yet (TBD) or has already passed (COMPLETE).
+   Sized to sit at roughly the height of a clock so the two blocks stay aligned. */
+.ps-clock-pending {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 74px;
+  padding: 12px 22px;
+  font-size: 0.82rem;
+  letter-spacing: 2px;
+  color: var(--text-muted);
+  background: var(--bg-card);
+  border: 1px dashed var(--border);
+  border-radius: var(--radius);
+}
+
+.ps-clock-done {
+  border-style: solid;
+  color: var(--success);
+}
+
+.ps-clock-cell {
+  min-width: 74px;
+  padding: 12px 10px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-card);
+}
+
+.ps-clock-num {
+  font-family: var(--font-display);
+  font-size: 1.9rem;
+  color: var(--text-main);
+  font-variant-numeric: tabular-nums;
+  line-height: 1.1;
+}
+
+.ps-clock-label {
+  font-size: 0.62rem;
+  letter-spacing: 2px;
+  color: var(--text-muted);
+  margin-top: 4px;
+}
+
+.ps-clock.is-live .ps-clock-num { color: var(--accent); }
+
+
+/* ── Defending champion banner ────────────────────────────────────────────── */
+
+.ps-banner {
+  padding: 14px 30px;
+  margin-bottom: 22px;
+  background: linear-gradient(180deg, var(--bg-card), var(--bg-panel));
+  border: 1px solid var(--accent);
+  border-radius: var(--radius);
+  box-shadow: 0 0 22px var(--accent-glow);
+  animation: ps-banner-raise 0.7s ease 0.25s both;
+}
+
+.ps-banner-label {
+  font-size: 0.62rem;
+  letter-spacing: 3px;
+  color: var(--text-muted);
+  margin-bottom: 4px;
+}
+
+.ps-banner-name {
+  font-family: var(--font-display);
+  font-size: 1.35rem;
+  color: var(--accent);
+}
+
+/* ── Team roll-call ───────────────────────────────────────────────────────── */
+
+.ps-teams {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: center;
+  max-width: 720px;
+  margin-bottom: 22px;
+}
+
+.ps-team {
+  padding: 5px 12px;
+  font-size: 0.76rem;
+  color: var(--text-main);
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+}
+
+.ps-footnote {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  max-width: 460px;
+}
+
+/* ── Compact per-chart preseason note ─────────────────────────────────────── */
+
+.ps-note {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 220px;
+  padding: 30px 20px;
+  text-align: center;
+  color: var(--text-muted);
+}
+
+.ps-note-icon  { font-size: 1.6rem; opacity: 0.75; }
+.ps-note-title { color: var(--text-main); font-size: 0.95rem; }
+.ps-note-sub   { font-size: 0.78rem; }
+
+/* ── Reduced motion ───────────────────────────────────────────────────────────
+   The hero loops for weeks at a time, so honoring this is not optional. Covers
+   the pre-existing animations too — the stylesheet had no guard before.
+   The countdown keeps updating; only motion is removed.
+   ────────────────────────────────────────────────────────────────────────── */
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+
+  /* Park the ball at the tee instead of leaving it mid-arc and invisible.
+     Both halves of the motion have to stop — the track carries the horizontal
+     travel and the ball carries the arc. */
+  .ps-ball-track,
+  .ps-ball {
+    animation: none !important;
+    opacity: 1;
+    transform: none;
+  }
+}

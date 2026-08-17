@@ -23,7 +23,7 @@ from plotly import graph_objects as go
 @pytest.fixture(scope="module")
 def atp():
     """AllTimePlayoffs built from whatever years are in cache."""
-    path = dl._cache_path("season_data_2024_18")
+    path = dl.season_cache_path(2024)
     if not os.path.exists(path):
         pytest.skip("2024 cache not found — start the app once to build it")
     # Load at least 2024 so AllMatchesDict is populated

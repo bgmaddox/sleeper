@@ -22,7 +22,7 @@ REFERENCE_OPTIMAL_2023_W5 = {
     'RascalHazard': 107.44,
     'bgmaddox': 116.10,
     'JTizzzzle': 104.16,
-    'jhuntmadd': 175.78,
+    'jhmad': 175.78,          # renamed from jhuntmadd; see config/aliases.json
     'eegrady': 91.02,
     'RossLikeSauce': 87.28,
 }
@@ -34,7 +34,7 @@ MAX_AT_POSITION = {'QB': 1, 'K': 1, 'DEF': 1, 'RB': 3, 'WR': 3, 'TE': 2}
 
 @pytest.fixture(scope="module")
 def season_2023():
-    path = dl._cache_path("season_data_2023_18")
+    path = dl.season_cache_path(2023)
     if not os.path.exists(path):
         pytest.skip("2023 cache not found — start the app once to build it")
     return dl.load_data_for_year(2023, verbose=False)

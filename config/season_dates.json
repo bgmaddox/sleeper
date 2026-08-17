@@ -1,0 +1,6 @@
+{
+  "_comment": "Optional manual date overrides per season, used by the preseason hero countdowns. Sleeper is the preferred source: set the draft time on Sleeper and it is picked up automatically, no edit needed here. Use these only to show a date before it has been scheduled on Sleeper. Values are ISO 8601; include an offset (e.g. 2026-08-28T20:00:00-04:00) or the time is read as US Eastern. null means 'not set' and the hero shows TBD.",
+  "2026": {
+    "draft": null
+  }
+}

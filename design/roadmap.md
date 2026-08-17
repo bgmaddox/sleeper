@@ -1,8 +1,10 @@
 # Legacy League Webapp — Development Roadmap
 
 **Created:** 2026-05-21  
-**Last updated:** 2026-05-28  
-**Status:** Active — Phases 1–4, 6–9 complete; Phase 3 complete (3E deferred to 2026); historical side bets (2019–2024) complete  
+**Last updated:** 2026-08-16  
+**Status:** Active — Phases 1–4, 6–9 complete; historical side bets (2019–2024) complete.
+Phase 11 (2026 season rollover) planned, not started. Task 3E is no longer blocked —
+the 2026 league exists and its `previous_league_id` chain was verified.  
 **Supersedes:** `design/fix-plan.md` (all tasks complete as of commit `41094a3`)
 
 This document is the single source of truth for planned work. Update status inline as tasks complete.
@@ -1119,3 +1121,359 @@ Tests to write:
 5. **10H** — Tests should be written alongside 10B and 10C, not after.
 
 **Do not proceed past 10A if the SVG structure check fails or is ambiguous.** An incorrect parse that silently corrupts the "C"/"HAMPION" elements will produce a broken badge that's hard to debug visually.
+
+---
+
+## Phase 11 — 2026 Season Rollover + Preseason Hero
+
+**Created:** 2026-08-16
+**Status:** 11A–11E and 11G complete. 11F: tests done, **deploy outstanding**.
+Test suite: **295 passed, 1 skipped** (baseline before this work was 242 passed; the
+one skip is pre-existing and unrelated). Nothing committed yet.
+**Goal:** Make the app load the 2026 season (renewed, `pre_draft` as of this writing),
+unify two managers who renamed themselves, and give the preseason a deliberate empty
+state instead of blank charts.
+
+### Verified facts (checked against the live Sleeper API, 2026-08-16)
+
+| Fact | Value |
+|---|---|
+| 2026 league ID | `1386215157826347008` |
+| `previous_league_id` | `1252049821154410496` (chains correctly to 2025) |
+| Status / teams | `pre_draft`, 12 rosters |
+| `roster_positions` | Unchanged from 2025 — `LINEUP_SLOTS` still validates |
+| `playoff_week_start` | 15 (unchanged) |
+| Draft | Created (`1386215157843124224`), `start_time: null` — not scheduled |
+| Week 1 kickoff | NE @ SEA, **2026-09-09 20:20 ET** (from `nfl.import_schedules([2026])`) |
+| Roster slots 1–12 | Identical membership to 2025 |
+| Survivor / Pick 'Em 2026 | **Do not exist** — main league only |
+
+**Two managers renamed themselves:** `jhuntmadd` → `jhmad`, `InfiniteJesse` → `InfiniteJess`.
+
+### Decisions taken
+
+- **Survivor / Pick 'Em:** not renewed yet. Leave 2026 out of `survivor_leagues` and
+  `pickem_leagues`; both tabs already fall back to `max(...)` and will keep showing 2025.
+- **Renames:** adopt the *new* display names as canonical and add an alias map, so
+  history unifies under the current name everywhere. (The cheaper option — writing the
+  old names into `roster_ids.json` for 2026 — was considered and rejected.)
+- **Preseason hero:** animated countdown, auto-retiring when Week 1 data lands.
+
+---
+
+### Task 11A — Derive the per-year global dicts ✅ COMPLETE
+
+**File:** `sleeper_core.py` — lines ~322–349
+
+`Matches_2019 … Matches_2025`, `AllMatchesDict`, `AllBreakoutDict`,
+`OptimalScoresByYear`, `AllMatchesList`, `AllSeasonsBreakoutList` are hand-enumerated
+through 2025. `Week.__init__` indexes them bare — `AllMatchesDict[self.year]` (`:768`),
+`AllBreakoutDict[self.year]` (`:652`), `OptimalScoresByYear[self.year]` (`:822`) — so
+constructing a single 2026 `Week` raises `KeyError`.
+
+**Fix:** derive all three from `AVAILABLE_YEARS`:
+```python
+AllMatchesDict      = {y: {} for y in AVAILABLE_YEARS}
+AllBreakoutDict     = {y: {} for y in AVAILABLE_YEARS}
+OptimalScoresByYear = {y: {} for y in AVAILABLE_YEARS}
+AllMatchesList          = list(AllMatchesDict.values())
+AllSeasonsBreakoutList  = list(AllBreakoutDict.values())
+```
+Delete the `Matches_YYYY` / `Breakout_Matches_YYYY` / `OptimalScoresYYYY` module-level
+names. Same class of fix as Task 1B (`SeasonMultiplier`); this block was missed then.
+Retires the annual edit permanently.
+
+**Verify:** every year in `AVAILABLE_YEARS` loads; All-Time charts unchanged.
+
+---
+
+### Task 11B — Alias map for renamed managers ✅ COMPLETE
+
+**New file:** `config/aliases.json` — variant → canonical (current display name):
+```json
+{ "jhuntmadd": "jhmad", "InfiniteJesse": "InfiniteJess" }
+```
+
+**New helper:** `sleeper_core.canonical_name(name)` — returns `ALIASES.get(name, name)`.
+Loaded at import next to the other `config/*.json` reads.
+
+Apply at every point a manager name enters the system. Known surfaces:
+- `roster_ids` load (`:270`) — normalize **all** years, so 2019–2025 display as the new names
+- `SIDE_BET_SEASONS` `winner` fields — 14 occurrences in `config/side_bet_seasons.json`
+- `Survivor.user_map` (`:5244`) and `PickEm.user_map` (`:5730`) — live API `display_name`
+- `League.OwnerIDDict` (`:415`) and `League.Teams` (`:457`)
+- `special_hosts2` (`:3813`) — contains a literal `'jhuntmadd'`
+- `tests/test_optimal.py:25` — fixture key `'jhuntmadd'`
+- Colorway comments at `:69` / `:74` are cosmetic; update for accuracy
+
+Team colors are slot-based and roster slots are unchanged, so palettes are unaffected.
+
+**Verify:** grep for `jhuntmadd` and `InfiniteJesse` returns only `config/aliases.json`.
+Head-to-Head shows 12 managers, not 14. All-Time win totals for the two renamed managers
+equal the sum of their pre- and post-rename records.
+
+---
+
+### Task 11C — Config and constants ✅ COMPLETE
+
+- `config/league_ids.json` → `"2026": 1386215157826347008` under `leagues` only
+- `config/roster_ids.json` → 2026 block, slots 1–12, using the **new** display names
+- `config/side_bet_seasons.json` → `"2026": {}` placeholder until challenges are chosen
+- `sleeper_core.py:39` → `CURRENT_SEASON = 2026`
+- `webapp/app.py:101` → `CURRENT_YEAR = 2026`
+- `webapp/app.py:2102` → `else 2025` becomes `else max(core.SIDE_BET_SEASONS)`
+
+`CURRENT_SEASON` and `CURRENT_YEAR` must move in the same commit — they gate
+optimal-lineup computation (`:549`) and team coloring (`:649`) for the in-progress season.
+
+**Optional, now unblocked:** Task 3E (`previous_league_id` auto-discovery). The chain was
+verified to resolve. Would make next August a zero-edit rollover.
+
+---
+
+### Task 11D — Preseason empty state ✅ COMPLETE
+
+**Load path: DONE.** The plan assumed the only breakage was an empty `weeks_dict`.
+Verified against the live 2026 league, the preseason path actually broke in four
+places, three of them earlier than expected. All four are fixed:
+
+1. **`League.__init__` 404'd** (`sleeper_core.py:417`). nflverse only publishes
+   `stats_player_week_{year}.csv` once a season has been played, so the League object
+   could not even be constructed. Now `League._fetch_weekly_stats` falls back to an
+   empty frame carrying the previous season's columns and warns. (`import_schedules`
+   and `import_rosters` *do* have 2026 data — only the weekly stats CSV is missing.)
+2. **`Week()` was constructed before the emptiness check** (`data_loader.py`). Sleeper
+   returns roster stubs pre-draft, so `Week.PlayerBreakout()` raised
+   `KeyError: 'team'`. The raw matchup JSON is now inspected via the (already cached)
+   `fetch_matchups_json` *before* constructing a Week.
+3. **`Season.Update()` raised on zero weeks** — `pd.concat([])` is a `ValueError`.
+   `AllMatchesConcat` and `BreakoutConcat` now return empty-but-typed frames.
+4. **Empty seasons are no longer cached.** There is no TTL on season pickles, so a
+   preseason snapshot would have frozen 2026 as permanently empty.
+
+**UI half: DONE.** Selecting 2026 used to show "Loading season data…" forever —
+`_boot` polled until `_weeks(year)` was truthy and only stopped early for
+`_failed_years`, so it could not tell "loaded, zero weeks" from "still loading".
+
+- `_is_preseason(year)` — `year in _data and not weeks`. Reads `_data` directly rather
+  than via `_weeks()`, which would call `_ensure()` and spawn loader threads during
+  render.
+- `_boot` now stops the poller on that condition.
+- `_loading_placeholder(year)` returns the compact `_preseason_note()` instead of the
+  spinner. All 12 call sites pass `year`; the bare call still works.
+- `_tab_week` returns the full hero, checked *before* `_season`/`_week` so it doesn't
+  kick off a pointless load.
+- Playoffs / All-Time / Side Bets / Head-to-Head keep working off 2019–2025 data.
+- The year selector and week scrubber already handled preseason — the scrubber renders
+  "PRE-SEASON" and all 12 team chips appear.
+
+**Also added:** `SLEEPER_SKIP_EAGER_LOAD=1`. `app.py` eagerly loads every season at
+import (`webapp/app.py:394`), and an unplayed season is deliberately never cached, so
+importing the module in tests hit the Sleeper API on every run.
+
+---
+
+### Task 11E — Kickoff countdown hero ✅ COMPLETE
+
+Renders on This Week whenever the selected year has no weeks. Self-retiring: it
+disappears once Week 1 data lands, so there is no cleanup task.
+
+- `data_loader.season_kickoff_ms(year)` returns epoch ms (UTC) for the first Week 1
+  kickoff, derived from the cached NFL schedule — **not hardcoded**. nflverse publishes
+  `gameday`/`gametime` in US Eastern; the helper localizes then converts to UTC.
+  Verified: 2026 → `2026-09-09 20:20 EDT` (NE @ SEA). Returns `None` on any failure and
+  the hero falls back to a "schedule not published yet" line.
+- `webapp/assets/kickoff.js` ticks the clock, following the `counter.js` pattern
+  (data attribute + `MutationObserver` re-attach, because Dash swaps DOM without a
+  page reload). Adds `.is-live` at zero.
+- Champion banner raises in (`ps-banner-raise`); all 12 managers listed.
+- Defending champion resolved via `Playoffs.winners[3]` placement 1. Reads the prior
+  season off disk when cached (~0.15s pickle read) because the eager loader does the
+  current year first, so 2025 isn't in `_data` when the hero first renders — and the
+  hero disables the boot poller, so nothing would re-render to pick the banner up
+  later. Warms in the background and skips the banner when not cached; never blocks
+  the render thread on an API call.
+
+**Animation: DVD-screensaver bounce** (changed from the original field-goal arc at the
+user's request). The ball crosses the box at constant speed and reflects off all four
+walls, so it carries the same "will it hit the corner?" tension as the old idle screens.
+
+- Two independent `alternate` animations, no JS: `ps-drift-x` on the full-width track,
+  `ps-drift-y` on the ball. Both `linear` — easing reads as a lob, not a bounce.
+- Durations 5.3s / 3.7s. **53 and 37 are both prime, so the axes only realign every
+  196s** — a dead-on corner hit lands about every 3.3 minutes, with near-misses around
+  37s and 159s. Matching or simply-related durations would lock the path to a fixed
+  diagonal and the corner would either happen every loop or never. Keep them awkward.
+- `.ps-ball` carries `-1.9s` negative delay so the ball doesn't start *in* a corner and
+  give the payoff away on load.
+- `.ps-field` gained a border and inset background — the bounce only reads if there are
+  visible walls to reflect off.
+- **The ball is absolutely positioned inside the track, not inline.** As an
+  `inline-block` it inherited `text-align: center` from `.ps-hero` and started at the
+  middle of the box, so the entire bounce sat in the right half and ran off the edge.
+  The zero-height track also hung it below its own baseline. `position: absolute;
+  left: 0; bottom: 0` removes both dependencies.
+- Travel distances derive from `--ps-field-h` / `--ps-field-border` / `--ps-inset` /
+  `--ps-ball-size` on `.ps-field` rather than being hand-tuned, so the geometry stays
+  correct if any of them change. Measured in-browser: the ball clears all four walls by
+  exactly **5px**, at field widths from 280px to 520px.
+
+**Three bugs found in review of the first version, all fixed:**
+
+1. **The goalpost was upside down** — it used `border-top`, which closes the shape at
+   the top and draws a doorframe. A goalpost opens *upward*: base post from the turf to
+   the crossbar (`border-bottom`), uprights continuing above it. Base post attaches via
+   `top: 100%` so the two pieces stay joined at any size.
+2. **The ball barely moved sideways.** `translate(46%, …)` resolves percentages against
+   *the element's own box* — on a ~24px ball that was ~11px of drift against 120px of
+   lift, so it read as purely vertical. Hence the track/ball split: percentages on a
+   `width: 100%` track are field-relative and stay correct at any width.
+3. **`kickoff.js` hung the browser tab.** `render()` writes `textContent`, which is
+   itself a childList mutation, so a `MutationObserver` reacting to any `addedNodes`
+   re-entered `start()` → `tick()` → `render()` forever. Observer callbacks are
+   microtasks, so the loop never yielded and the page never painted. Fixed by matching
+   element nodes only (`nodeType === 1`) *and* only when a `[data-kickoff]` element
+   actually enters the DOM — the same guard `counter.js` relies on — plus skipping
+   `textContent` writes when the value is unchanged. Verified in jsdom both ways: the
+   old version exceeded 5000 observer calls in 2.5s, the fixed version makes 4.
+
+**`prefers-reduced-motion` guard shipped with it**, and it covers the pre-existing
+animations too — the stylesheet had none before. The countdown keeps updating under
+reduced motion; only movement is removed, and the ball parks in the corner rather than
+freezing mid-flight.
+
+**Two countdowns: draft and Week 1.** `_countdown_block(label, target_ms, pending)`
+renders each one and handles three states — live digits, `COMPLETE` once the date has
+passed, and a pending chip (`TBD` / `SCHEDULE PENDING`) when there is no date. A block
+with no date carries no `data-kickoff`, so the ticker skips it; `kickoff.js` already
+looped over every `[data-kickoff]` on the page, so adding a second countdown needed
+**no JS change**.
+
+`data_loader.draft_start_ms(year)` resolves the draft date:
+1. Sleeper's draft `start_time` (authoritative — scheduling the draft on Sleeper is all
+   that's needed, no config edit).
+2. `config/season_dates.json` override, for pinning a date before it's on Sleeper.
+3. Otherwise `None` → the hero shows TBD.
+
+`fetch_draft_json` **only caches once `start_time` is set.** Caching an unscheduled
+draft would pin the hero to TBD forever, since these pickles have no TTL — the same trap
+as caching an unplayed season. Verified: 2026 returns `None` and writes no cache entry;
+2025 resolves to its real draft (2025-09-01 21:02 EDT) through the Sleeper path.
+
+**Champion banner labels the season** (`2025 CHAMPION`, not `DEFENDING CHAMPION`). The
+bare label misled a reader into thinking the wrong season's champion was shown — a
+season spanning two calendar years makes "defending" genuinely ambiguous. The data was
+correct: cosmodromedary won 2025; DirtyCommie won 2024.
+
+---
+
+### Task 11F — Tests ✅ / deploy ⛔ NOT DONE
+
+**Tests: DONE** (53 added, suite now **295 passed / 1 skipped**, from a 242-passed
+baseline). The single skip is pre-existing and unrelated
+(`test_pipeline.py:428`, "too many values to unpack").
+
+New files: `tests/test_aliases.py` (16), `tests/test_preseason.py` (22).
+New classes: `TestSeasonRolloverIntegrity` in `tests/test_config.py`,
+`TestPreseasonSeason` + `TestCacheDurability` in `tests/test_pipeline.py`.
+
+The preseason guards were mutation-checked — each new test was confirmed to fail with
+its guard removed. Two test-quality problems were found and fixed along the way:
+- `test_empty_season_is_not_cached` passed only by luck of ordering; it asserted *no*
+  cache write at all, but `load_data_for_year` legitimately seeds `nfl_players`. Now
+  scoped to `season_data_*` keys.
+- `test_carries_a_kickoff_timestamp` depended on a schedule pickle being on disk. Now
+  pins `season_kickoff_ms` so it asserts the markup contract, not the cache state.
+
+**Deploy: NOT done.** Before deploying:
+- The name fingerprint (11B) invalidated every season pickle. `.cache/` was rebuilt
+  locally; the Pi's `.cache/` is **not** git-tracked and must be re-rsynced, or the Pi
+  refetches all seven seasons from the API on first request.
+- 2026 is deliberately never cached, so each Pi restart refetches it (~5s). That is what
+  makes it notice when Week 1 lands.
+- Ship 11G with this — the Pi's gunicorn threads are exactly the concurrency that
+  corrupts caches, and it is the one change here that prevents silent data loss.
+
+#### Original 11F notes
+
+Add to `tests/test_pipeline.py`:
+- preseason: empty `weeks_dict` does not raise and does not write a cache file
+- config integrity: every year in `league_ids.json["leagues"]` has a `roster_ids.json` entry
+- alias: `canonical_name` is idempotent, and no legacy name survives in loaded config
+
+Then `pytest tests/ -m "not slow" -q`, commit, push,
+`ssh rachett 'bash ~/deploy.sh sleeper'`, and re-rsync `.cache/` (not git-tracked).
+
+### Task 11G — Atomic cache writes ✅ COMPLETE (unplanned)
+
+**Not in the original plan — found by accident, and it is the most serious defect this
+phase turned up.**
+
+`_save_cache` pickled straight into the destination path. Any overlap between writers
+leaves a truncated file visible to readers, and `_load_cache` then raised
+`EOFError: Ran out of input` rather than treating it as a miss. During this session —
+with the dev server, several pytest processes and a couple of scripts all warming the
+same keys — **43 of ~170 cache files were corrupted**, including season pickles, the
+NFL schedule, matchups, transactions and the survivor cache. The symptom was not an
+obvious crash: `season_kickoff_ms` swallowed the `EOFError` in its broad `except` and
+silently returned `None`, so the hero rendered without a countdown and the test suite
+hung and failed in ways that looked unrelated.
+
+**This is a live production risk, not just a local one.** The Pi serves the app under
+gunicorn with 4 threads and eagerly loads every season on boot, so two workers warming
+the same key overlap in exactly the same way.
+
+Fix in `data_loader.py`:
+- `_save_cache` writes to a `tempfile.mkstemp` in the same directory, then `os.replace`
+  into place — atomic on POSIX and Windows, so readers see the old file or the new one
+  and never a partial. Temp file is cleaned up if pickling raises.
+- `_load_cache` catches `EOFError` / `UnpicklingError` / `AttributeError` / `ImportError`,
+  logs, deletes the bad file, and returns `None` so the next call rebuilds. Caches now
+  self-heal instead of poisoning every consumer.
+
+Guarded by `TestCacheDurability` in `tests/test_pipeline.py` (truncated file reads as a
+miss, bad file is removed, a failed write leaves the previous value intact, no temp
+files left behind, round-trip).
+
+**Cleanup performed:** all 43 corrupt files deleted and rebuilt (seasons 2019–2025,
+survivor 2024–2025, pick 'em 2025). All 174 cache files verified readable.
+
+---
+
+---
+
+---
+
+### Implementation order
+
+1. **11A** first — nothing else can be verified against 2026 until a `Week` constructs.
+2. **11B** before 11C, so the 2026 config is written into an already-aliased world.
+3. **11C** — flip the constants together; confirm 2025 now behaves as a completed season.
+4. **11D** before 11E — the hero needs a reliable "no weeks yet" signal.
+5. **11E** — reduced-motion guard in the same commit as the animation.
+6. **11F** alongside, not after.
+7. **11G** emerged mid-phase; it is independent of the rest and could ship on its own.
+
+---
+
+### What this phase changed about the plan
+
+Worth recording, because the original plan was wrong in instructive ways:
+
+- **Preseason breaks in four places, not one.** The plan assumed an empty `weeks_dict`.
+  In fact `League.__init__` 404s outright (nflverse publishes no weekly stats until a
+  season is played), `Week()` was constructed before the emptiness check and raised
+  `KeyError` on pre-draft roster stubs, `Season.Update()` raised on `pd.concat([])`, and
+  only then did the empty-cache problem appear. See 11D.
+- **The visible symptom of an unhandled empty season is a hang, not an error.** Nothing
+  could distinguish "loaded, zero weeks" from "still loading", so the tab polled forever.
+  Worth remembering the next time a state looks like it's "still loading".
+- **Renames touch far more than the roster config.** Eight surfaces, including 14 side
+  bet `winner` fields, seven of which are compound (`"jhuntmadd & BMoreBallers88"`) and
+  would have been silently missed by a whole-string alias lookup.
+- **Two diagnoses in this phase were wrong on the first pass.** The browser hang was
+  blamed on the Playwright MCP backend when it was an infinite `MutationObserver` loop
+  in our own JS — the isolation test was invalid because the browser was already wedged
+  from a prior load. The test-suite hang was blamed on a networked test when it was
+  cache corruption. In both cases the correct move was the one taken second: reproduce
+  the failure deliberately and confirm it disappears when the suspected cause is removed.

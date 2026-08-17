@@ -24,7 +24,7 @@ import sleeper_core as core
 @pytest.fixture(scope="module")
 def league_2024_playoffs():
     """League and Season objects for 2024, used by Playoffs tests."""
-    path = dl._cache_path("season_data_2024_18")
+    path = dl.season_cache_path(2024)
     if not os.path.exists(path):
         pytest.skip("2024 cache not found — start the app once to build it")
     league, season, _ = dl.load_data_for_year(2024, verbose=False)
@@ -35,7 +35,7 @@ def league_2024_playoffs():
 def breakout_2024():
     """Flat DataFrame of all 2024 dfBreakout weeks concatenated."""
     import pandas as pd
-    path = dl._cache_path("season_data_2024_18")
+    path = dl.season_cache_path(2024)
     if not os.path.exists(path):
         pytest.skip("2024 cache not found — start the app once to build it")
     dl.load_data_for_year(2024, verbose=False)
