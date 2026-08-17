@@ -1127,9 +1127,17 @@ Tests to write:
 ## Phase 11 — 2026 Season Rollover + Preseason Hero
 
 **Created:** 2026-08-16
-**Status:** 11A–11E and 11G complete. 11F: tests done, **deploy outstanding**.
-Test suite: **295 passed, 1 skipped** (baseline before this work was 242 passed; the
-one skip is pre-existing and unrelated). Nothing committed yet.
+**Status:** ✅ COMPLETE — 11A–11G done, committed and deployed.
+Commit `dd159a4`, live at <https://rachett.tail504ae5.ts.net/legacy/>.
+Test suite: **309 passed, 2 skipped** (baseline before this work was 242 passed; one
+skip is pre-existing and unrelated, the other is the logo git-tracking check which
+passes post-commit).
+
+Deploy notes: `.cache/` was re-rsynced (369 MB, 176 files) because the 11B name
+fingerprint changed every season cache key — without it the Pi would have refetched
+seven seasons from the API. Verified live: hero renders with both countdowns
+(draft TBD, Week 1 ticking), logo loads under the `/legacy/` subpath, champion banner
+reads "2025 CHAMPION", no console errors, no errors in `journalctl -u sleeper`.
 **Goal:** Make the app load the 2026 season (renewed, `pre_draft` as of this writing),
 unify two managers who renamed themselves, and give the preseason a deliberate empty
 state instead of blank charts.

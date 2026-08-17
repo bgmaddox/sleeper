@@ -56,6 +56,14 @@ boot, so it has the same exposure. Do not "simplify" this back to a plain
 `open(path, "wb")`. Settled 2026-08-16, roadmap Task 11G, guarded by
 `TestCacheDurability`.
 
+**App images are served from `webapp/assets/`, never from an external URL.**
+`LOGO_URL` pointed at `raw.githubusercontent.com/bgmaddox/sleeper/master/LL%20logo.png`,
+which 404'd: the repo's default branch is `main`, and the file was never committed
+anyway. It is now `URL_BASE + 'assets/ll-logo.png'`, which also removes a dependency on
+GitHub being reachable from behind the Tailscale Funnel. Note `Photos&Videos/` is
+gitignored, so anything the app needs must be copied into `webapp/assets/`.
+Settled 2026-08-16, guarded by `TestLogoAsset`.
+
 **Sleeper is the source of truth for the draft date; `config/season_dates.json` is only
 a fallback.**
 `data_loader.draft_start_ms()` prefers the draft's `start_time` from Sleeper, so
