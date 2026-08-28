@@ -118,3 +118,27 @@ this file. An empty section is fine; a wrong one is not.)*
   confirmed the atomic-write fix above is in place. That overlap is what corrupted the
   cache; symptoms were a hanging test suite and a hero with no countdown, neither of
   which pointed at the cache.
+
+- **Do not make a failed background load a terminal state with no visible UI.**
+  `_failed_years` in `webapp/app.py` was permanent — `_ensure` refused to retry a year
+  in it — and `_loading_placeholder` had no failed branch, so a failure rendered as the
+  ordinary "Loading season data…" spinner. On 2026-08-23 the Pi rebooted, the service
+  started before DNS and the clock were ready, and the one season that is never cached
+  (the unplayed current one, which `data_loader` deliberately does not pickle) failed
+  its API call. Every other season loaded from `.cache/`, so the app looked healthy
+  while This Week spun for five days. Failures now record the error, retry on a bounded
+  backoff (`_RETRY_DELAYS`), and render a real error card when the backoff is spent.
+  Found 2026-08-28.
+
+- **Do not rely on `print()` reaching the journal under gunicorn.** stdout is a pipe
+  there, so Python block-buffers it; the `[data] Error loading …` line that would have
+  explained the five-day hang was still sitting in a buffer days later, while an
+  unbuffered stderr `UserWarning` from the same process came through fine. The unit now
+  sets `PYTHONUNBUFFERED=1` and the error path passes `flush=True`. Found 2026-08-28.
+
+- **Do not assume `After=network-online.target` is enough on a machine with no RTC.**
+  The Pi's clock is wrong until NTP lands, which can make HTTPS certificates read as
+  "not yet valid" — a network-dependent load can fail even after the network is up.
+  `sleeper.service` also orders after `time-sync.target` and `nss-lookup.target`.
+  Symptom to recognise: `uptime -s` reporting a boot time *later* than a service start
+  in the journal. Found 2026-08-28.

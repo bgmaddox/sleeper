@@ -12,8 +12,8 @@ numbers on purpose; they drift). Sections appear in this order:
   Plotly template                            — _register_template()
   Dash / Flask setup                         — app, server
   Auth                                       — login route, token helpers, auth gate middleware
-  Data store                                 — _load_bg, _ensure, _season/_weeks/_matches/_breakout, eager load
-  Helpers                                    — _strip, _empty, _card, loading placeholders, etc.
+  Data store                                 — _load_bg, _ensure, _retry_due/_retry_pending, _season/_weeks/_matches/_breakout, eager load
+  Helpers                                    — _strip, _empty, _card, loading/failed placeholders, etc.
   League Digest card                         — _digest() builds the weekly summary card
   Layout                                     — full app HTML/component tree (html.Div structure)
   Callbacks                                  — boot, year/week/team controls, retry tick, tab router
@@ -329,13 +329,39 @@ def _auth_gate():
 _data:          dict = {}
 _loading_years: set  = set()
 _failed_years:  set  = set()
+_load_errors:   dict = {}   # year -> last error text, shown in the failed-state card
+_retry_at:      dict = {}   # year -> monotonic deadline for the next auto-retry
+_attempts:      dict = {}   # year -> consecutive failed attempts
 _lock = threading.Lock()
+
+# Backoff between automatic retries of a failed season load. The current season
+# is the only one that is never cached (an unplayed season is deliberately not
+# pickled), so it is the only one whose load needs the network — which makes it
+# the only casualty when the service starts at boot before DNS and the clock are
+# ready. That happened on the Pi and, with no retry, stranded the season behind a
+# spinner for five days. Bounded on purpose: after the last delay the year stays
+# failed until someone hits SYNC, so a genuinely dead API isn't hammered.
+_RETRY_DELAYS = (5, 15, 60)
+
+
+def _retry_due(year) -> bool:
+    """True when a failed year has an automatic retry scheduled and it's due."""
+    at = _retry_at.get(year)
+    return at is not None and time.monotonic() >= at
+
+
+def _retry_pending(year) -> bool:
+    """True while a failed year still has an automatic retry coming."""
+    return year in _retry_at
 
 
 def _load_bg(year: int):
     with _lock:
-        if year in _data or year in _loading_years or year in _failed_years:
+        if year in _data or year in _loading_years:
             return
+        if year in _failed_years and not _retry_due(year):
+            return
+        _failed_years.discard(year)
         _loading_years.add(year)
     try:
         league, season, weeks = dl.load_data_for_year(year, max_week=18, verbose=True)
@@ -348,16 +374,35 @@ def _load_bg(year: int):
             'breakout': dict(core.AllBreakoutDict.get(year, {})),
         }
         _failed_years.discard(year)
+        _load_errors.pop(year, None)
+        _retry_at.pop(year, None)
+        _attempts.pop(year, None)
     except Exception as e:
-        print(f'[data] Error loading {year}: {e}')
+        n = _attempts.get(year, 0) + 1
+        _attempts[year] = n
+        _load_errors[year] = f'{type(e).__name__}: {e}'
         _failed_years.add(year)
+        if n <= len(_RETRY_DELAYS):
+            _retry_at[year] = time.monotonic() + _RETRY_DELAYS[n - 1]
+            nxt = f'retrying in {_RETRY_DELAYS[n - 1]}s'
+        else:
+            _retry_at.pop(year, None)
+            nxt = 'giving up until SYNC'
+        # Flush explicitly: gunicorn hands the app a pipe, so stdout is block
+        # buffered and an error can sit unwritten for days — which is exactly
+        # why the Pi failure left no trace. The unit sets PYTHONUNBUFFERED=1
+        # too; this is the belt to that's braces.
+        print(f'[data] Error loading {year} (attempt {n}, {nxt}): {e}', flush=True)
     finally:
         _loading_years.discard(year)
 
 
 def _ensure(year):
-    if year not in _data and year not in _failed_years and year not in _loading_years:
-        threading.Thread(target=_load_bg, args=(year,), daemon=True).start()
+    if year in _data or year in _loading_years:
+        return
+    if year in _failed_years and not _retry_due(year):
+        return
+    threading.Thread(target=_load_bg, args=(year,), daemon=True).start()
 
 
 def _season(year):
@@ -861,14 +906,40 @@ def _preseason_note(year=None):
     ], className='ps-note')
 
 
-def _loading_placeholder(year=None):
-    """Spinner, or the preseason note when the year is loaded-but-empty.
+def _load_failed_card(year):
+    """Terminal load failure — the backoff is spent and nothing else will run.
 
-    Callers pass `year` so a renewed-but-unplayed season shows a real state
-    instead of spinning forever.
+    Silence here is what let one boot-time API failure masquerade as a five-day
+    spinner, so name the year, show what broke, and point at the way out.
+    """
+    children = [
+        html.Div(f'⚠ Could not load {year}.', className='error-title'),
+        html.Div('Retries are exhausted — use ↺ SYNC in the sidebar to try again.',
+                 className='error-sub'),
+    ]
+    reason = _load_errors.get(year)
+    if reason:
+        children.append(html.Div(reason, className='error-detail'))
+    return html.Div(children, className='error-msg-card')
+
+
+def _loading_placeholder(year=None):
+    """Spinner, or a real state when the year is loaded-but-empty or failed.
+
+    Callers pass `year` so a renewed-but-unplayed season and a load that blew up
+    each show what actually happened instead of spinning forever.
     """
     if year is not None and _is_preseason(year):
         return _preseason_note(year)
+    if year is not None and year in _failed_years:
+        # A pending retry is still honest work in progress; an exhausted one is
+        # not, and must never keep wearing the spinner.
+        if not _retry_pending(year):
+            return _load_failed_card(year)
+        return html.Div([
+            html.Div(className='loading-spinner'),
+            f'{year} failed to load — retrying…'
+        ], className='loading-msg')
     return html.Div([
         html.Div(className='loading-spinner'),
         'Loading season data…'
@@ -1163,27 +1234,38 @@ def _playoff_week_start(year):
     Output('store-playoff-week-start', 'data'),
     Output('boot', 'disabled'),
     Output('team-list', 'value', allow_duplicate=True),
+    Output('store-retry', 'data', allow_duplicate=True),
     Input('boot', 'n_intervals'),
     State('year-dd', 'value'),
     prevent_initial_call='initial_duplicate',
 )
 def _boot(_, year):
     year = year or CURRENT_YEAR
-    w = _weeks(year)
+    w = _weeks(year)          # also drives the retry: _weeks -> _ensure
     if not w:
         if year in _failed_years:
-            # Load failed — stop polling; the tab body shows the error state
-            return no_update, no_update, no_update, no_update, no_update, True, no_update
+            if _retry_pending(year):
+                # Backoff still has attempts left. Keep polling — _weeks() above
+                # re-arms the load once the deadline passes, and this is the only
+                # thing that drives it while the user just watches the spinner.
+                return (no_update,) * 5 + (False, no_update, no_update)
+            # Out of retries. Stop polling, but bump store-retry so _render_tab
+            # fires once more and swaps the spinner for the error card — nothing
+            # else re-renders the tab body, which is how a dead load used to keep
+            # spinning forever.
+            return (no_update,) * 5 + (True, no_update, time.time())
         if year in _data:
             # Loaded fine, but the season has no weeks yet (preseason). Without
             # this branch the poller can't tell "empty" from "still loading" and
             # spins forever on a renewed-but-unplayed season.
             pws = _playoff_week_start(year)
-            return 1, 1, 1, 1, pws, True, no_update
-        return no_update, no_update, no_update, no_update, no_update, False, no_update  # keep polling
+            return 1, 1, 1, 1, pws, True, no_update, no_update
+        # keep polling
+        return (no_update,) * 5 + (False, no_update, no_update)
     slider_max, default_week = _default_week(year, w)
     pws = _playoff_week_start(year)
-    return slider_max, default_week, default_week, slider_max, pws, True, None  # data ready — disable interval
+    # data ready — disable interval
+    return slider_max, default_week, default_week, slider_max, pws, True, None, no_update
 
 
 @app.callback(
@@ -1416,7 +1498,12 @@ def _sync_stores(year, week):
 def _refresh(_, year):
     if year in _data:
         del _data[year]
+    # Clear the whole failure record, not just the flag — an exhausted backoff
+    # would otherwise refuse the very reload this button exists to force.
     _failed_years.discard(year)
+    _load_errors.pop(year, None)
+    _retry_at.pop(year, None)
+    _attempts.pop(year, None)
     dl.invalidate_week(year, 0)
     threading.Thread(target=_load_bg, args=(year,), daemon=True).start()
     # Re-arm the boot poller so the tab re-renders when the reload finishes
@@ -1433,7 +1520,7 @@ def _update_digest(year, week):
 
 
 @app.callback(
-    Output('store-retry', 'data'),
+    Output('store-retry', 'data', allow_duplicate=True),
     Input('alltime-retry', 'n_intervals'),
     prevent_initial_call=True,
 )
