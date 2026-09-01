@@ -5616,6 +5616,14 @@ class Survivor:
 
     def team_graveyard_fig(self) -> go.Figure:
         """4×8 heatmap grid of all 32 NFL teams colored by number of times picked."""
+        # Every September the pool is renewed and joined before anyone has
+        # picked. Boolean-masking an empty frame drops its columns, so the
+        # is_fatal lookup below raised KeyError('team_pick') — and the tab's
+        # per-chart try/except drew the exception as the chart. Match the
+        # empty guard the sibling charts already use.
+        if self.Picks.empty:
+            return go.Figure(layout=go.Layout(template='gridiron_ink'))
+
         picks = self.Picks[self.Picks['team_pick'] != '']
         pick_counts = picks.groupby('team_pick').size().to_dict()
         fatal_teams = set(self.Picks[self.Picks['is_fatal']]['team_pick'].tolist())

@@ -11,7 +11,10 @@ import sleeper_core as core
 class TestPickEmConfig:
 
     def test_pickem_league_ids(self):
-        assert core.PICKEM_LEAGUE_IDS == {2025: 1263903606336139264}
+        assert core.PICKEM_LEAGUE_IDS == {
+            2025: 1263903606336139264,
+            2026: 1399999749611876352,
+        }
 
     def test_keys_are_ints(self):
         assert all(isinstance(k, int) for k in core.PICKEM_LEAGUE_IDS)
@@ -131,3 +134,52 @@ class TestPickEmCharts:
         assert isinstance(fig, go.Figure)
         assert len(fig.data) == 1
         assert len(fig.data[0].y) == 6
+
+
+class TestPickEmPreseasonHeader:
+    """A renewed pool that nobody has scored in yet still has entrants.
+
+    Totals is derived from points, so it is empty between the renewal and Week 1
+    — the tab header used to report "0 players" for a pool of six.
+    """
+
+    def _tab(self, monkeypatch, user_map, totals_index):
+        import os
+        import sys
+
+        import pandas as pd
+
+        # webapp/ isn't on the path by default (conftest adds only the root),
+        # and app.py eagerly loads every season unless told not to.
+        root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        webapp = os.path.join(root, "webapp")
+        if webapp not in sys.path:
+            sys.path.insert(0, webapp)
+        os.environ.setdefault("SLEEPER_SKIP_EAGER_LOAD", "1")
+
+        app = pytest.importorskip("app", reason="webapp/app.py not importable")
+        pe = core.PickEm.__new__(core.PickEm)
+        pe.year = 2026
+        pe.user_map = user_map
+        pe.n_weeks = 0 if not totals_index else 3
+        pe.Totals = pd.Series(
+            range(len(totals_index)), index=totals_index, dtype=float, name="points"
+        ).sort_values(ascending=False)
+        pe.WeeksWon = pd.Series(dtype=float)
+        pe.Data = pd.DataFrame(columns=["username", "week", "points", "year"])
+        monkeypatch.setattr(app.dl, "load_pickem_for_year", lambda y: pe)
+        return str(app._tab_pickem(2026))
+
+    def test_counts_entrants_before_any_scoring(self, monkeypatch):
+        out = self._tab(monkeypatch, {f"u{i}": f"p{i}" for i in range(6)}, [])
+        assert "6 players" in out
+        assert "0 players" not in out
+
+    def test_leader_is_a_dash_before_any_scoring(self, monkeypatch):
+        out = self._tab(monkeypatch, {f"u{i}": f"p{i}" for i in range(6)}, [])
+        assert "Leader: —" in out
+
+    def test_leader_appears_once_scores_exist(self, monkeypatch):
+        out = self._tab(monkeypatch, {"u0": "alice", "u1": "bob"}, ["alice", "bob"])
+        assert "Leader: bob" in out or "Leader: alice" in out
+        assert "Leader: —" not in out

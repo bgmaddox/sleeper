@@ -2630,9 +2630,12 @@ def _tab_pickem(year):
         traceback.print_exc()
         return html.Div(f"Could not load Pick 'Em data: {e}", className='error-msg-card')
 
-    n_players = len(pe.Totals)
+    # Count entrants, not scorers. Totals is derived from points, so between a
+    # pool being renewed and Week 1 being scored it is empty even though people
+    # have joined — the header read "0 players" for a pool of six.
+    n_players = len(pe.user_map) or len(pe.Totals)
     status_label = 'Season Complete' if pe.n_weeks >= 18 else f'Through Week {pe.n_weeks}'
-    leader = pe.Totals.index[0] if n_players else '—'
+    leader = pe.Totals.index[0] if not pe.Totals.empty else '—'
 
     def _pchart(method, h=None):
         try:

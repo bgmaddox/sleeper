@@ -107,6 +107,7 @@ class TestLeagueIds:
         assert core.SURVIVOR_LEAGUE_IDS == {
             2024: 1136802217681539072,
             2025: 1252050081251590144,
+            2026: 1399999661581819904,
         }
 
     def test_available_years_derived(self):
