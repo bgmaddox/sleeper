@@ -503,5 +503,76 @@
       "winner": ""
     }
   },
-  "2026": {}
+  "2026": {
+    "1": {
+      "name": "I'm Flying, Jack!",
+      "desc": "Team with the highest score (starters only)",
+      "winner": ""
+    },
+    "2": {
+      "name": "Look At These TDs",
+      "desc": "Team with the most offensive touchdowns scored",
+      "winner": ""
+    },
+    "3": {
+      "name": "Big Helpers, Too",
+      "desc": "Most combined points with starting D/ST & Kicker",
+      "winner": ""
+    },
+    "4": {
+      "name": "Blackjack",
+      "desc": "Team with a starter closest to 21 points without going over",
+      "winner": ""
+    },
+    "5": {
+      "name": "The Replacements",
+      "desc": "Team with the highest total points for their bench",
+      "winner": ""
+    },
+    "6": {
+      "name": "The Boom & Bust",
+      "desc": "Largest point differential between single highest and lowest-scoring starter",
+      "winner": ""
+    },
+    "7": {
+      "name": "Campus Rush Week",
+      "desc": "Highest total rush yards for team (active or bench)",
+      "winner": ""
+    },
+    "8": {
+      "name": "All Hands on Deck",
+      "desc": "Team with the most starting players who score over 15 points",
+      "winner": ""
+    },
+    "9": {
+      "name": "The Old Man & Young Buck",
+      "desc": "Best combined score from a starting player over 30 and a rookie",
+      "winner": ""
+    },
+    "10": {
+      "name": "NFL Franchise Week",
+      "desc": "Team with highest point total of players from the same NFL franchise (active or bench)",
+      "winner": ""
+    },
+    "11": {
+      "name": "Please Not the Jets",
+      "desc": "Trade Deadline Week — team with the most trades this season wins",
+      "winner": ""
+    },
+    "12": {
+      "name": "Go Long",
+      "desc": "Starting QB with the highest completion % (over 10 throws)",
+      "winner": ""
+    },
+    "13": {
+      "name": "Coffee's For Closers",
+      "desc": "Team that beats its opponent by the smallest margin of victory",
+      "winner": ""
+    },
+    "14": {
+      "name": "Breaking of the Tie",
+      "desc": "If needed — choose 3 non-QB players; highest combined total wins",
+      "winner": ""
+    }
+  }
 }
