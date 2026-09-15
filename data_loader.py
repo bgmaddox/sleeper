@@ -257,16 +257,45 @@ def fetch_pickem_users(league_id: int) -> list:
     _save_cache(key, data)
     return data
 
+def _matchups_unplayed(data) -> bool:
+    """True if a matchup response means "this week hasn't been played yet".
+
+    Sleeper says that two different ways, and both must be treated alike:
+      * `[]`                     — before the league exists for that week
+      * roster stubs, every entry with `matchup_id: None` — a scheduled but
+        unplayed week, and also every week after the fantasy season ends
+
+    load_data_for_year already stops its loop on either shape; this helper
+    exists so the cache layer can recognise them too.
+    """
+    if not data:
+        return True
+    return all(m.get('matchup_id') is None for m in data)
+
+
 def fetch_matchups_json(league_id: int, week: int) -> list:
-    """Fetch raw Sleeper matchup JSON for a given week (cached to disk)."""
+    """Fetch raw Sleeper matchup JSON for a given week (cached to disk).
+
+    An unplayed week is never cached. These pickles have no TTL, so writing
+    down "not played yet" freezes that week as permanently unplayed — the
+    answer changes on kickoff, but the cache never does.
+
+    This is not hypothetical. An `[]` cached for 2026 week 1 on Aug 16 was
+    still being served on Sep 14 after the games were played, and it defeated
+    the preseason guard in load_data_for_year: no weeks -> no season pickle
+    saved -> full rebuild every load -> read the same stale `[]` again, with
+    the ↺ SYNC button unable to break the loop. The roster-stub form has the
+    same failure mode for weeks 2+, which is why both shapes are excluded.
+    """
     key = f"matchups_{league_id}_{week}"
     cached = _load_cache(key)
-    if cached is not None:
+    if cached and not _matchups_unplayed(cached):
         return cached
     data = _get_json(
         f"https://api.sleeper.app/v1/league/{league_id}/matchups/{week}"
     )
-    _save_cache(key, data)
+    if not _matchups_unplayed(data):
+        _save_cache(key, data)
     return data
 
 def fetch_nfl_schedule(year: int):
@@ -558,11 +587,29 @@ def load_playoff_probs(year: int) -> dict | None:
     return result if result else None
 
 
-def invalidate_week(year: int, week: int):
-    """Remove season cache for `year` so it rebuilds from the Sleeper API on next load.
-    Deleting the season pickle forces all weeks (including `week`) to be re-fetched."""
+def invalidate_week(year: int, week: int, max_week: int = 18):
+    """Remove the cached data for `year` so it rebuilds from the Sleeper API on next load.
+
+    Deletes the season pickle *and* the per-week matchup pickles. Dropping the
+    season pickle alone is not enough: load_data_for_year rebuilds by calling
+    fetch_matchups_json, which reads its own separate cache, so a stale week
+    survives the "refresh" and the ↺ SYNC button silently fails to refresh
+    anything. Both layers have to go for a rebuild to actually reach Sleeper.
+    """
     import sleeper_core as core
+    removed = 0
     season_path = season_cache_path(year)
     if os.path.exists(season_path):
         os.remove(season_path)
-    print(f"Invalidated cache for {year} (will re-fetch all weeks including Week {week}).")
+        removed += 1
+
+    league_id = core.leagueNumbers_Dict.get(year)
+    if league_id is not None:
+        for w in range(1, max_week + 1):
+            wk_path = _cache_path(f"matchups_{league_id}_{w}")
+            if os.path.exists(wk_path):
+                os.remove(wk_path)
+                removed += 1
+
+    print(f"Invalidated cache for {year} — removed {removed} file(s); "
+          f"all weeks (including Week {week}) will be re-fetched.")

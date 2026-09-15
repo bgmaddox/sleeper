@@ -329,16 +329,146 @@ class TestCacheInvalidation:
         dl.invalidate_week(2024, 5)
         assert not fake_pkl.exists(), "Season cache file should have been deleted"
 
-    def test_invalidate_week_no_crash_if_file_missing(self):
-        """Should not raise if the season cache file doesn't exist for a known year."""
+    def test_invalidate_week_no_crash_if_file_missing(self, tmp_path, monkeypatch):
+        """Should not raise if the season cache file doesn't exist for a known year.
+
+        Pinned to a temp CACHE_DIR: invalidate_week now deletes matchup pickles
+        too, so running this against the real cache would wipe 2019 week data as
+        a side effect of a no-op test.
+        """
+        fake_cache = tmp_path / ".cache"
+        fake_cache.mkdir()
+        monkeypatch.setattr(dl, "CACHE_DIR", str(fake_cache))
         try:
-            # 2019 cache exists but we test with a monkeypatched CACHE_DIR in the
-            # other test, so just call with a real year and confirm no exception.
             dl.invalidate_week(2019, 1)
         except KeyError as e:
             pytest.fail(f"invalidate_week raised KeyError for unknown year — consider guarding leagueNumbers_Dict lookup: {e}")
         except Exception as e:
             pytest.fail(f"invalidate_week raised unexpectedly: {e}")
+
+    def test_invalidate_week_removes_matchup_pickles(self, tmp_path, monkeypatch):
+        """
+        invalidate_week() must clear the per-week matchup pickles, not just the
+        season pickle. load_data_for_year rebuilds via fetch_matchups_json, which
+        reads its own cache — so leaving those behind makes ↺ SYNC a no-op that
+        re-serves exactly the stale week the user pressed the button to fix.
+        """
+        import sleeper_core as core
+
+        fake_cache = tmp_path / ".cache"
+        fake_cache.mkdir()
+        monkeypatch.setattr(dl, "CACHE_DIR", str(fake_cache))
+
+        league_id = core.leagueNumbers_Dict[2024]
+        wk1 = dl._cache_path(f"matchups_{league_id}_1")
+        wk2 = dl._cache_path(f"matchups_{league_id}_2")
+        dl._save_cache(f"matchups_{league_id}_1", [{"matchup_id": 1}])
+        dl._save_cache(f"matchups_{league_id}_2", [{"matchup_id": 1}])
+        assert os.path.exists(wk1) and os.path.exists(wk2)
+
+        dl.invalidate_week(2024, 1)
+
+        assert not os.path.exists(wk1), "Week 1 matchup pickle should have been deleted"
+        assert not os.path.exists(wk2), "Week 2 matchup pickle should have been deleted"
+
+
+class TestMatchupCaching:
+    """An empty matchup response means 'not played yet' and must never be cached."""
+
+    def test_empty_matchups_not_written_to_disk(self, tmp_path, monkeypatch):
+        fake_cache = tmp_path / ".cache"
+        fake_cache.mkdir()
+        monkeypatch.setattr(dl, "CACHE_DIR", str(fake_cache))
+        monkeypatch.setattr(dl, "_get_json", lambda url: [])
+
+        assert dl.fetch_matchups_json(999, 1) == []
+        assert not os.path.exists(dl._cache_path("matchups_999_1")), (
+            "An empty (unplayed) week must not be cached — these pickles have no "
+            "TTL, so caching [] freezes the week as permanently unplayed."
+        )
+
+    def test_week_refetches_after_preseason_empty(self, tmp_path, monkeypatch):
+        """
+        The 2026 Week 1 regression: [] cached preseason, then the games are played.
+        The next call must reach Sleeper again and pick up the real scores.
+        """
+        fake_cache = tmp_path / ".cache"
+        fake_cache.mkdir()
+        monkeypatch.setattr(dl, "CACHE_DIR", str(fake_cache))
+
+        calls = []
+
+        def fake_get(url):
+            calls.append(url)
+            return [] if len(calls) == 1 else [{"matchup_id": 1, "points": 154.36}]
+
+        monkeypatch.setattr(dl, "_get_json", fake_get)
+
+        assert dl.fetch_matchups_json(999, 1) == []          # preseason
+        played = dl.fetch_matchups_json(999, 1)              # after kickoff
+        assert played == [{"matchup_id": 1, "points": 154.36}]
+        assert len(calls) == 2, "Second call must hit the API, not serve a cached []"
+
+    def test_populated_matchups_still_cached(self, tmp_path, monkeypatch):
+        """The no-empty rule must not disable caching for real data."""
+        fake_cache = tmp_path / ".cache"
+        fake_cache.mkdir()
+        monkeypatch.setattr(dl, "CACHE_DIR", str(fake_cache))
+
+        calls = []
+
+        def fake_get(url):
+            calls.append(url)
+            return [{"matchup_id": 1, "points": 120.5}]
+
+        monkeypatch.setattr(dl, "_get_json", fake_get)
+
+        first = dl.fetch_matchups_json(999, 3)
+        second = dl.fetch_matchups_json(999, 3)
+        assert first == second == [{"matchup_id": 1, "points": 120.5}]
+        assert len(calls) == 1, "Populated weeks must still be served from cache"
+
+    def test_roster_stub_week_not_cached(self, tmp_path, monkeypatch):
+        """
+        Sleeper returns roster stubs (matchup_id=None) for a scheduled-but-unplayed
+        week. That is non-empty, so a bare truthiness check would cache it — and
+        freeze the week the same way an empty [] froze 2026 Week 1.
+        """
+        fake_cache = tmp_path / ".cache"
+        fake_cache.mkdir()
+        monkeypatch.setattr(dl, "CACHE_DIR", str(fake_cache))
+
+        stub = [{"matchup_id": None, "roster_id": 1}, {"matchup_id": None, "roster_id": 2}]
+        monkeypatch.setattr(dl, "_get_json", lambda url: stub)
+
+        assert dl.fetch_matchups_json(999, 5) == stub
+        assert not os.path.exists(dl._cache_path("matchups_999_5")), (
+            "A roster-stub (unplayed) week must not be cached"
+        )
+
+    def test_stub_week_refetches_once_played(self, tmp_path, monkeypatch):
+        """A week cached as stubs by an older build must still recover."""
+        fake_cache = tmp_path / ".cache"
+        fake_cache.mkdir()
+        monkeypatch.setattr(dl, "CACHE_DIR", str(fake_cache))
+
+        # Simulate a pickle written before this guard existed.
+        stub = [{"matchup_id": None, "roster_id": 1}]
+        dl._save_cache("matchups_999_2", stub)
+
+        real = [{"matchup_id": 1, "roster_id": 1, "points": 98.2}]
+        monkeypatch.setattr(dl, "_get_json", lambda url: real)
+
+        assert dl.fetch_matchups_json(999, 2) == real, (
+            "A stale stub pickle must be treated as a miss, not served as truth"
+        )
+
+    def test_unplayed_helper_shapes(self):
+        assert dl._matchups_unplayed([]) is True
+        assert dl._matchups_unplayed([{"matchup_id": None}]) is True
+        assert dl._matchups_unplayed([{"matchup_id": None}, {"matchup_id": None}]) is True
+        assert dl._matchups_unplayed([{"matchup_id": 1}]) is False
+        assert dl._matchups_unplayed([{"matchup_id": None}, {"matchup_id": 2}]) is False
 
 
 # ── Survivor pool data pipeline ──────────────────────────────────────────────
