@@ -13,6 +13,7 @@ numbers on purpose; they drift). Sections appear in this order:
   Dash / Flask setup                         — app, server
   Auth                                       — login route, token helpers, auth gate middleware
   Data store                                 — _load_bg, _ensure, _retry_due/_retry_pending, _season/_weeks/_matches/_breakout, eager load
+  Freshness watcher                          — _newest_loaded_week, _check_new_week (auto-pickup of a newly scored week)
   Helpers                                    — _strip, _empty, _card, loading/failed placeholders, etc.
   League Digest card                         — _digest() builds the weekly summary card
   Layout                                     — full app HTML/component tree (html.Div structure)
@@ -102,10 +103,38 @@ CURRENT_YEAR  = core.CURRENT_SEASON   # derived, so it can't drift from sleeper_
 ALL_YEARS     = core.AVAILABLE_YEARS
 REGULAR_SEASON_WEEKS = 14  # weeks 15-18 are playoffs; capped until playoff feature is built
 
-try:
-    _nfl_state = dl.fetch_state_json()
-except Exception:
-    _nfl_state = {}
+# NFL state (season, season_type, leg) drives the default week and the
+# preseason/postseason banners. It was previously fetched once at import and
+# never again — on the Pi, where the service can run for weeks, that froze the
+# app's idea of "now" at whatever it was on boot. Re-read it on a TTL instead.
+_STATE_TTL    = 600          # seconds
+_nfl_state    = {}
+_nfl_state_at = 0.0
+_state_lock   = threading.Lock()
+
+
+def _state() -> dict:
+    """Current NFL state, refreshed at most once per _STATE_TTL.
+
+    Never raises and never empties a good value: if Sleeper is unreachable the
+    last known state keeps being served, which is far better than the app
+    forgetting what week it is because one request timed out.
+    """
+    global _nfl_state, _nfl_state_at
+    if _nfl_state and (time.monotonic() - _nfl_state_at) < _STATE_TTL:
+        return _nfl_state
+    with _state_lock:
+        # Re-check under the lock: several gunicorn threads can arrive together.
+        if _nfl_state and (time.monotonic() - _nfl_state_at) < _STATE_TTL:
+            return _nfl_state
+        try:
+            fresh = dl.fetch_state_json()
+            if fresh:
+                _nfl_state = fresh
+        except Exception:
+            pass                      # keep the previous value
+        _nfl_state_at = time.monotonic()
+    return _nfl_state
 
 
 def _default_week(year: int, weeks_dict: dict) -> tuple:
@@ -117,10 +146,11 @@ def _default_week(year: int, weeks_dict: dict) -> tuple:
     if not weeks_dict:
         return 1, 1
     available_max = max(weeks_dict.keys())
-    state_season = str(_nfl_state.get('season', ''))
-    state_type   = _nfl_state.get('season_type', '')
+    st = _state()
+    state_season = str(st.get('season', ''))
+    state_type   = st.get('season_type', '')
     if str(year) == state_season and state_type == 'regular':
-        leg = int(_nfl_state.get('leg', 1) or 1)
+        leg = int(st.get('leg', 1) or 1)
         return available_max, min(leg, available_max)
     default = min(REGULAR_SEASON_WEEKS, available_max)
     return available_max, default
@@ -342,6 +372,69 @@ _lock = threading.Lock()
 # spinner for five days. Bounded on purpose: after the last delay the year stays
 # failed until someone hits SYNC, so a genuinely dead API isn't hammered.
 _RETRY_DELAYS = (5, 15, 60)
+
+
+# ── Freshness watcher ─────────────────────────────────────────────────────────
+#
+# Nothing used to pull a newly scored week in. The season pickle has no TTL, so
+# once a year was cached it stayed exactly as loaded until a human pressed SYNC
+# — Week 1 could be live on Sleeper for days while the site still showed the
+# preseason. This closes that loop by comparing Sleeper's `last_scored_leg`
+# against the newest week actually loaded, and rebuilding when it advances.
+#
+# Driven by a browser Interval rather than a server thread: the check then runs
+# when somebody is actually looking, instead of waking a 4GB Pi that also hosts
+# five other apps every few minutes all year. The tradeoff is that the first
+# viewer after kickoff waits for the rebuild — acceptable, and the page already
+# has a loading state for exactly this.
+_WEEK_CHECK_INTERVAL = 600      # seconds between real API checks (per process)
+_week_checked_at: dict = {}     # year -> monotonic timestamp of last check
+
+
+def _newest_loaded_week(year: int) -> int:
+    """Highest week number currently loaded for `year`, or 0 if none."""
+    entry = _data.get(year)
+    if not entry:
+        return 0
+    weeks = entry.get('weeks') or {}
+    return max(weeks.keys()) if weeks else 0
+
+
+def _check_new_week(year: int) -> bool:
+    """Rebuild `year` if Sleeper has scored a week we don't have yet.
+
+    Returns True if a reload was started. Throttled per process so a dozen open
+    browser tabs can't turn into a dozen API calls a minute, and skipped
+    entirely while a load is already in flight or the year has failed — the
+    existing backoff owns that case.
+    """
+    if year in _loading_years or year in _failed_years:
+        return False
+
+    last = _week_checked_at.get(year)
+    if last is not None and (time.monotonic() - last) < _WEEK_CHECK_INTERVAL:
+        return False
+    _week_checked_at[year] = time.monotonic()
+
+    try:
+        scored = dl.get_current_week(year)
+    except Exception as e:
+        print(f'[watch] {year}: freshness check failed: {e}', flush=True)
+        return False
+
+    have = _newest_loaded_week(year)
+    if scored <= have:
+        return False
+
+    print(f'[watch] {year}: Sleeper has week {scored}, loaded through {have} '
+          f'— rebuilding.', flush=True)
+    with _lock:
+        if year in _loading_years:
+            return False
+        _data.pop(year, None)
+    dl.invalidate_week(year, scored)
+    threading.Thread(target=_load_bg, args=(year,), daemon=True).start()
+    return True
 
 
 def _retry_due(year) -> bool:
@@ -1117,6 +1210,11 @@ app.layout = html.Div([
     dcc.Store(id='store-playoff-week-start', data=15),
     dcc.Store(id='store-d3-trigger', data=0),
     dcc.Interval(id='boot', interval=1500, n_intervals=0, max_intervals=-1),
+    # Freshness poll: asks whether Sleeper has scored a week we don't have.
+    # Long interval on purpose — the server throttles the real API call to
+    # _WEEK_CHECK_INTERVAL anyway, so this only decides how soon after
+    # kickoff an open tab notices.
+    dcc.Interval(id='week-watch', interval=120_000, n_intervals=0, max_intervals=-1),
     dcc.Store(id='store-retry'),
 
     # Top bar
@@ -1161,10 +1259,10 @@ app.layout = html.Div([
                        className='hidden-slider'),
             *([html.Div(
                 {'off': 'Off-season', 'pre': 'Pre-season'}.get(
-                    _nfl_state.get('season_type', ''), ''
+                    _state().get('season_type', ''), ''
                 ),
                 className='season-state-badge',
-            )] if _nfl_state.get('season_type') not in ('regular', 'post') else []),
+            )] if _state().get('season_type') not in ('regular', 'post') else []),
         ], className='ctrl-group ctrl-group--week'),
 
         html.Div(className='ctrl-divider'),
@@ -1508,6 +1606,26 @@ def _refresh(_, year):
     threading.Thread(target=_load_bg, args=(year,), daemon=True).start()
     # Re-arm the boot poller so the tab re-renders when the reload finishes
     return 'loading…', False
+
+
+@app.callback(
+    Output('boot', 'disabled', allow_duplicate=True),
+    Input('week-watch', 'n_intervals'),
+    State('year-dd', 'value'),
+    prevent_initial_call=True,
+)
+def _week_watch(_, year):
+    """Pull in a newly scored week without anyone pressing SYNC.
+
+    Only the current season can gain weeks, so older years are skipped — they
+    are settled history and re-checking them is pure API traffic. Re-arms the
+    boot poller when a rebuild starts, so the slider and tabs refresh on their
+    own once it lands.
+    """
+    year = year or CURRENT_YEAR
+    if year != CURRENT_YEAR:
+        return no_update
+    return False if _check_new_week(year) else no_update
 
 
 @app.callback(

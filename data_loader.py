@@ -536,15 +536,34 @@ def load_data_for_year(year: int, max_week: int = 18, verbose: bool = True):
     return league_obj, season_obj, weeks_dict
 
 
+def fetch_league_json_fresh(league_id: int) -> dict:
+    """League settings straight from Sleeper, bypassing (and refreshing) the cache.
+
+    fetch_league_json caches with no TTL, which is right for the things that
+    never change — name, scoring, roster positions — but wrong for
+    `last_scored_leg`, which advances every week. Reading that from a pickle
+    written in August means it never advances at all.
+    """
+    data = _get_json(f"https://api.sleeper.app/v1/league/{league_id}")
+    if data:
+        _save_cache(f"league_{league_id}", data)
+    return data
+
+
 def get_current_week(year: int) -> int:
-    """Return the last scored week for the given season year."""
+    """Return the last scored week for `year`, straight from Sleeper.
+
+    Deliberately uncached: this is the signal used to decide whether the
+    on-disk season is stale, so serving it from that same stale cache would
+    make the check permanently answer "nothing has changed".
+    """
     import sleeper_core as core
     try:
         league_id = core.leagueNumbers_Dict[year]
-        settings = fetch_league_json(league_id)
+        settings = fetch_league_json_fresh(league_id)
         return int(settings.get("settings", {}).get("last_scored_leg", 1) or 1)
     except Exception:
-        return 1
+        return 0
 
 
 def load_playoff_probs(year: int) -> dict | None:
