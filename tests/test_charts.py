@@ -89,8 +89,12 @@ class TestSeasonCharts:
 
     @pytest.mark.slow
     def test_position_strength_polar(self, sf):
-        """4x3 polar subplot grid — slow render expected."""
-        fig = sf.PositionStengthPolar()   # typo in name until Task 2C renames it
+        """4x3 polar subplot grid — slow render expected.
+
+        The method was PositionStengthPolar until the spelling was corrected;
+        this test kept calling the old name and had been failing ever since.
+        """
+        fig = sf.PositionStrengthPolar()
         assert _is_valid_fig(fig)
         assert len(fig.data) == 12, "Should have one trace per team (12 polar subplots)"
 
@@ -159,11 +163,6 @@ class TestAllTimeCharts:
         fig = alltime.TopScores(Top_Bottom='Top', Team_Player='Player')
         assert _is_valid_fig(fig)
 
-
-def test_position_strength_polar_renamed(sf):
-    """PositionStrengthPolar (corrected spelling, was PositionStengthPolar)."""
-    fig = sf.PositionStrengthPolar()
-    assert _is_valid_fig(fig)
 
 
 # ── Survivor chart smoke tests ────────────────────────────────────────────────

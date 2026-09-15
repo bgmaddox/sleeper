@@ -20,7 +20,12 @@ from sklearn.preprocessing import MinMaxScaler, StandardScaler
 import nfl_data_py as nfl
 from dataclasses import dataclass, field as dc_field
 
-pd.options.mode.copy_on_write = True
+# Copy-on-Write is always on and no longer settable from pandas 3.0, where
+# assigning this raises a Pandas4Warning on every import — including every
+# test run. Set it only where it still means something, so the project keeps
+# working on the 2.x pins the Pi and older venvs may still be on.
+if int(pd.__version__.split('.')[0]) < 3:
+    pd.options.mode.copy_on_write = True
 
 # ── League Logo ──────────────────────────────────────────────────────────────
 _LOGO_URL = "https://raw.githubusercontent.com/bgmaddox/sleeper/master/LL%20logo.png"
@@ -4912,7 +4917,11 @@ class SideBet(TeamColorsMixin):
         Week10SideBet2Data['Name'] = Week10SideBet2Data['team'] + ' - ' + Week10SideBet2Data['recent_team']
 
         
-        Week10SideBet = WeekObj.Breakout.groupby(['team'])[['player','points','recent_team']]
+        # groupby('team'), not groupby(['team']): a list of keys makes the group
+        # labels tuples under pandas 3.0, so the get_group(person) below raised
+        # KeyError for every manager. Every other get_group site already uses
+        # the scalar form.
+        Week10SideBet = WeekObj.Breakout.groupby('team')[['player','points','recent_team']]
         Week10SideBet2 = WeekObj.Breakout.groupby(['team','recent_team'])[['player','points']].sum(numeric_only=True).reset_index()
         Week10SideBet2Data = Week10SideBet2.sort_values('points', ascending=False).head(10)
         Week10SideBet2Data['Name'] = Week10SideBet2Data['team'] + ' - ' + Week10SideBet2Data['recent_team']

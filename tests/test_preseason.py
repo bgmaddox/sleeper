@@ -129,12 +129,28 @@ class TestPreseasonHero:
         """The countdown target is data-driven; JS reads it from the attribute.
 
         Pinned rather than read from the schedule cache — this asserts the markup
-        contract, not whether a pickle happens to be on disk.
+        contract, not whether a pickle happens to be on disk. The target is
+        computed relative to now: it was previously a fixed epoch, which meant
+        the test started failing the moment that date passed, reporting a
+        rendering bug where there was only a stale constant.
         """
-        monkeypatch.setattr(app.dl, "season_kickoff_ms", lambda y: 1788999600000)
+        future_ms = int((time.time() + 30 * 86400) * 1000)
+        monkeypatch.setattr(app.dl, "season_kickoff_ms", lambda y: future_ms)
         rendered = str(app._preseason_hero(empty_year))
         assert "data-kickoff" in rendered
-        assert "1788999600000" in rendered
+        assert str(future_ms) in rendered
+
+    def test_past_kickoff_renders_complete_not_a_countdown(self, empty_year, monkeypatch):
+        """Once kickoff has passed the block must stop counting down.
+
+        This is the branch the fixed-epoch version of the test above was
+        accidentally exercising, with no assertion describing it.
+        """
+        past_ms = int((time.time() - 86400) * 1000)
+        monkeypatch.setattr(app.dl, "season_kickoff_ms", lambda y: past_ms)
+        rendered = str(app._preseason_hero(empty_year))
+        assert "COMPLETE" in rendered
+        assert str(past_ms) not in rendered
 
     def test_survives_missing_champion(self, empty_year, monkeypatch):
         monkeypatch.setattr(app, "_defending_champion", lambda y: None)

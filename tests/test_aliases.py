@@ -45,13 +45,23 @@ class TestCanonicalName:
 
 
 class TestCanonicalNamesStr:
+    # RReclam is the un-aliased control: it must survive every rewrite intact.
+    # BMoreBallers88 used to serve that role, but it became an alias key when
+    # that manager renamed to BMoreBaller88 — which is exactly the drift these
+    # tests exist to catch, so it is now used as a second aliased name.
+
     def test_compound_winner(self):
-        assert core.canonical_names_str("jhuntmadd & BMoreBallers88") == "jhmad & BMoreBallers88"
+        assert core.canonical_names_str("jhuntmadd & RReclam") == "jhmad & RReclam"
+
+    def test_compound_winner_both_aliased(self):
+        assert core.canonical_names_str(
+            "jhuntmadd & BMoreBallers88"
+        ) == "jhmad & BMoreBaller88"
 
     def test_three_way_winner(self):
         assert core.canonical_names_str(
             "BMoreBallers88 & RReclam & jhuntmadd"
-        ) == "BMoreBallers88 & RReclam & jhmad"
+        ) == "BMoreBaller88 & RReclam & jhmad"
 
     def test_single_name_unchanged_shape(self):
         assert core.canonical_names_str("bgmaddox") == "bgmaddox"
