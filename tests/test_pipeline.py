@@ -463,12 +463,58 @@ class TestMatchupCaching:
             "A stale stub pickle must be treated as a miss, not served as truth"
         )
 
+    def test_scheduled_zero_score_week_not_cached(self, tmp_path, monkeypatch):
+        """
+        The shape that actually occurs for 2026 weeks 2-18: Sleeper fixes the
+        schedule at draft time, so the response has real matchup_ids and every
+        score is 0.0. Nothing about its shape says "unplayed" — only the scores
+        do. Caching it serves zeros for the rest of the season.
+        """
+        fake_cache = tmp_path / ".cache"
+        fake_cache.mkdir()
+        monkeypatch.setattr(dl, "CACHE_DIR", str(fake_cache))
+
+        scheduled = [{"matchup_id": (i // 2) + 1, "roster_id": i, "points": 0.0}
+                     for i in range(1, 13)]
+        monkeypatch.setattr(dl, "_get_json", lambda url: scheduled)
+
+        assert dl.fetch_matchups_json(999, 7) == scheduled
+        assert not os.path.exists(dl._cache_path("matchups_999_7")), (
+            "A scheduled-but-unplayed week (all scores 0.0) must not be cached"
+        )
+
+    def test_zero_week_refetches_once_played(self, tmp_path, monkeypatch):
+        """A week cached as all-zeros must not be served after it is played."""
+        fake_cache = tmp_path / ".cache"
+        fake_cache.mkdir()
+        monkeypatch.setattr(dl, "CACHE_DIR", str(fake_cache))
+
+        zeros = [{"matchup_id": 1, "roster_id": 1, "points": 0.0},
+                 {"matchup_id": 1, "roster_id": 2, "points": 0.0}]
+        dl._save_cache("matchups_999_2", zeros)
+
+        real = [{"matchup_id": 1, "roster_id": 1, "points": 112.4},
+                {"matchup_id": 1, "roster_id": 2, "points": 98.2}]
+        monkeypatch.setattr(dl, "_get_json", lambda url: real)
+
+        assert dl.fetch_matchups_json(999, 2) == real, (
+            "A stale all-zeros pickle must read as a miss, not as a 0-0 result"
+        )
+
     def test_unplayed_helper_shapes(self):
+        # not played yet
         assert dl._matchups_unplayed([]) is True
         assert dl._matchups_unplayed([{"matchup_id": None}]) is True
         assert dl._matchups_unplayed([{"matchup_id": None}, {"matchup_id": None}]) is True
-        assert dl._matchups_unplayed([{"matchup_id": 1}]) is False
-        assert dl._matchups_unplayed([{"matchup_id": None}, {"matchup_id": 2}]) is False
+        assert dl._matchups_unplayed([{"matchup_id": 1, "points": 0.0}]) is True
+        assert dl._matchups_unplayed([{"matchup_id": 1, "points": None}]) is True
+        assert dl._matchups_unplayed(
+            [{"matchup_id": 1, "points": 0.0}, {"matchup_id": 1, "points": 0.0}]) is True
+        # played
+        assert dl._matchups_unplayed([{"matchup_id": 1, "points": 101.2}]) is False
+        assert dl._matchups_unplayed(
+            [{"matchup_id": 1, "points": 0.0}, {"matchup_id": 1, "points": 88.6}]) is False, \
+            "One real score means the week was played, even if a team scored 0"
 
 
 # ── Survivor pool data pipeline ──────────────────────────────────────────────

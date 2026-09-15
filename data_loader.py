@@ -260,17 +260,24 @@ def fetch_pickem_users(league_id: int) -> list:
 def _matchups_unplayed(data) -> bool:
     """True if a matchup response means "this week hasn't been played yet".
 
-    Sleeper says that two different ways, and both must be treated alike:
-      * `[]`                     — before the league exists for that week
-      * roster stubs, every entry with `matchup_id: None` — a scheduled but
-        unplayed week, and also every week after the fantasy season ends
+    Sleeper expresses that three different ways depending on how far out the
+    week is, and the cache must refuse all three:
 
-    load_data_for_year already stops its loop on either shape; this helper
-    exists so the cache layer can recognise them too.
+      * `[]`                                  — week not scheduled yet
+      * every entry with `matchup_id: None`   — pre-draft / after season end
+      * matchups assigned but every score 0.0 — scheduled, not yet played
+
+    The third is the common one once a draft has happened: Sleeper fixes the
+    schedule up front, so weeks 2-18 come back fully formed with matchup_ids
+    and nothing but zeros. It looks like real data to any shape-based check.
+    A 12-team week in which literally every roster scores exactly 0.0 does not
+    otherwise occur, so treating it as unplayed is safe.
     """
     if not data:
         return True
-    return all(m.get('matchup_id') is None for m in data)
+    if all(m.get('matchup_id') is None for m in data):
+        return True
+    return all((m.get('points') or 0) == 0 for m in data)
 
 
 def fetch_matchups_json(league_id: int, week: int) -> list:
@@ -448,7 +455,7 @@ def load_data_for_year(year: int, max_week: int = 18, verbose: bool = True):
         # Fixes caches built before this check existed (e.g. 2021–2024 with phantom week 18).
         for wk_num in sorted(cached["weeks"].keys(), reverse=True):
             wk = cached["weeks"][wk_num]
-            if wk.json and all(m.get('matchup_id') is None for m in wk.json):
+            if wk.json and _matchups_unplayed(wk.json):
                 del cached["weeks"][wk_num]
             else:
                 break
@@ -485,12 +492,11 @@ def load_data_for_year(year: int, max_week: int = 18, verbose: bool = True):
             raise RuntimeError(
                 f"Failed to fetch {year} week {w} from the Sleeper API: {e}"
             ) from e
-        # No data at all = the season hasn't reached this week.
-        if not raw:
-            break
-        # Every entry matchup_id=None: Sleeper keeps returning roster score data
-        # for all NFL weeks after the fantasy season ends, and before it starts.
-        if all(m.get('matchup_id') is None for m in raw):
+        # The season hasn't reached this week yet. Sleeper keeps answering for
+        # every NFL week regardless — with [], with roster stubs, or (once the
+        # draft has set the schedule) with real matchup_ids and all-zero scores.
+        # Without this the season loads 18 weeks, most of them zeros.
+        if _matchups_unplayed(raw):
             break
 
         try:
