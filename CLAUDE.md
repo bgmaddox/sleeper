@@ -53,6 +53,27 @@ Activate the venv if running other scripts: `source .venv/bin/activate` (Python 
 
 To bust stale cache for a week: call `data_loader.invalidate_week(year, week)` or delete `.cache/` files manually.
 
+## Notebook (Sleeper_v3.ipynb)
+
+Runs on a **registered kernel named `sleeper-312`** ("Sleeper Project (3.12.7)"), which
+points at this project's `.venv` — Python 3.12.7, not the 3.14.3 used elsewhere in the
+workspace. The kernel name is pinned in the notebook's metadata; if VS Code reports
+*"Failed to start the Kernel … timeout waiting for the ports"*, it has been switched to
+another project's `.venv`. Fix with Kernel > Select Kernel > *Sleeper Project (3.12.7)*.
+
+If the kernel is missing entirely (fresh clone, or `.venv` rebuilt):
+
+```bash
+.venv/bin/pip install ipykernel nbformat
+.venv/bin/python -m ipykernel install --user --name sleeper-312 \
+    --display-name "Sleeper Project (3.12.7)"
+```
+
+Charts match the app with no extra setup: `sleeper_core` registers the `gridiron_ink`
+template *and* sets it as the Plotly default at import (`sleeper_core.py:242-245`).
+
+Commit the notebook with outputs cleared — figures are large and churn every run.
+
 ## Project Layout
 
 ```
