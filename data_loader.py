@@ -4,6 +4,7 @@
 # Subsequent loads read from .cache/ (fast).
 
 import os
+import time
 import json
 import pickle
 import hashlib
@@ -31,10 +32,24 @@ def _cache_path(key: str) -> str:
     h = hashlib.md5(key.encode()).hexdigest()
     return os.path.join(CACHE_DIR, f"{key.replace('/', '_')}_{h}.pkl")
 
-def _load_cache(key: str):
+def _load_cache(key: str, max_age: float | None = None):
+    """Read a cached value, or None on a miss.
+
+    `max_age` (seconds) makes the entry expire: anything older reads as a miss.
+    Most pickles here are deliberately permanent — a played week never changes
+    — but anything that tracks a live season (pool standings, entrant lists)
+    needs an expiry, or it freezes at whatever it was the first time it was
+    fetched.
+    """
     path = _cache_path(key)
     if not os.path.exists(path):
         return None
+    if max_age is not None:
+        try:
+            if (time.time() - os.path.getmtime(path)) > max_age:
+                return None
+        except OSError:
+            return None
     try:
         with open(path, "rb") as f:
             return pickle.load(f)
@@ -217,10 +232,35 @@ def fetch_traded_picks_json(league_id: int) -> list:
     _save_cache(key, data)
     return data
 
+# Survivor and Pick 'Em pools track a live season: weekly scores land in roster
+# metadata, and people can still join after week 1. Cached with no expiry, both
+# froze at whatever they were the first time they were fetched — the 2026 pools
+# were pickled on Sep 1, in the preseason, and were still being served two weeks
+# later with no picks and the wrong entrant count. The payloads are a few KB, so
+# a short TTL costs nothing and removes a whole class of staleness.
+_POOL_TTL = 600      # seconds
+
+
+def _pool_ttl(league_id: int, mapping: dict) -> float | None:
+    """The TTL to read a pool cache with, or None to never expire it.
+
+    Only the season in progress can change. A finished pool is settled history:
+    expiring it would re-fetch seven closed seasons for nothing, and — because
+    the test fixtures read the same caches — would turn an offline test run into
+    a network-bound one.
+    """
+    import sleeper_core as core
+    for year, lid in mapping.items():
+        if lid == league_id:
+            return _POOL_TTL if year == core.CURRENT_SEASON else None
+    return _POOL_TTL      # unknown league: assume live, so it cannot go stale
+
+
 def fetch_survivor_rosters(league_id: int) -> list:
     """Survivor pool rosters (pick history + elimination metadata)."""
+    import sleeper_core as core
     key = f"survivor_rosters_{league_id}"
-    cached = _load_cache(key)
+    cached = _load_cache(key, max_age=_pool_ttl(league_id, core.SURVIVOR_LEAGUE_IDS))
     if cached is not None:
         return cached
     data = _get_json(f"https://api.sleeper.app/v1/league/{league_id}/rosters")
@@ -229,8 +269,9 @@ def fetch_survivor_rosters(league_id: int) -> list:
 
 def fetch_survivor_users(league_id: int) -> list:
     """Survivor pool users (owner_id → display_name mapping)."""
+    import sleeper_core as core
     key = f"survivor_users_{league_id}"
-    cached = _load_cache(key)
+    cached = _load_cache(key, max_age=_pool_ttl(league_id, core.SURVIVOR_LEAGUE_IDS))
     if cached is not None:
         return cached
     data = _get_json(f"https://api.sleeper.app/v1/league/{league_id}/users")
@@ -239,8 +280,9 @@ def fetch_survivor_users(league_id: int) -> list:
 
 def fetch_pickem_rosters(league_id: int) -> list:
     """Pick 'Em pool rosters (weekly scores in points_by_leg metadata)."""
+    import sleeper_core as core
     key = f"pickem_rosters_{league_id}"
-    cached = _load_cache(key)
+    cached = _load_cache(key, max_age=_pool_ttl(league_id, core.PICKEM_LEAGUE_IDS))
     if cached is not None:
         return cached
     data = _get_json(f"https://api.sleeper.app/v1/league/{league_id}/rosters")
@@ -249,8 +291,9 @@ def fetch_pickem_rosters(league_id: int) -> list:
 
 def fetch_pickem_users(league_id: int) -> list:
     """Pick 'Em pool users (owner_id → display_name mapping)."""
+    import sleeper_core as core
     key = f"pickem_users_{league_id}"
-    cached = _load_cache(key)
+    cached = _load_cache(key, max_age=_pool_ttl(league_id, core.PICKEM_LEAGUE_IDS))
     if cached is not None:
         return cached
     data = _get_json(f"https://api.sleeper.app/v1/league/{league_id}/users")
@@ -409,7 +452,8 @@ def load_survivor_for_year(year: int):
     """Build and return a Survivor object for the given year, disk-cached."""
     import sleeper_core as core
     key = f"survivor_{year}"
-    cached = _load_cache(key)
+    ttl = _POOL_TTL if year == core.CURRENT_SEASON else None
+    cached = _load_cache(key, max_age=ttl)
     if cached is not None:
         return cached
     s = core.Survivor(year)
@@ -420,7 +464,8 @@ def load_pickem_for_year(year: int):
     """Build and return a PickEm object for the given year, disk-cached."""
     import sleeper_core as core
     key = f"pickem_{year}"
-    cached = _load_cache(key)
+    ttl = _POOL_TTL if year == core.CURRENT_SEASON else None
+    cached = _load_cache(key, max_age=ttl)
     if cached is not None:
         return cached
     p = core.PickEm(year)
@@ -635,6 +680,22 @@ def invalidate_week(year: int, week: int, max_week: int = 18):
             if os.path.exists(wk_path):
                 os.remove(wk_path)
                 removed += 1
+
+    # The pools are separate caches with their own keys, so a season rebuild
+    # left them untouched — SYNC appeared to refresh the site while Survivor
+    # and Pick 'Em kept serving whatever they were built from.
+    pool_keys = [f"survivor_{year}", f"pickem_{year}"]
+    sid = core.SURVIVOR_LEAGUE_IDS.get(year)
+    if sid is not None:
+        pool_keys += [f"survivor_rosters_{sid}", f"survivor_users_{sid}"]
+    pid = core.PICKEM_LEAGUE_IDS.get(year)
+    if pid is not None:
+        pool_keys += [f"pickem_rosters_{pid}", f"pickem_users_{pid}"]
+    for k in pool_keys:
+        pk = _cache_path(k)
+        if os.path.exists(pk):
+            os.remove(pk)
+            removed += 1
 
     print(f"Invalidated cache for {year} — removed {removed} file(s); "
           f"all weeks (including Week {week}) will be re-fetched.")

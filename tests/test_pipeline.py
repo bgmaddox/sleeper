@@ -9,6 +9,7 @@ A failure here means core data is broken — chart tests will likely also fail.
 Run these first.
 """
 import os
+import time
 import pytest
 import sleeper_core as core
 import data_loader as dl
@@ -370,6 +371,119 @@ class TestCacheInvalidation:
 
         assert not os.path.exists(wk1), "Week 1 matchup pickle should have been deleted"
         assert not os.path.exists(wk2), "Week 2 matchup pickle should have been deleted"
+
+
+class TestCacheTtl:
+    """max_age on _load_cache — the expiry that live-season data needs."""
+
+    def test_fresh_entry_is_served(self, tmp_path, monkeypatch):
+        fake = tmp_path / ".cache"
+        fake.mkdir()
+        monkeypatch.setattr(dl, "CACHE_DIR", str(fake))
+        dl._save_cache("k", {"v": 1})
+        assert dl._load_cache("k", max_age=600) == {"v": 1}
+
+    def test_expired_entry_reads_as_a_miss(self, tmp_path, monkeypatch):
+        import os as _os
+        fake = tmp_path / ".cache"
+        fake.mkdir()
+        monkeypatch.setattr(dl, "CACHE_DIR", str(fake))
+        dl._save_cache("k", {"v": 1})
+        path = dl._cache_path("k")
+        old = time.time() - 3600
+        _os.utime(path, (old, old))
+        assert dl._load_cache("k", max_age=600) is None
+        assert dl._load_cache("k") == {"v": 1}, "no max_age must still serve it"
+
+
+class TestPoolCaching:
+    """Survivor / Pick 'Em caches must expire.
+
+    The 2026 pools were pickled on Sep 1 in the preseason — no picks, and an
+    entrant count taken before two people joined — and were still being served
+    on Sep 15, after Week 1 had been scored. Nothing expired them and SYNC did
+    not clear them.
+    """
+
+    @pytest.mark.parametrize("fn,kind", [
+        ("fetch_survivor_rosters", "survivor_rosters"),
+        ("fetch_survivor_users",   "survivor_users"),
+        ("fetch_pickem_rosters",   "pickem_rosters"),
+        ("fetch_pickem_users",     "pickem_users"),
+    ])
+    def test_stale_pool_fetch_refetches(self, fn, kind, tmp_path, monkeypatch):
+        import os as _os
+        fake = tmp_path / ".cache"
+        fake.mkdir()
+        monkeypatch.setattr(dl, "CACHE_DIR", str(fake))
+
+        stale = [{"roster_id": 1, "metadata": {"points_by_leg": None}}]
+        dl._save_cache(f"{kind}_777", stale)
+        path = dl._cache_path(f"{kind}_777")
+        old = time.time() - (dl._POOL_TTL + 60)
+        _os.utime(path, (old, old))
+
+        fresh = [{"roster_id": 1, "metadata": {"points_by_leg": {"v1:regular:1": 11.0}}}]
+        monkeypatch.setattr(dl, "_get_json", lambda url: fresh)
+
+        assert getattr(dl, fn)(777) == fresh, "a pool cache past its TTL must refetch"
+
+    def test_fresh_pool_fetch_is_served_from_cache(self, tmp_path, monkeypatch):
+        fake = tmp_path / ".cache"
+        fake.mkdir()
+        monkeypatch.setattr(dl, "CACHE_DIR", str(fake))
+
+        cached = [{"roster_id": 1, "metadata": {"points_by_leg": {"v1:regular:1": 9.0}}}]
+        dl._save_cache("pickem_rosters_777", cached)
+        monkeypatch.setattr(dl, "_get_json",
+                            lambda url: pytest.fail("should not hit the API"))
+        assert dl.fetch_pickem_rosters(777) == cached
+
+    def test_finished_seasons_never_expire(self):
+        """A closed pool is settled history.
+
+        Expiring it would refetch seven dead seasons on every load and — because
+        the fixtures read these same caches — turn the offline test suite into a
+        network-bound one, which is exactly what happened when the TTL was first
+        applied to every year.
+        """
+        import sleeper_core as core
+
+        current = core.CURRENT_SEASON
+        for year, lid in core.SURVIVOR_LEAGUE_IDS.items():
+            ttl = dl._pool_ttl(lid, core.SURVIVOR_LEAGUE_IDS)
+            if year == current:
+                assert ttl == dl._POOL_TTL, f"{year} is live and must expire"
+            else:
+                assert ttl is None, f"{year} is finished and must not expire"
+
+    def test_unknown_league_is_treated_as_live(self):
+        """Fail safe: an unmapped id expires rather than caching forever."""
+        import sleeper_core as core
+        assert dl._pool_ttl(999999, core.SURVIVOR_LEAGUE_IDS) == dl._POOL_TTL
+
+    def test_invalidate_week_clears_pool_caches(self, tmp_path, monkeypatch):
+        """SYNC refreshed the season but left Survivor and Pick 'Em stale."""
+        import sleeper_core as core
+
+        fake = tmp_path / ".cache"
+        fake.mkdir()
+        monkeypatch.setattr(dl, "CACHE_DIR", str(fake))
+
+        year = 2026
+        sid = core.SURVIVOR_LEAGUE_IDS[year]
+        pid = core.PICKEM_LEAGUE_IDS[year]
+        keys = [f"survivor_{year}", f"pickem_{year}",
+                f"survivor_rosters_{sid}", f"survivor_users_{sid}",
+                f"pickem_rosters_{pid}", f"pickem_users_{pid}"]
+        for k in keys:
+            dl._save_cache(k, ["x"])
+            assert os.path.exists(dl._cache_path(k))
+
+        dl.invalidate_week(year, 1)
+
+        for k in keys:
+            assert not os.path.exists(dl._cache_path(k)), f"{k} should have been cleared"
 
 
 class TestMatchupCaching:
