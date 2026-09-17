@@ -23,6 +23,22 @@ Screenshots are expensive — each image costs ~1,000–4,000 tokens and burns q
 
 Default to steps 1–4. Only reach for a screenshot when a text-based check genuinely can't answer the question.
 
+## Chart Downloads
+
+Every `.chart-card` that contains a Plotly graph or a D3 SVG gets a **PNG** download
+button injected by `webapp/assets/chartdownload.js` — no Dash callback, no `app.py`
+wiring, and a `MutationObserver` picks up cards Dash renders later. The export is
+composited onto the card background with the card's `.chart-title` and the current
+season/week drawn in as a header, because the `gridiron_ink` template renders
+transparent (`paper_bgcolor='rgba(0,0,0,0)'`) and `_strip()` clears the figure title —
+a raw Plotly export would share as untitled text on nothing.
+
+Consequences for new chart work:
+- Keep charts inside a `.chart-card` with a `.chart-title` and they are covered for free.
+- D3 renderers must keep styling **inline** (via `_theme()` / `_styleAxis`, as they do).
+  A colour that only exists in `style.css` will not survive SVG serialisation.
+- Do not re-enable the Plotly modebar in `_graph()`; the button replaces it.
+
 ## Keeping Docs Current
 
 After any edit to `webapp/app.py`:
@@ -84,6 +100,7 @@ webapp/             — The live Dash web app (active development)
   assets/
     style.css       — CSS design system (gridiron_ink variables)
     d3charts.js     — D3 clientside chart renderers
+    chartdownload.js— Injects the per-card "PNG" download button (Plotly + D3)
     d3.min.js       — D3 v7 library
 Data/               — NFL player stats CSVs
 Photos&Videos/      — League logos and media assets

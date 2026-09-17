@@ -792,6 +792,7 @@ html, body {
   animation: fade-up 0.35s ease both;
   transition: box-shadow 0.2s;
   overflow: hidden;
+  position: relative;
 }
 
 .chart-card:nth-child(1) { animation-delay: 0.00s; }
@@ -806,6 +807,7 @@ html, body {
 }
 
 .chart-title {
+  padding-right: 86px;   /* room for the .chart-dl button */
   font-family: var(--font-display);
   font-size: 1.3rem;
   font-weight: bold;
@@ -843,6 +845,70 @@ html, body {
 .chart-card .plot-container,
 .chart-card .plot-container svg { width: 100% !important; }
 .chart-card .dash-graph { flex: 1; min-width: 0; }
+
+/* ── Chart download button (injected by assets/chartdownload.js) ─────────── */
+
+.chart-dl {
+  position: absolute;
+  top: 10px;
+  right: 12px;
+  z-index: 4;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 10px;
+  font-family: var(--font-main);
+  font-size: 0.68rem;
+  font-weight: bold;
+  letter-spacing: 1px;
+  color: var(--text-muted);
+  background: rgba(22, 49, 70, 0.72);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.18s, color 0.18s, border-color 0.18s;
+}
+
+/* Revealed on card hover; always visible on touch/keyboard. */
+.chart-card:hover .chart-dl,
+.chart-dl:focus-visible { opacity: 1; }
+
+@media (hover: none) {
+  .chart-dl { opacity: 1; }
+}
+
+.chart-dl:hover {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+.chart-dl:focus-visible {
+  outline: 2px solid var(--accent2);
+  outline-offset: 2px;
+}
+
+.chart-dl.is-busy {
+  pointer-events: none;
+  opacity: 1;
+  color: var(--accent);
+  animation: chart-dl-pulse 0.9s ease-in-out infinite;
+}
+
+.chart-dl.is-error {
+  opacity: 1;
+  color: #ff6b6b;
+  border-color: #ff6b6b;
+}
+
+@keyframes chart-dl-pulse {
+  0%, 100% { opacity: 1; }
+  50%      { opacity: 0.45; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .chart-dl.is-busy { animation: none; }
+}
 
 /* ── Loading overlay (dcc.Loading) ───────────────────────────────────────── */
 

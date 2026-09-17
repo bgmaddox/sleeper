@@ -1,7 +1,7 @@
 entry:        webapp/app.py
 run:          lsof -ti :8050 | xargs kill -9 2>/dev/null; sleep 1; cd webapp && source ../.venv/bin/activate && python app.py
 core:         sleeper_core.py, data_loader.py  (project root — imported by webapp/ via sys.path)
-web:          webapp/app.py (3400+ lines — grep the "# ── <name>" section markers listed in its docstring SECTION MAP), webapp/assets/style.css, webapp/assets/d3charts.js
+web:          webapp/app.py (3400+ lines — grep the "# ── <name>" section markers listed in its docstring SECTION MAP), webapp/assets/style.css, webapp/assets/d3charts.js, webapp/assets/chartdownload.js (per-card PNG export)
 data:         Data/  — NFL player CSVs; .cache/  — pickled season data
 config:       config/*.json  — league IDs, roster slots, side bets, manager-name aliases,
               season date overrides (loaded by sleeper_core at import)
