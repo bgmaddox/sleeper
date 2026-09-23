@@ -39,6 +39,45 @@ Consequences for new chart work:
   A colour that only exists in `style.css` will not survive SVG serialisation.
 - Do not re-enable the Plotly modebar in `_graph()`; the button replaces it.
 
+## Side Bet Winners
+
+Weekly side bet winners are **derived, not typed in**. `side_bet_resolver.py` maps each
+challenge to a rule and computes the winner from that week's final stats.
+
+Three invariants hold it together:
+
+- **A non-empty `winner` in `config/side_bet_seasons.json` always wins.** It is the
+  override for challenges that cannot be derived and the escape hatch when a rule is
+  wrong. The resolver never overwrites one.
+- **Nothing resolves before the Tuesday following the week's last game**, at
+  `SETTLE_HOUR` ET. nfl_data_py applies stat corrections into Tuesday, so a winner
+  computed Monday night can move. The gate reads the real `gameday` values for that
+  week — it is not a hardcoded calendar. Before then the card reads
+  "Winner: pending final stats (Tuesday)".
+- **An unrecognised challenge stays blank** rather than guessing. Names are matched
+  through `norm_name()` because spelling drifts between seasons ("I'm flying, Jack!"
+  vs "I'm Flying, Jack!").
+
+Six challenges are declared in `MANUAL_ONLY` and will never resolve automatically —
+Soothsayer and Stay On Target need projections or off-platform guesses, the two
+tiebreakers depend on managers picking players, and The Old Man & Young Buck needs
+player age (only `rookie_year` is available). These require a hand-entered winner.
+
+**Rules are validated against history, not intuition.** `tests/test_side_bet_resolver.py`
+backtests every rule against the winners the league recorded by hand across 2019–2025
+and enforces a 90% floor. When a description is ambiguous, the resolved reading comes
+from that backtest — this is how the passing-TD question in "Look At These TDs" was
+settled (including them reproduces 6 of 7 weeks; excluding them, only 4).
+
+Adding a challenge means adding a rule keyed by its normalised name, or adding it to
+`MANUAL_ONLY`. A name in neither fails `test_every_configured_challenge_is_classified`,
+so a new season cannot quietly introduce a bet that sits at TBD forever.
+
+Seven historical weeks do not reproduce. Three were verified as bookkeeping errors in
+the original hand entry — the starter-flag integrity test proves the underlying data is
+exact — and the rest are challenges with only one or two data points. Do not "fix" a
+rule to match a hand entry without checking the data first.
+
 ## Keeping Docs Current
 
 After any edit to `webapp/app.py`:

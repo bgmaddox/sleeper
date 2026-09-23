@@ -360,8 +360,22 @@ PICKEM_LEAGUE_IDS = _intkeys(_league_ids['pickem_leagues'])
 
 AVAILABLE_YEARS = sorted(leagueNumbers_Dict)
 
+import side_bet_resolver
+
+
+def resolved_side_bets(year, now=None):
+    """Side bet config for ``year`` with derivable winners filled in.
+
+    Each week carries a ``source`` field (manual / computed / pending /
+    no_data / unsupported) so callers can tell how a winner was arrived at.
+    """
+    return side_bet_resolver.resolved_season_config(year, now)
+
+
 # {year: {week: {"name": ..., "desc": ..., "winner": ...}}}
 # "winner" is a manager display name, so it goes through the alias resolver too.
+# A blank "winner" is not a gap: side_bet_resolver derives it from the week's
+# final stats once the week settles. Hand-entered values always take priority.
 SIDE_BET_SEASONS = {
     int(y): {wk: {**cfg, 'winner': canonical_names_str(cfg.get('winner'))}
              for wk, cfg in _intkeys(weeks).items()}
@@ -4241,10 +4255,25 @@ class SideBet(TeamColorsMixin):
         return get_slot_teamcolors(self.League.year)
 
     def get_week_config(self, week: int) -> dict:
-        """Returns {"name": ..., "desc": ..., "winner": ...} for the given week, or empty defaults."""
-        return SIDE_BET_SEASONS.get(self.League.year, {}).get(
+        """Returns {"name", "desc", "winner", "source"} for the given week.
+
+        ``winner`` is the hand-entered value when the JSON supplies one, and is
+        otherwise derived from the week's final stats — blank until the week
+        settles. See side_bet_resolver.
+        """
+        year = self.League.year
+        cfg = SIDE_BET_SEASONS.get(year, {}).get(
             week, {"name": f"Week {week}", "desc": "", "winner": ""}
         )
+        winner, source = side_bet_resolver.resolve_week(
+            year, week, cfg,
+            AllBreakoutDict.get(year, {}).get(week),
+            AllMatchesDict.get(year, {}).get(week),
+            leagueNumbers_Dict.get(year),
+        )
+        if source == side_bet_resolver.COMPUTED:
+            winner = canonical_names_str(winner)
+        return {**cfg, "winner": winner, "source": source}
 
     def Scoreboard(self, tally = None):
             
@@ -4264,7 +4293,7 @@ class SideBet(TeamColorsMixin):
                         total_height += height_padding
                 return total_height
 
-            year_config = SIDE_BET_SEASONS.get(self.League.year, {})
+            year_config = resolved_side_bets(self.League.year)
 
             if tally != None:
                 tally_list = tally

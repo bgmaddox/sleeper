@@ -25,7 +25,8 @@ numbers on purpose; they drift). Sections appear in this order:
   Tab: All-Time                              — _tab_alltime()
   Tab: Head-to-Head (shell + inner callback) — _tab_h2h_shell(), _h2h()
   Tab: Playoffs                              — _tab_playoffs() (winners + losers bracket cards)
-  Tab: Side Bets                             — _tab_sidebets()
+  Tab: Side Bets                             — _tab_sidebets(); winner badges via
+                                               _winner_tooltip/_tbd_label
   Tab: Survivor                              — _tab_survivor(), _survivor_win_margin() callback
   Tab: Pick 'Em                              — _tab_pickem()
   Toggle callbacks                           — luck/timeline/pfa/freq/bench/bump/violin/top-players/playoff-view
@@ -1746,9 +1747,10 @@ def _sidebet_card(year, week, week_obj):
                            style={'display': 'inline-block', 'verticalAlign': 'middle',
                                   'marginRight': '6px'})
         winner_el = html.Div([trophy, html.Span(f'Winner: {winner}')],
-                             className='sidebet-winner-badge')
+                             className='sidebet-winner-badge',
+                             title=_winner_tooltip(cfg.get('source')))
     else:
-        winner_el = html.Div('Winner: TBD', className='sidebet-tbd')
+        winner_el = html.Div(_tbd_label(cfg.get('source')), className='sidebet-tbd')
 
     kids = [
         html.Div(f'SIDE BET · WEEK {week}', className='chart-eyebrow'),
@@ -1758,6 +1760,22 @@ def _sidebet_card(year, week, week_obj):
         winner_el,
     ]
     return html.Div([k for k in kids if k is not None], className='chart-card chart-col-full')
+
+
+def _winner_tooltip(source):
+    """Hover text explaining where a displayed winner came from."""
+    if source == core.side_bet_resolver.COMPUTED:
+        return 'Determined automatically from final stats'
+    if source == core.side_bet_resolver.MANUAL:
+        return 'Entered by hand'
+    return ''
+
+
+def _tbd_label(source):
+    """Blank-winner text, distinguishing "not yet" from "never automatic"."""
+    if source == core.side_bet_resolver.PENDING:
+        return 'Winner: pending final stats (Tuesday)'
+    return 'Winner: TBD'
 
 
 def _playoff_key_games_card(snapshots, league):
@@ -2479,7 +2497,9 @@ def _tab_sidebets(year):
     if sb is None:
         return _loading_placeholder(year)
 
-    year_config = core.SIDE_BET_SEASONS[config_year]
+    # Winners are hand-entered where the JSON has one and derived from the
+    # week's final stats otherwise; weeks that have not settled stay blank.
+    year_config = core.resolved_side_bets(config_year)
     teamcolors  = sb.teamcolors
 
     sections = []
@@ -2589,9 +2609,10 @@ def _tab_sidebets(year):
         winner = cfg.get('winner', '')
         if winner:
             winner_el = html.Div([_ico('trophy'), html.Span(f'Winner: {winner}')],
-                                 className='sidebet-winner-badge')
+                                 className='sidebet-winner-badge',
+                                 title=_winner_tooltip(cfg.get('source')))
         else:
-            winner_el = html.Div('Winner: TBD', className='sidebet-tbd')
+            winner_el = html.Div(_tbd_label(cfg.get('source')), className='sidebet-tbd')
 
         sections.append(html.Div([
             html.Div(f'SIDE BET · WEEK {wk}', className='chart-eyebrow'),
