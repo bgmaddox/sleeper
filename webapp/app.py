@@ -13,7 +13,9 @@ numbers on purpose; they drift). Sections appear in this order:
   Dash / Flask setup                         — app, server
   Auth                                       — login route, token helpers, auth gate middleware
   Data store                                 — _load_bg, _ensure, _retry_due/_retry_pending, _season/_weeks/_matches/_breakout, eager load
-  Freshness watcher                          — _newest_loaded_week, _check_new_week (auto-pickup of a newly scored week)
+  Freshness watcher                          — _newest_loaded_week, _built_at, _settle_rebuild_due, _check_new_week
+                                               (auto-pickup of a newly scored week, plus one
+                                               rebuild after it settles on Tuesday)
   Helpers                                    — _strip, _empty, _card, loading/failed placeholders, etc.
   League Digest card                         — _digest() builds the weekly summary card
   Layout                                     — full app HTML/component tree (html.Div structure)
@@ -44,6 +46,7 @@ import os
 import time
 import threading
 import traceback
+from datetime import datetime
 
 # Core library lives at project root (one level up from webapp/)
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
@@ -58,6 +61,7 @@ from itsdangerous import URLSafeTimedSerializer, BadSignature, SignatureExpired
 
 import sleeper_core as core
 import data_loader as dl
+import side_bet_resolver
 
 
 # ── NFL Stadium Coordinates ───────────────────────────────────────────────────
@@ -401,8 +405,41 @@ def _newest_loaded_week(year: int) -> int:
     return max(weeks.keys()) if weeks else 0
 
 
+def _built_at(year: int):
+    """When `year`'s season data was fetched, from its cache file's mtime.
+
+    Not the time it was loaded into memory: a restart reloads an old pickle,
+    and treating that as fresh would skip the post-settle rebuild.
+    """
+    try:
+        mtime = os.path.getmtime(dl.season_cache_path(year))
+    except OSError:
+        return None
+    return datetime.fromtimestamp(mtime, side_bet_resolver.LEAGUE_TZ)
+
+
+def _settle_rebuild_due(year: int, now=None) -> bool:
+    """True if the newest loaded week has settled since its data was built.
+
+    A week is first built when Sleeper scores it, early Tuesday — before
+    nflverse applies stat corrections. Rebuilding once after the settle time
+    (Tuesday SETTLE_HOUR ET) picks the corrections up; the rebuilt data then
+    postdates the settle time, so this does not fire again.
+    """
+    entry = _data.get(year)
+    if not entry or not entry.get('built_at'):
+        return False
+    week = _newest_loaded_week(year)
+    settles = side_bet_resolver.settles_at((entry.get('breakout') or {}).get(week))
+    if settles is None:
+        return False
+    now = now or datetime.now(side_bet_resolver.LEAGUE_TZ)
+    return entry['built_at'] < settles <= now
+
+
 def _check_new_week(year: int) -> bool:
-    """Rebuild `year` if Sleeper has scored a week we don't have yet.
+    """Rebuild `year` if Sleeper has scored a week we don't have yet, or the
+    newest week has settled since it was built (see _settle_rebuild_due).
 
     Returns True if a reload was started. Throttled per process so a dozen open
     browser tabs can't turn into a dozen API calls a minute, and skipped
@@ -424,11 +461,14 @@ def _check_new_week(year: int) -> bool:
         return False
 
     have = _newest_loaded_week(year)
-    if scored <= have:
+    if scored > have:
+        print(f'[watch] {year}: Sleeper has week {scored}, loaded through {have} '
+              f'— rebuilding.', flush=True)
+    elif have and _settle_rebuild_due(year):
+        print(f'[watch] {year}: week {have} has settled since it was built '
+              f'— rebuilding for stat corrections.', flush=True)
+    else:
         return False
-
-    print(f'[watch] {year}: Sleeper has week {scored}, loaded through {have} '
-          f'— rebuilding.', flush=True)
     with _lock:
         if year in _loading_years:
             return False
@@ -466,6 +506,7 @@ def _load_bg(year: int):
             # fully-built copy instead of state the loader thread mutates.
             'matches':  dict(core.AllMatchesDict.get(year, {})),
             'breakout': dict(core.AllBreakoutDict.get(year, {})),
+            'built_at': _built_at(year),
         }
         _failed_years.discard(year)
         _load_errors.pop(year, None)

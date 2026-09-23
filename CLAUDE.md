@@ -53,7 +53,10 @@ Three invariants hold it together:
   `SETTLE_HOUR` ET. nfl_data_py applies stat corrections into Tuesday, so a winner
   computed Monday night can move. The gate reads the real `gameday` values for that
   week — it is not a hardcoded calendar. Before then the card reads
-  "Winner: pending final stats (Tuesday)".
+  "Winner: pending final stats (Tuesday)". The freshness watcher
+  (`_settle_rebuild_due` in `app.py`) rebuilds the current season once after
+  that settle time if its data predates it, so the corrected stats land without
+  anyone pressing SYNC.
 - **An unrecognised challenge stays blank** rather than guessing. Names are matched
   through `norm_name()` because spelling drifts between seasons ("I'm flying, Jack!"
   vs "I'm Flying, Jack!").

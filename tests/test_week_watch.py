@@ -168,3 +168,96 @@ class TestNflStateTtl:
             raise RuntimeError("timeout")
         monkeypatch.setattr(app.dl, "fetch_state_json", boom)
         assert app._state() == {"leg": 5}
+
+
+# ── One rebuild after the newest week settles ────────────────────────────────
+#
+# A week is first built in the small hours of Tuesday, when Sleeper scores it —
+# before nflverse applies stat corrections. Nothing new gets scored after that,
+# so without this the corrected stats never reached the site unless someone
+# pressed SYNC. The rule: if the newest loaded week has passed its settle time
+# (Tuesday SETTLE_HOUR ET) and the data was built before that, rebuild once.
+
+from datetime import datetime
+
+import pandas as pd
+
+from side_bet_resolver import LEAGUE_TZ
+
+# Week 2 of 2026: last game Monday Sep 21, so it settles Tue Sep 22 at noon ET.
+SETTLES = datetime(2026, 9, 22, 12, tzinfo=LEAGUE_TZ)
+BUILT_EARLY = datetime(2026, 9, 22, 1, 44, tzinfo=LEAGUE_TZ)
+BUILT_LATE = datetime(2026, 9, 22, 20, 33, tzinfo=LEAGUE_TZ)
+AFTER = datetime(2026, 9, 22, 20, 0, tzinfo=LEAGUE_TZ)
+BEFORE = datetime(2026, 9, 22, 9, 0, tzinfo=LEAGUE_TZ)
+
+
+def _settling(built_at):
+    """Weeks 1–2 loaded, week 2's last game on Monday Sep 21."""
+    return {
+        "weeks": {1: object(), 2: object()},
+        "breakout": {2: pd.DataFrame({"gameday": ["2026-09-17", "2026-09-21"]})},
+        "built_at": built_at,
+    }
+
+
+class TestSettleRebuild:
+    def test_due_when_built_before_settle(self):
+        """The 2026 Week 2 case: built 1:44 AM Tuesday, now Tuesday evening."""
+        app._data[YEAR] = _settling(BUILT_EARLY)
+        assert app._settle_rebuild_due(YEAR, now=AFTER) is True
+
+    def test_not_due_before_settle_time(self):
+        """Tuesday morning: corrections may still be landing — wait."""
+        app._data[YEAR] = _settling(BUILT_EARLY)
+        assert app._settle_rebuild_due(YEAR, now=BEFORE) is False
+
+    def test_not_due_once_rebuilt_after_settle(self):
+        """Exactly once — a post-settle build must not loop forever."""
+        app._data[YEAR] = _settling(BUILT_LATE)
+        assert app._settle_rebuild_due(YEAR, now=AFTER) is False
+
+    def test_not_due_without_build_time(self):
+        entry = _settling(None)
+        app._data[YEAR] = entry
+        assert app._settle_rebuild_due(YEAR, now=AFTER) is False
+
+    def test_not_due_when_year_absent(self):
+        assert app._settle_rebuild_due(YEAR, now=AFTER) is False
+
+    def test_not_due_without_gamedays(self):
+        entry = _settling(BUILT_EARLY)
+        entry["breakout"] = {2: pd.DataFrame()}
+        app._data[YEAR] = entry
+        assert app._settle_rebuild_due(YEAR, now=AFTER) is False
+
+    def test_check_new_week_rebuilds_when_settle_due(self, monkeypatch, no_reload):
+        app._data[YEAR] = _settling(BUILT_EARLY)
+        monkeypatch.setattr(app.dl, "get_current_week", lambda y: 2)
+        monkeypatch.setattr(app, "_settle_rebuild_due", lambda y: True)
+        assert app._check_new_week(YEAR) is True
+        assert no_reload == [YEAR]
+        assert YEAR not in app._data
+
+    def test_check_new_week_quiet_when_settled_build_is_fresh(self, monkeypatch, no_reload):
+        app._data[YEAR] = _settling(BUILT_LATE)
+        monkeypatch.setattr(app.dl, "get_current_week", lambda y: 2)
+        monkeypatch.setattr(app, "_settle_rebuild_due", lambda y: False)
+        assert app._check_new_week(YEAR) is False
+        assert no_reload == []
+
+
+class TestBuiltAt:
+    def test_uses_cache_file_mtime(self, monkeypatch, tmp_path):
+        """A restart reloads an old pickle — its age is the file's, not now."""
+        f = tmp_path / "season.pkl"
+        f.write_bytes(b"x")
+        stamp = BUILT_EARLY.timestamp()
+        os.utime(f, (stamp, stamp))
+        monkeypatch.setattr(app.dl, "season_cache_path", lambda y: str(f))
+        assert app._built_at(YEAR) == BUILT_EARLY
+
+    def test_none_when_no_cache_file(self, monkeypatch, tmp_path):
+        monkeypatch.setattr(app.dl, "season_cache_path",
+                            lambda y: str(tmp_path / "missing.pkl"))
+        assert app._built_at(YEAR) is None
