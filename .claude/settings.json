@@ -1,7 +1,6 @@
 {
   "permissions": {
     "allow": [
-      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:*)",
       "Bash(curl -s http://localhost:*)",
       "Bash(curl -s -b * http://localhost:*)"
     ]
