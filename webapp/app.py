@@ -2711,14 +2711,14 @@ def _tab_survivor(year):
     # Row 1: Pick Matrix (full width)
     row1 = html.Div([
         html.Div('Pick Matrix', className='chart-title'),
-        html.Div('Which team each player picked each week — green=win, amber=revive loss, red=fatal elimination', className='chart-subtitle'),
+        html.Div('Which team each player picked each week — green=win, amber=revive loss, red=fatal elimination (✕)', className='chart-subtitle'),
         _schart('pick_matrix_fig', h=max(340, 60 * n_players)),
     ], className='chart-card chart-col-full')
 
     # Row 2: Timeline | Carnage | Graveyard (three columns)
     row2_timeline = html.Div([
         html.Div('Elimination Timeline', className='chart-title'),
-        html.Div('How long each player survived — gap marks revive use', className='chart-subtitle'),
+        html.Div('How long each player survived — amber marks the revive loss, red the fatal pick', className='chart-subtitle'),
         _schart('elimination_timeline_fig', h=max(300, 55 * n_players)),
     ], className='chart-card chart-col-third')
 
@@ -2828,9 +2828,9 @@ def _tab_pickem(year):
             return _err_graph(e)
 
     row1 = html.Div([
-        html.Div('Score Race', className='chart-title'),
-        html.Div('Cumulative correct picks per player, week by week', className='chart-subtitle'),
-        _pchart('score_race_fig', h=480),
+        html.Div('The Race', className='chart-title'),
+        html.Div('Correct picks behind the leader each week — the leader sits on 0', className='chart-subtitle'),
+        _pchart('behind_leader_fig', h=480),
     ], className='chart-card chart-col-full')
 
     row2 = html.Div([

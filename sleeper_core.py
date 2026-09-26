@@ -5348,6 +5348,15 @@ class Survivor:
         'NYJ', 'PHI', 'PIT', 'SEA', 'SF',  'TB',  'TEN', 'WAS',
     ])
 
+    # One color per pick outcome, shared by every Survivor chart so a revive
+    # loss reads the same in the matrix, the timeline and the margins.
+    OUTCOME_COLORS = {
+        'none':   '#1a3a4a',   # no pick (not yet, or after elimination)
+        'fatal':  '#e74c3c',
+        'revive': '#f39c12',
+        'win':    '#2ecc71',
+    }
+
     def __init__(self, year: int):
         import data_loader
         self.year = year
@@ -5467,8 +5476,9 @@ class Survivor:
         )
         weeks = sorted(self.Picks['week'].unique())
 
-        # Build z matrix and annotation text
-        # 2=won, 1=revive-loss, -1=fatal, 0=no pick
+        # Build z matrix and annotation text: one integer code per outcome,
+        # each owning an equal band of the discrete colorscale below.
+        codes = {'none': 0, 'fatal': 1, 'revive': 2, 'win': 3}
         z = []
         text = []
         for username in player_order:
@@ -5476,36 +5486,31 @@ class Survivor:
             row_z, row_text = [], []
             for wk in weeks:
                 if wk not in player_picks.index:
-                    row_z.append(0)
+                    row_z.append(codes['none'])
                     row_text.append('')
+                    continue
+                pick = player_picks.loc[wk]
+                team = pick['team_pick']
+                if pick['is_fatal']:
+                    row_z.append(codes['fatal'])
+                    row_text.append(f'{team} ✕')
+                elif pick['won']:
+                    row_z.append(codes['win'])
+                    row_text.append(team)
                 else:
-                    pick = player_picks.loc[wk]
-                    team = pick['team_pick']
-                    if pick['is_fatal']:
-                        row_z.append(-1)
-                        row_text.append(f'{team} ✕')
-                    elif pick['is_revive_loss']:
-                        row_z.append(1)
-                        row_text.append(team)
-                    elif pick['won']:
-                        row_z.append(2)
-                        row_text.append(team)
-                    else:
-                        row_z.append(0)
-                        row_text.append('')
+                    # A loss that didn't end the run is the revive being spent.
+                    row_z.append(codes['revive'])
+                    row_text.append(team)
             z.append(row_z)
             text.append(row_text)
 
-        colorscale = [
-            [0.0,  '#1a3a4a'],   # 0  → no pick / post-elim
-            [0.25, '#1a3a4a'],
-            [0.25, '#e74c3c'],   # -1 remapped to 0 via zmin/zmax trick — see below
-            [0.5,  '#e74c3c'],
-            [0.5,  '#f39c12'],   # 1  → revive loss (amber)
-            [0.75, '#f39c12'],
-            [0.75, '#2ecc71'],   # 2  → win (green)
-            [1.0,  '#2ecc71'],
-        ]
+        # Code k sits at k/3 on the scale, inside band [k/4, (k+1)/4). The old
+        # scale put its bands for codes -1..2 at the wrong positions, so fatal
+        # picks drew as empty cells and empty cells drew as fatal picks.
+        colorscale = []
+        for name, k in codes.items():
+            color = self.OUTCOME_COLORS[name]
+            colorscale += [[k / 4, color], [(k + 1) / 4, color]]
 
         fig = go.Figure()
         fig.add_trace(go.Heatmap(
@@ -5516,7 +5521,7 @@ class Survivor:
             texttemplate='%{text}',
             textfont=dict(size=11, color='white', family='Courier New'),
             colorscale=colorscale,
-            zmin=-1, zmax=2,
+            zmin=0, zmax=3,
             showscale=False,
             hovertemplate='%{y} · Week %{x}<br>%{text}<extra></extra>',
             xgap=2,
@@ -5534,71 +5539,71 @@ class Survivor:
         return fig
 
     def elimination_timeline_fig(self) -> go.Figure:
-        """Horizontal Gantt-style swim lanes: one bar per player showing survival span."""
-        if self.Status.empty:
+        """Swim lanes: one lane per player, one cell per week picked.
+
+        Consecutive weeks with the same outcome merge into one bar spanning
+        whole weeks (week w covers w-0.5 to w+0.5), colored like the Pick
+        Matrix: green survived, amber the revive loss, red the fatal pick.
+        """
+        if self.Status.empty or self.Picks.empty:
             return go.Figure(layout=go.Layout(template='gridiron_ink'))
 
         results = self.get_game_results()
-        max_week = self.Picks['week'].max() if not self.Picks.empty else 17
-
+        max_week = int(self.Picks['week'].max())
         player_order = (
             self.Status.sort_values('weeks_survived', ascending=False)['username'].tolist()
         )
+        outcome_label = {'win': 'survived', 'revive': 'revive loss', 'fatal': 'eliminated'}
 
         fig = go.Figure()
         for username in player_order:
-            row = self.Status[self.Status['username'] == username].iloc[0]
-            final = row['final_week'] if pd.notna(row['final_week']) else max_week
-            revived = row['revived']
+            picks = self.Picks[self.Picks['username'] == username].sort_values('week')
 
-            # Find revive-loss week if applicable
-            revive_row = self.Picks[
-                (self.Picks['username'] == username) & (self.Picks['is_revive_loss'])
-            ]
-            revive_wk = int(revive_row['week'].iloc[0]) if not revive_row.empty else None
-
-            # Build bar segment(s)
-            if revived and revive_wk:
-                segments = [(1, revive_wk - 0.15), (revive_wk + 0.15, final)]
-            else:
-                segments = [(1, final)]
-
-            for i, (start, end) in enumerate(segments):
-                fatal_picks = self.Picks[
-                    (self.Picks['username'] == username) & self.Picks['is_fatal']
-                ]
-                if i == len(segments) - 1 and not fatal_picks.empty:
-                    fatal_team = fatal_picks.iloc[0]['team_pick']
-                    fatal_wk = int(fatal_picks.iloc[0]['week'])
-                    res = results.get((fatal_team, fatal_wk))
-                    if res:
-                        opp, score, opp_score = res
-                        label = f'{fatal_team} — Lost {score:.0f}-{opp_score:.0f}'
-                    else:
-                        label = f'{fatal_team} — Lost'
+            # Merge consecutive weeks with the same outcome into runs.
+            runs = []   # [outcome, first_week, last_week, pick_row]
+            for _, pick in picks.iterrows():
+                wk = int(pick['week'])
+                outcome = ('fatal' if pick['is_fatal'] else
+                           'win' if pick['won'] else 'revive')
+                if runs and runs[-1][0] == outcome and runs[-1][2] == wk - 1:
+                    runs[-1][2] = wk
+                    runs[-1][3] = pick
                 else:
-                    label = None
+                    runs.append([outcome, wk, wk, pick])
 
+            for outcome, first, last, pick in runs:
+                label = None
+                if outcome == 'fatal':
+                    team = pick['team_pick']
+                    res = results.get((team, last))
+                    label = (f'{team} — Lost {res[1]:.0f}-{res[2]:.0f}' if res
+                             else f'{team} — Lost')
+                weeks_txt = f'Week {first}' if first == last else f'Weeks {first}–{last}'
                 fig.add_trace(go.Bar(
-                    x=[end - start],
+                    x=[last - first + 1],
                     y=[username],
-                    base=[start],
+                    base=[first - 0.5],
                     orientation='h',
-                    marker_color='#2ecc71',
-                    text=[label] if label else [None],
+                    marker_color=self.OUTCOME_COLORS[outcome],
+                    text=[label],
                     textposition='outside',
                     textfont=dict(size=10, color='#BDE2FF'),
+                    cliponaxis=False,
                     showlegend=False,
-                    hovertemplate=f'{username}<br>Weeks {start:.0f}–{end:.0f}<extra></extra>',
+                    hovertemplate=(f'{username}<br>{weeks_txt}: '
+                                   f'{outcome_label[outcome]}<extra></extra>'),
                 ))
 
         fig.update_layout(
             template='gridiron_ink',
             title=dict(text='<b>Elimination Timeline</b>', x=0.5),
-            xaxis=dict(title='Week', tickmode='linear', dtick=1, range=[0, max_week + 3]),
-            yaxis=dict(title=None, categoryorder='array', categoryarray=list(reversed(player_order))),
+            # Headroom on the right for the "TB — Lost 10-20" labels.
+            xaxis=dict(title='Week', tickmode='linear', dtick=1,
+                       range=[0.5, max_week + 0.5 + max(2, max_week * 0.3)]),
+            yaxis=dict(title=None, categoryorder='array',
+                       categoryarray=list(reversed(player_order))),
             barmode='overlay',
-            margin=dict(t=80, l=140, r=100, b=50),
+            margin=dict(t=80, l=140, r=40, b=50),
             height=max(300, 60 * len(player_order)),
         )
         return fig
@@ -5620,16 +5625,18 @@ class Survivor:
             .reset_index()
         )
 
+        # One line per fatal team, not per player: three people going down
+        # with Tampa Bay reads "TB ×3 (L 17-24)", not "TB TB TB".
         annotations_text = []
         for _, row in carnage.iterrows():
             parts = []
-            for team in row['teams']:
+            for team, n in pd.Series(row['teams']).value_counts().items():
+                label = f'{team} ×{n}' if n > 1 else team
                 res = results.get((team, int(row['week'])))
                 if res:
                     _, score, opp_score = res
-                    parts.append(f'{team} (L {score:.0f}-{opp_score:.0f})')
-                else:
-                    parts.append(team)
+                    label += f' (L {score:.0f}-{opp_score:.0f})'
+                parts.append(label)
             annotations_text.append('<br>'.join(parts))
 
         fig = go.Figure()
@@ -5697,7 +5704,7 @@ class Survivor:
         team_labels = [[teams_grid[r * cols + c] if r * cols + c < len(teams_grid) else ''
                         for c in range(cols)] for r in range(rows)]
 
-        fatal_text = [['✕' if fatal_markers[r][c] else team_labels[r][c]
+        fatal_text = [[f'{team_labels[r][c]} ✕' if fatal_markers[r][c] else team_labels[r][c]
                        for c in range(cols)] for r in range(rows)]
 
         fig = go.Figure()
@@ -5717,7 +5724,9 @@ class Survivor:
             template='gridiron_ink',
             title=dict(text='<b>Team Graveyard</b>', x=0.5),
             xaxis=dict(showticklabels=False, ticklen=0),
-            yaxis=dict(showticklabels=False, ticklen=0),
+            # Heatmap rows draw bottom-up; reverse so the alphabetical grid
+            # reads like a page, ARI top-left.
+            yaxis=dict(showticklabels=False, ticklen=0, autorange='reversed'),
             margin=dict(t=80, l=20, r=20, b=20),
             height=260,
         )
@@ -5824,11 +5833,32 @@ class Survivor:
             xaxis=dict(title='Weeks Survived', dtick=1),
             yaxis=dict(title=None),
             barmode='group',
-            legend=dict(title='Year'),
-            margin=dict(t=80, l=140, r=20, b=50),
+            # gridiron_ink hides legends; the year colors mean nothing without one.
+            showlegend=True,
+            # Below the plot: gridiron_ink draws the x ticks along the top.
+            legend=dict(title='Year', orientation='h', yanchor='top', y=-0.04,
+                        xanchor='center', x=0.5),
+            margin=dict(t=80, l=140, r=20, b=60),
             height=max(300, 50 * len(player_order)),
         )
         return fig
+
+
+def _fraction(x: float) -> str:
+    """3.6667 -> '3⅔'. Weeks won are split evenly on ties (up to six ways), so
+    the running total is a sum of simple fractions; anything else gets one
+    decimal."""
+    from fractions import Fraction
+    whole, part = int(x), Fraction(x - int(x)).limit_denominator(6)
+    glyph = {Fraction(0): '', Fraction(1, 6): '⅙', Fraction(1, 5): '⅕',
+             Fraction(1, 4): '¼', Fraction(1, 3): '⅓', Fraction(2, 5): '⅖',
+             Fraction(1, 2): '½', Fraction(3, 5): '⅗', Fraction(2, 3): '⅔',
+             Fraction(3, 4): '¾', Fraction(4, 5): '⅘', Fraction(5, 6): '⅚'}
+    if abs(float(part) - (x - whole)) > 1e-6 or part not in glyph:
+        return f'{x:.1f}'
+    if part == 0:
+        return str(whole)
+    return f'{whole}{glyph[part]}' if whole else glyph[part]
 
 
 # ── Pick 'Em Pool ─────────────────────────────────────────────────────────────
@@ -5892,26 +5922,58 @@ class PickEm:
 
     # ── Chart methods ─────────────────────────────────────────────────────────
 
-    def score_race_fig(self) -> go.Figure:
-        """Cumulative correct picks per player, week by week."""
+    # Fallback for an entrant who has never been a league manager.
+    _GUEST_COLOR = '#8A9BA8'
+
+    def colors(self) -> dict:
+        """{username: color}, fixed per manager — the league-wide all-time color.
+
+        Color follows the person, never their rank, so it matches every other
+        tab and doesn't reshuffle when the standings move.
+        """
+        league = get_alltime_teamcolors()
+        names = list(self.Totals.index) or list(self.Data['username'].unique())
+        return {n: league.get(n, self._GUEST_COLOR) for n in names}
+
+    def behind_leader_fig(self) -> go.Figure:
+        """Picks behind the leader, week by week — the leader sits on 0.
+
+        Replaces the cumulative score race: totals of 161–176 on a 0–180 axis
+        drew six lines on top of each other. Plotting the gap spends the whole
+        chart on the part that differs, and lead changes show as crossings.
+        """
         if self.Data.empty:
             return go.Figure(layout=go.Layout(template='gridiron_ink'))
-        fig = px.line(
-            self.Data, x='week', y='ScoreYTD', color='username',
-            template='gridiron_ink', line_shape='spline', markers=True,
-            title="<b>Pick 'Em Score Race</b>",
-            category_orders={'username': list(self.Totals.index)},
+        ytd = self.Data.pivot_table(index='week', columns='username',
+                                    values='ScoreYTD', aggfunc='last')
+        # A skipped week has no row; the running total simply carries over.
+        ytd = ytd.reindex(range(0, self.n_weeks + 1)).ffill().fillna(0)
+        gap = ytd.sub(ytd.max(axis=1), axis=0)
+
+        colors = self.colors()
+        order = [n for n in colors if n in gap.columns]   # leader first in legend
+        fig = go.Figure()
+        for name in order:
+            fig.add_trace(go.Scatter(
+                x=list(gap.index), y=list(gap[name]), name=name, mode='lines+markers',
+                line=dict(color=colors[name], width=2),
+                marker=dict(size=8, color=colors[name]),
+                customdata=list(ytd[name]),
+                hovertemplate=('Week %{x}: %{y:.0f} behind '
+                               '(%{customdata:.0f} correct)<extra>%{fullData.name}</extra>'),
+            ))
+        fig.update_layout(
+            template='gridiron_ink',
+            title=dict(text='<b>Picks Behind the Leader</b>', x=0.5),
+            xaxis=dict(title='Week', dtick=1, range=[-0.3, self.n_weeks + 0.3]),
+            yaxis=dict(title='Picks behind leader', zeroline=True),
+            showlegend=True,
+            # Below the plot: gridiron_ink draws the week ticks along the top.
+            legend=dict(orientation='h', yanchor='top', y=-0.08,
+                        xanchor='center', x=0.5, title=''),
+            margin=dict(t=60, b=70),
+            hovermode='x unified',
         )
-        fig.update_traces(
-            line=dict(width=3), marker=dict(size=7, symbol='diamond'),
-            hovertemplate='Week %{x}: %{y} correct<extra>%{fullData.name}</extra>',
-        )
-        fig.update_xaxes(title='Week', dtick=1)
-        fig.update_yaxes(title='Correct Picks (YTD)')
-        fig.update_layout(legend=dict(
-            orientation='h', yanchor='bottom', y=1.02,
-            xanchor='right', x=1, title='',
-        ))
         return fig
 
     def weekly_points_fig(self) -> go.Figure:
@@ -5950,14 +6012,14 @@ class PickEm:
             return go.Figure(layout=go.Layout(template='gridiron_ink'))
         order = list(self.Totals.index)[::-1]  # leader at top
         totals = self.Totals[order]
+        colors = self.colors()
         labels = [
-            f'{totals[name]:g}  ({self.WeeksWon[name]:g} wk won)'
+            f'{totals[name]:g}  ({_fraction(self.WeeksWon[name])} wk won)'
             for name in order
         ]
         fig = go.Figure(go.Bar(
             y=order, x=totals.values, orientation='h',
-            marker_color=[coastal_colorway[i % len(coastal_colorway)]
-                          for i in range(len(order))][::-1],
+            marker_color=[colors[name] for name in order],
             text=labels, textposition='outside', cliponaxis=False,
             hovertemplate='%{y}: %{x} correct picks<extra></extra>',
         ))

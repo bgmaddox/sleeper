@@ -348,12 +348,20 @@ def fetch_matchups_json(league_id: int, week: int) -> list:
         _save_cache(key, data)
     return data
 
+# The schedule doubles as the source of final scores (Survivor margins and fatal
+# pick results). Pickled once with no expiry, the 2026 file was written in
+# August — before any game was played — and served every score as missing for
+# the whole season. Past seasons are final and stay permanent.
+_SCHEDULE_TTL = 3600     # seconds
+
+
 def fetch_nfl_schedule(year: int):
     """NFL regular-season schedule from nfl_data_py, disk-cached."""
-    import pandas as pd
     import nfl_data_py as nfl
+    import sleeper_core as core
     key = f"nfl_schedule_{year}"
-    cached = _load_cache(key)
+    ttl = _SCHEDULE_TTL if year == core.CURRENT_SEASON else None
+    cached = _load_cache(key, max_age=ttl)
     if cached is not None:
         return cached
     sched = nfl.import_schedules([year])
@@ -448,6 +456,28 @@ def draft_start_ms(year: int):
     return _override_draft_ms(year)
 
 
+def _canonicalize_pool(pool):
+    """Re-apply manager aliases to a pool unpickled from disk.
+
+    Names are canonicalised when a pool is built, but finished seasons are
+    cached forever — so a pool pickled before an alias existed keeps the old
+    name permanently (the Longevity Leaderboard listed BMoreBallers88 and
+    BMoreBaller88 as two people). canonical_name is idempotent, so this is
+    safe to run on every load.
+    """
+    import sleeper_core as core
+    pool.user_map = {k: core.canonical_name(v) for k, v in pool.user_map.items()}
+    for attr in ('Picks', 'Status', 'Data'):
+        df = getattr(pool, attr, None)
+        if df is not None and 'username' in df.columns:
+            df['username'] = df['username'].map(core.canonical_name)
+    for attr in ('Totals', 'WeeksWon'):
+        ser = getattr(pool, attr, None)
+        if ser is not None:
+            ser.index = ser.index.map(core.canonical_name)
+    return pool
+
+
 def load_survivor_for_year(year: int):
     """Build and return a Survivor object for the given year, disk-cached."""
     import sleeper_core as core
@@ -455,7 +485,7 @@ def load_survivor_for_year(year: int):
     ttl = _POOL_TTL if year == core.CURRENT_SEASON else None
     cached = _load_cache(key, max_age=ttl)
     if cached is not None:
-        return cached
+        return _canonicalize_pool(cached)
     s = core.Survivor(year)
     _save_cache(key, s)
     return s
@@ -467,7 +497,7 @@ def load_pickem_for_year(year: int):
     ttl = _POOL_TTL if year == core.CURRENT_SEASON else None
     cached = _load_cache(key, max_age=ttl)
     if cached is not None:
-        return cached
+        return _canonicalize_pool(cached)
     p = core.PickEm(year)
     _save_cache(key, p)
     return p

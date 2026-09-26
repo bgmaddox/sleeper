@@ -85,7 +85,7 @@ class TestPickEmParse:
         pe = _make_pickem([], {})
         assert pe.Data.empty
         assert pe.n_weeks == 0
-        assert isinstance(pe.score_race_fig(), go.Figure)
+        assert isinstance(pe.behind_leader_fig(), go.Figure)
         assert isinstance(pe.weekly_points_fig(), go.Figure)
         assert isinstance(pe.leaderboard_fig(), go.Figure)
 
@@ -119,8 +119,8 @@ class TestPickEm2025:
 
 class TestPickEmCharts:
 
-    def test_score_race_fig(self, pickem_2025):
-        fig = pickem_2025.score_race_fig()
+    def test_behind_leader_fig(self, pickem_2025):
+        fig = pickem_2025.behind_leader_fig()
         assert isinstance(fig, go.Figure)
         assert len(fig.data) == 6  # one line per player
 

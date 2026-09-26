@@ -198,7 +198,7 @@ Key config dicts (loaded at import from `config/*.json` — edit the JSON, not t
 6. **Side Bets** — season scoreboard (D3 leaderboard), week navigator, per-week challenge cards with charts; supports all years in `SIDE_BET_SEASONS` (2019–2025)
 7. **Survivor** — survivor pool pick history and elimination tracking (2024–2025)
 8. **Head-to-Head** — all-time matchup history between two selected teams
-9. **Pick 'Em** — weekly pick 'em pool: cumulative score race, weekly scores heatmap, season leaderboard (2025)
+9. **Pick 'Em** — weekly pick 'em pool: picks-behind-the-leader race, weekly scores heatmap, season leaderboard (2025–2026). Players keep their all-time manager color (`PickEm.colors()`)
 
 ### Theming
 
