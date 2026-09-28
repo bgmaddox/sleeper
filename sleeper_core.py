@@ -697,6 +697,21 @@ class Week(TeamColorsMixin):
         dfBreakout.loc[is_def, 'player_name'] = dfBreakout.loc[is_def, 'player_id']
         dfBreakout.loc[is_def, 'recent_teams'] = dfBreakout.loc[is_def, 'player_id'].replace({'LAR': 'LA'})
 
+        import data_loader as dl
+        sleeper_to_gsis = dl.fetch_sleeper_gsis_crosswalk(self.year)
+        dfBreakout['gsis_id'] = dfBreakout['player_id'].map(sleeper_to_gsis)
+
+        # The roster table holds each player's *end-of-season* team, so a player
+        # traded mid-season would be placed in his new team's game for every week
+        # before the trade. Prefer the team he actually played for that week (from
+        # the weekly stats); fall back to the roster team when he has no stats row
+        # (inactive, or the current week before nflverse publishes it).
+        team_col = 'team' if 'team' in WeeklyNFLData.columns else 'recent_team'
+        this_week = (WeeklyNFLData[WeeklyNFLData['week'] == self.week]
+                     .drop_duplicates('player_id'))
+        played_for = dfBreakout['gsis_id'].map(dict(zip(this_week['player_id'], this_week[team_col])))
+        dfBreakout['recent_teams'] = played_for.fillna(dfBreakout['recent_teams'])
+
         dfBreakout['week_id'] = dfBreakout['recent_teams'] + '-' + dfBreakout['week'].astype(str)
         
         if self.week in Regular:
@@ -704,9 +719,6 @@ class Week(TeamColorsMixin):
         elif self.week in Playoff:
             dfBreakout['Season'] = 'Playoff'
 
-        import data_loader as dl
-        sleeper_to_gsis = dl.fetch_sleeper_gsis_crosswalk(self.year)
-        dfBreakout['gsis_id'] = dfBreakout['player_id'].map(sleeper_to_gsis)
         # ID-based join: Sleeper player_id → GSIS player_id → nflverse stats row.
         # DEF and any unmatched players get gsis_id=NaN and won't match stats (same as before).
         dfBreakout['gsis_week_id'] = dfBreakout['gsis_id'].fillna('') + ' - ' + dfBreakout['week'].astype(str)

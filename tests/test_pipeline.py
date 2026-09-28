@@ -853,3 +853,24 @@ class TestOptimalScoresRestore:
         assert populated, "all playoff efficiency badges are None — restore failed"
         for e in populated:
             assert 0 < e <= 100, f"impossible efficiency value: {e}"
+
+
+def test_traded_players_sit_in_the_game_they_played(season_2025):
+    """Breakout places each player in the game his team *that week* played.
+
+    The roster table carries a player's end-of-season team; before this was
+    fixed, 2025's Rashid Shaheed (NO → SEA) and Jakobi Meyers (LV → JAX) were
+    drawn in their new team's game for every week before the trade.
+    """
+    league, _, weeks = season_2025
+    stats = league.WeeklyNFLData
+    team_col = 'team' if 'team' in stats.columns else 'recent_team'
+    played = stats.drop_duplicates(['player_id', 'week']).set_index(['player_id', 'week'])[team_col]
+    wrong = []
+    for w, week in weeks.items():
+        b = week.Breakout.dropna(subset=['gsis_id', 'game_id'])
+        for r in b.itertuples():
+            team = played.get((r.gsis_id, w))
+            if team is not None and team not in str(r.game_id).split('_')[2:]:
+                wrong.append((w, r.player, team, r.game_id))
+    assert not wrong, wrong[:5]

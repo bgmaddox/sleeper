@@ -98,11 +98,23 @@ in `pbp_timeline.py`; `data_loader.fetch_pbp_week` fetches and caches one week a
 - **Not live.** nflverse publishes PBP after games end, so an unpublished week falls back
   to the per-game chart with a note, and a partly published week shows the missing games'
   players as one step at their scheduled end.
-- **Place players by their plays, not by `Breakout.game_id`.** `Breakout`'s game columns
-  come from the player's end-of-season team, which is wrong for traded players before the
-  trade.
+- **Place players by their plays, not by `Breakout.game_id`.** The plays are
+  authoritative. `Breakout` uses the team a player played for that week, but falls back to
+  the end-of-season roster team when there's no weekly stats row.
 - **Cache keys.** `PBP_COLUMNS` is part of what gets cached. Bump `_PBP_VERSION` when it
   changes.
+
+## Season Cache Schema
+
+`data_loader.SEASON_SCHEMA` is part of every season pickle's cache key. **Bump it whenever
+you change what a season pickle holds**: a new `Breakout` column, or a column derived a
+different way. Otherwise every cached season, locally and on the Pi, keeps serving the old
+derivation, and nothing raises an error. The bump makes each season rebuild once, about
+10–20 s per year locally.
+
+After bumping, rebuild locally and rsync the new pickles to the Pi, so it doesn't rebuild
+seven seasons on its own after the deploy:
+`rsync -av .cache/season_data_v<N>_* rachett:apps/Sleeper/.cache/`
 
 ## Keeping Docs Current
 

@@ -106,6 +106,13 @@ def _name_fingerprint(year: int) -> str:
     return hashlib.md5(payload.encode()).hexdigest()[:8]
 
 
+# Bump when the *shape or meaning* of what a season pickle holds changes (a
+# column added or derived differently), so every stale pickle — here and on
+# the Pi — rebuilds instead of silently serving the old derivation.
+#   2: Breakout places traded players in the game they played that week.
+SEASON_SCHEMA = 2
+
+
 def season_cache_key(year: int, max_week: int = 18) -> str:
     """The cache key for a season pickle. Single source of truth.
 
@@ -113,7 +120,7 @@ def season_cache_key(year: int, max_week: int = 18) -> str:
     string to agree. When it was rebuilt by hand in each place, adding the name
     fingerprint broke the ↺ refresh button and every fixture at once.
     """
-    return f"season_data_{year}_{max_week}_{_name_fingerprint(year)}"
+    return f"season_data_v{SEASON_SCHEMA}_{year}_{max_week}_{_name_fingerprint(year)}"
 
 
 def season_cache_path(year: int, max_week: int = 18) -> str:

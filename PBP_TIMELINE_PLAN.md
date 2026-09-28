@@ -5,6 +5,11 @@ fantasy team's score play by play from nflverse play-by-play data, so the chart 
 touchdown, catch and field goal landing at the moment it happened. The existing mode only
 adds a step when each NFL game window finishes.
 
+> **Status: complete. Shipped 2026-09-28 (`a9dd609`, `7fc5982`), live on
+> legacy.bgmaddox.com.** Each phase's DONE note records what was actually built, and those
+> notes win over the step lists beneath them, which are the original plan kept for the
+> record. The code is authoritative over both.
+
 ## Current state (verified 2026-09-27)
 
 - **Chart:** `Week.PointsOverTheWeekend(Alternate=None, animate=False)` in `sleeper_core.py`
@@ -68,7 +73,7 @@ adds a step when each NFL game window finishes.
 
 ## Phase 1: PBP data and per-play scoring engine
 
-> **DONE 2026-09-28 (uncommitted).** 14 new tests; full suite 445 passed.
+> **DONE 2026-09-28 (`a9dd609`).** 14 new tests; full suite 445 passed.
 > - **Backtest:** 99.9% of 2025 offensive starter-weeks are within 0.5 pts (2019: 99.7%,
 >   2022: 100%). The floor is pinned at 98% (`BACKTEST_FLOOR`). Every team's final total
 >   equalled Sleeper in every week tested.
@@ -189,7 +194,7 @@ real data.
 
 ## Phase 2: By-play chart method
 
-> **DONE 2026-09-28 (uncommitted).** `Week.PointsTimelinePBP()` sits directly after
+> **DONE 2026-09-28 (`a9dd609`).** `Week.PointsTimelinePBP()` sits directly after
 > `PointsOverTheWeekend`. There are 4 chart tests in `TestPointsTimelinePBP` and 2 helper
 > tests. The full suite passes: 451 passed. Every 2025 week (1–17) and 2019 week 10 build,
 > taking ~0.1 s per week once cached. It was checked visually against 2025 week 3.
@@ -251,7 +256,7 @@ contract from Phase 1. The styling copies the existing timeline.
 **Verification:**
 ```bash
 .venv/bin/pytest tests/test_charts.py tests/test_pbp_timeline.py -q
-.venv/bin/python -c "import data_loader as dl; _,_,w=dl.load_data_for_year(2025,verbose=False); f=w[3].PointsTimelinePBP(); f.write_html('/private/tmp/claude-501/pbp_w3.html'); print(len(f.data))"
+.venv/bin/python -c "import data_loader as dl; _,_,w=dl.load_data_for_year(2025,verbose=False); f=w[3].PointsTimelinePBP(); f.write_html('pbp_w3.html'); print(len(f.data))"
 ```
 Then open the HTML. This is the one place a visual check is warranted: confirm the gaps are
 compressed, the steps land at plausible times, and the hover text reads well.
@@ -271,9 +276,8 @@ compressed, the steps land at plausible times, and the hover text reads well.
 >   "isn't published yet" note can only appear between Monday night's final whistle and
 >   nflverse publishing, usually a few hours. The `no_pbp` partial-week path is likewise
 >   reachable only in that window. Both are covered by unit tests, not the live site.
-> - **Also found:** the `?week=` deep-link parameter is ignored. The parser only reads
->   `tab` and `year`, although CLAUDE.md's Deployment section says it's preserved.
->   Separate from this feature.
+> - **Also found:** the `?week=` deep-link parameter was ignored. Fixed afterwards; see
+>   Deferred.
 
 **Model:** Sonnet 5. It is routine callback wiring plus the project's deploy runbook.
 
@@ -305,8 +309,9 @@ compressed, the steps land at plausible times, and the hover text reads well.
    pushing).
    - The Pi fetches PBP on demand, so there's no need to rsync the `pbp_*` pickles.
      Rsyncing them is optional and only warms the cache.
-   - Record the service's memory before and after the first By-play click:
-     `ssh rachett 'systemctl status sleeper | grep Memory'`.
+   - Record the gunicorn worker's RSS before and after the first By-play click:
+     `ssh rachett 'ps -C gunicorn -o pid,rss,args --sort=-rss | head -2'`. (`systemctl`
+     reports no memory figure for this unit, so don't use it.)
 7. Update the `PROJECTS.md` Next Step column.
 
 **Verification:**
@@ -325,7 +330,22 @@ chart must render, and the memory delta must be under 300 MB.
 
 **Model:** Sonnet 5. It is a read-through for gaps and has no code to design.
 
-**Steps:** Before Phase 1 starts, re-read this plan cold, as the executing agent would.
+> **DONE 2026-09-28**, run after Phases 1–3 rather than before them (the user went
+> straight to Phase 1). Changes made:
+> - Added a status block at the top saying which layer is authoritative. The DONE notes
+>   diverge from the original steps, and without it a cold reader can't tell which to
+>   follow.
+> - Changed "uncommitted" to commit hashes.
+> - Phase 2's verification wrote to a machine-specific temp path; it now uses a relative
+>   one.
+> - Phase 3's `systemctl` memory command returns nothing on the Pi; replaced it with the
+>   `ps` RSS command that was actually used.
+> - Marked the rangebreak risk as resolved, and both Deferred bugs as fixed.
+> - **Length.** The original step lists for Phases 1–3 are now mostly history, and each
+>   is longer than its DONE note. They're kept because they record the reasoning. For a
+>   future change, read the DONE notes and the code, not the steps.
+
+**Steps:** Re-read this plan cold, as the executing agent would.
 - Check each line number cited against current code, since `app.py` shifts often.
 - Check each column name against `PBP_COLUMNS`.
 - Confirm the Phase 1 output contract matches what Phase 2 consumes.
@@ -335,7 +355,7 @@ chart must render, and the memory delta must be under 300 MB.
 **Verification:** a list of the changes made, or the words "no changes needed", recorded at
 the bottom of this file.
 
-**Depends on:** nothing. Run it first.
+**Depends on:** nothing. It was meant to run first and ran last. See the DONE note.
 
 ---
 
@@ -347,7 +367,7 @@ the bottom of this file.
 | The per-season PBP download spikes memory on the Pi (4 GB total, ~2 GB free). | `columns=` subset and a one-week filter before caching. Phase 3 measures the delta. If it's too high, prebuild the pickles locally and rsync them. |
 | Attribution is wrong in ways that make the intra-game shape misleading, even though totals are right. | The backtest floor in Phase 1 plus the visible `final_adjust` rows, whose hover says "Stat adjustment". |
 | Stat corrections move a player's Sleeper total after the PBP cache is frozen. | The PBP cache only freezes after the settle Tuesday. Reconciliation always uses the current Sleeper total, so the final value is still correct. |
-| Rangebreaks misrender on subplots. | Phase 2 step 4 has a toy-figure check and a `bounds` fallback. Worst case, ship with the true time axis, which still works and is only less compact. |
+| Rangebreaks misrender on subplots. | Resolved: `values` + `dvalue` render correctly on all six panels (Phase 2). |
 | Rollback | The mode is purely additive. Remove the toggle option and nothing else changes. |
 
 ## Deferred
@@ -357,13 +377,17 @@ the bottom of this file.
 - **Animated By-play mode.** Frames per play would be heavy. Revisit after the static mode ships.
 - **Exact lateral, special-teams TD and forced-fumble attribution.** Reconciliation absorbs
   these for now. Tighten only if the backtest shows they matter.
-- **Existing bug found in Phase 1:** `Breakout.game_id`, `gameday` and `gametime` come
-  from `rosters['team']`, which is the player's end-of-season team (`sleeper_core.py`
-  ~line 695, `recent_teams`). In weeks before a trade, a traded player is placed in the
-  wrong game. The **existing per-game timeline** therefore draws their points in the wrong
-  time slot, for example 2025 Rashid Shaheed and Jakobi Meyers. The fix is to derive the
-  team per week, e.g. from `WeeklyNFLData`'s `recent_team` for that week. It is separate
-  from this feature.
+- **~~Existing bug: traded players in the wrong game~~ — FIXED 2026-09-28.**
+  `Breakout.recent_teams`, and therefore `game_id`, `gameday` and `gametime`, came from the
+  end-of-season roster team. As a result, the per-game timeline drew traded players' points
+  in the wrong slot before the trade: 269 rostered player-weeks in 2025 alone, including
+  Rashid Shaheed and Jakobi Meyers. It now uses the team from `WeeklyNFLData` for that
+  week, and falls back to the roster team when there's no stats row. Guarded by
+  `test_traded_players_sit_in_the_game_they_played`. The fix introduced
+  `data_loader.SEASON_SCHEMA` so stale season pickles rebuild (see CLAUDE.md).
+- **~~`?week=` deep links ignored~~ — FIXED 2026-09-28.** `webapp/app.py` `_url_week()`,
+  used by `_boot` and `_year_changed`, applies the link's week to the season the link
+  names. Guarded by `tests/test_deep_link.py`.
 - **Migrating to `nflreadpy`.** Do this when `nfl_data_py` actually breaks, not preemptively.
 - **Timing.** It's currently mid-season (2026 weeks 1–3 are published), which is the ideal
   time to build and check it against fresh weeks. There's no calendar dependency otherwise;

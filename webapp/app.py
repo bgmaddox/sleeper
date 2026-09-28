@@ -160,6 +160,30 @@ def _default_week(year: int, weeks_dict: dict) -> tuple:
         return available_max, min(leg, available_max)
     default = min(REGULAR_SEASON_WEEKS, available_max)
     return available_max, default
+
+
+def _url_week(search, year, slider_max):
+    """The ?week= deep-link value, if it applies to `year` — else None.
+
+    It applies only to the season the link names (?year=, or the current season
+    when the link gives none), so switching to another year falls back to that
+    year's default week instead of dragging a stale week along. Out-of-range or
+    non-numeric values are ignored.
+    """
+    if not search:
+        return None
+    from urllib.parse import parse_qs
+    params = parse_qs(search.lstrip('?'))
+    try:
+        week = int(params['week'][0])
+        link_year = int(params['year'][0]) if 'year' in params else CURRENT_YEAR
+    except (KeyError, ValueError):
+        return None
+    if link_year != year or not 1 <= week <= slider_max:
+        return None
+    return week
+
+
 def _load_env_file():
     """Load KEY=VALUE pairs from the project-root .env (gitignored) into
     os.environ. Real environment variables take precedence."""
@@ -1378,9 +1402,10 @@ def _playoff_week_start(year):
     Output('store-retry', 'data', allow_duplicate=True),
     Input('boot', 'n_intervals'),
     State('year-dd', 'value'),
+    State('url', 'search'),
     prevent_initial_call='initial_duplicate',
 )
-def _boot(_, year):
+def _boot(_, year, search=None):
     year = year or CURRENT_YEAR
     w = _weeks(year)          # also drives the retry: _weeks -> _ensure
     if not w:
@@ -1404,6 +1429,7 @@ def _boot(_, year):
         # keep polling
         return (no_update,) * 5 + (False, no_update, no_update)
     slider_max, default_week = _default_week(year, w)
+    default_week = _url_week(search, year, slider_max) or default_week
     pws = _playoff_week_start(year)
     # data ready — disable interval
     return slider_max, default_week, default_week, slider_max, pws, True, None, no_update
@@ -1418,15 +1444,18 @@ def _boot(_, year):
     Output('team-list', 'value'),
     Output('boot', 'disabled', allow_duplicate=True),
     Input('year-dd', 'value'),
+    State('url', 'search'),
     prevent_initial_call=True,
 )
-def _year_changed(year):
+def _year_changed(year, search=None):
     # Re-arm the boot poller when switching to a not-yet-loaded year so the
     # slider/store update (and tab re-render) fire once the data arrives.
     boot_disabled = True if year in _data else False
     _ensure(year)
     w = _weeks(year)
     slider_max, default_week = _default_week(year, w) if w else (1, 1)
+    if w:
+        default_week = _url_week(search, year, slider_max) or default_week
     pws = _playoff_week_start(year)
     teams = sorted(core.roster_ids.get(year, {}).values())
     opts = [{'label': t, 'value': t} for t in teams]

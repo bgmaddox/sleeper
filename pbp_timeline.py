@@ -309,10 +309,10 @@ def team_timeline(breakout: pd.DataFrame, pbp: pd.DataFrame, schedule: pd.DataFr
     plays = score(play_stats(pbp, scoring_settings), scoring_settings)
     plays = plays.merge(pbp[['game_id', 'play_id', 'ts']], on=['game_id', 'play_id'], how='left')
 
-    # Join on the player alone, not his Breakout game: Breakout's game_id comes
-    # from the player's end-of-season team, so a player traded mid-season is
-    # listed in the wrong game for every week before the trade. A player
-    # appears in exactly one game's plays per week, so the plays locate him.
+    # Join on the player alone, not his Breakout game: a player appears in
+    # exactly one game's plays per week, so the plays locate him even when
+    # Breakout's game_id is wrong (it falls back to the end-of-season roster
+    # team for a player with no weekly stats row).
     ev = starters[['team', 'matchup', 'player', 'entity', 'points']].merge(
         plays, on='entity', how='inner', suffixes=('', '_play'))
     ev = ev.assign(delta=ev['points_play'],
