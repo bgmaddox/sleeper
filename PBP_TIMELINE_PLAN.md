@@ -263,6 +263,18 @@ compressed, the steps land at plausible times, and the hover text reads well.
 
 ## Phase 3: Dash wiring, docs, deploy
 
+> **DONE 2026-09-28 — deployed (`7fc5982`).** 2 callback tests; full suite 453 passed.
+> - **Live check:** 2025 week 14 renders at legacy.bgmaddox.com. A cold PBP fetch took
+>   2.0 s and grew the worker's RSS by +124 MB (940 → 1,066 MB), under the 300 MB budget.
+> - **SECTION MAP:** unchanged. It points at `# ──` markers, not line numbers.
+> - **The fallback almost never shows.** The app only offers completed weeks, so the
+>   "isn't published yet" note can only appear between Monday night's final whistle and
+>   nflverse publishing, usually a few hours. The `no_pbp` partial-week path is likewise
+>   reachable only in that window. Both are covered by unit tests, not the live site.
+> - **Also found:** the `?week=` deep-link parameter is ignored. The parser only reads
+>   `tab` and `year`, although CLAUDE.md's Deployment section says it's preserved.
+>   Separate from this feature.
+
 **Model:** Sonnet 5. It is routine callback wiring plus the project's deploy runbook.
 
 **Files:** `webapp/app.py`, `CLAUDE.md`, `.claude/structure.md`, `PROJECTS.md` (workspace root).
