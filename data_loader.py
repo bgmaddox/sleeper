@@ -368,6 +368,83 @@ def fetch_nfl_schedule(year: int):
     _save_cache(key, sched)
     return sched
 
+# Play-by-play columns the points timeline needs. The full nflverse frame is
+# ~370 columns and ~370 MB per season in memory — never load it unfiltered.
+PBP_COLUMNS = [
+    'game_id', 'play_id', 'week', 'time_of_day', 'play_type', 'desc',
+    'posteam', 'defteam', 'home_team', 'away_team', 'qtr', 'game_seconds_remaining',
+    'passer_player_id', 'rusher_player_id', 'receiver_player_id', 'kicker_player_id',
+    'td_player_id', 'td_team',
+    'fumbled_1_player_id', 'fumbled_1_team', 'fumble_recovery_1_team',
+    'fumbled_2_player_id', 'fumbled_2_team', 'fumble_recovery_2_team',
+    'kickoff_returner_player_id', 'punt_returner_player_id',
+    'lateral_receiver_player_id', 'lateral_rusher_player_id', 'blocked_player_id',
+    'passing_yards', 'rushing_yards', 'receiving_yards', 'return_yards',
+    'lateral_receiving_yards', 'lateral_rushing_yards',
+    'pass_attempt', 'rush_attempt', 'complete_pass', 'touchdown', 'pass_touchdown',
+    'rush_touchdown', 'return_touchdown', 'interception', 'fumble', 'fumble_lost',
+    'sack', 'safety', 'two_point_conv_result', 'field_goal_result', 'kick_distance',
+    'extra_point_result',
+]
+
+_PBP_TTL = 6 * 3600   # seconds — until a week is complete and settled
+_PBP_VERSION = 2      # bump when PBP_COLUMNS changes, so stale pickles aren't reused
+
+
+def pbp_cache_key(year: int, week: int, final: bool) -> str:
+    """Cache key for one week's play-by-play. Single source of truth — the
+    tests use it to skip, rather than download, when a week isn't cached."""
+    return f"pbp{_PBP_VERSION}_{year}_w{week}" + ("_final" if final else "")
+
+
+def fetch_pbp_weeks(year: int, weeks) -> dict:
+    """{week: play-by-play DataFrame or None} for `weeks` of `year`.
+
+    One download serves every requested week, so warming a whole season costs
+    one fetch, not seventeen. A week is cached permanently only once every game
+    on its schedule is present and the week is past its Tuesday settle (stat
+    corrections land until then); before that the cache expires after
+    `_PBP_TTL`, so a partly published week fills in on its own. `None` means
+    nflverse has published nothing for that week yet.
+    """
+    import nfl_data_py as nfl
+    import side_bet_resolver as sbr
+
+    out, missing = {}, []
+    for w in weeks:
+        cached = _load_cache(pbp_cache_key(year, w, final=False), max_age=_PBP_TTL)
+        if cached is None:
+            # A permanent entry has no expiry — check for one before giving up.
+            cached = _load_cache(pbp_cache_key(year, w, final=True))
+        if cached is not None:
+            out[w] = cached
+        else:
+            missing.append(w)
+    if not missing:
+        return out
+
+    season = nfl.import_pbp_data([year], columns=PBP_COLUMNS, downcast=False, cache=False)
+    sched = fetch_nfl_schedule(year)
+    for w in missing:
+        pbp = season[season['week'] == w].reset_index(drop=True)
+        if pbp.empty:
+            out[w] = None
+            continue
+        games = sched[sched['week'] == w]
+        complete = set(games['game_id']) <= set(pbp['game_id'])
+        if complete and sbr.is_settled(games):
+            _save_cache(pbp_cache_key(year, w, final=True), pbp)
+        else:
+            _save_cache(pbp_cache_key(year, w, final=False), pbp)
+        out[w] = pbp
+    return out
+
+
+def fetch_pbp_week(year: int, week: int):
+    """Play-by-play for one week (see `fetch_pbp_weeks`), or None if unpublished."""
+    return fetch_pbp_weeks(year, [week])[week]
+
+
 def season_kickoff_ms(year: int):
     """Epoch milliseconds (UTC) of the first kickoff of `year`'s Week 1, or None.
 

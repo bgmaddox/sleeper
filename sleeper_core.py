@@ -1166,9 +1166,76 @@ class Week(TeamColorsMixin):
             )
 
         return figWeekLine
-        
-    
-    
+
+    def PointsTimelinePBP(self):
+        """Points timeline rebuilt play by play from nflverse play-by-play.
+
+        Each team's line steps at the moment each starter scores, on a clock
+        axis with the dead time between game windows cut out. Raises
+        ``pbp_timeline.PBPUnavailable`` when nflverse has published nothing for
+        the week yet; the scoring and reconciliation rules live in
+        ``pbp_timeline`` (each line ends exactly on the Sleeper total).
+        """
+        import data_loader as dl
+        import pbp_timeline as pt
+
+        pbp = dl.fetch_pbp_week(self.year, self.week)
+        if pbp is None:
+            raise pt.PBPUnavailable(f'No play-by-play published for {self.year} week {self.week}')
+        schedule = dl.fetch_nfl_schedule(self.year)
+        settings = dl.fetch_league_json(self.league.id)['scoring_settings']
+        tl = pt.coalesce(pt.team_timeline(self.Breakout, pbp, schedule, settings))
+        # Playoff weeks: eliminated teams have no matchup — the per-game chart
+        # drops them too.
+        tl = tl[tl['matchup'].notna()]
+        # Carry every line flat to the week's last play so both sides of a
+        # matchup span the whole axis, even when one team's starters are done.
+        last = tl.groupby('team').tail(1).assign(ts=tl['ts'].max(), delta=0.0,
+                                                 desc='Final', kind='end')
+        tl = pd.concat([tl, last[last['ts'] != tl.loc[last.index, 'ts']]]).sort_values(['team', 'ts'])
+
+        matchups = sorted(tl['matchup'].unique())
+        teams_in = {m: sorted(tl.loc[tl['matchup'] == m, 'team'].unique()) for m in matchups}
+        titles = [f"<span style='color:{self.teamcolors[a]}'>{a}</span> vs "
+                  f"<span style='color:{self.teamcolors[b]}'>{b}</span>"
+                  for a, b in (teams_in[m] for m in matchups)]
+        rows = -(-len(matchups) // 2)
+        fig = make_subplots(rows=rows, cols=2, subplot_titles=titles,
+                            horizontal_spacing=0.10, vertical_spacing=0.10)
+
+        for i, m in enumerate(matchups):
+            r, c = i // 2 + 1, i % 2 + 1
+            for team in teams_in[m]:
+                td = tl[tl['team'] == team]
+                fig.add_trace(go.Scatter(
+                    x=td['ts'], y=td['cum'], name=team, mode='lines+markers',
+                    line=dict(color=self.teamcolors[team], shape='hv', width=2),
+                    fill='tozeroy',
+                    marker=dict(size=[0 if k in ('anchor', 'end') else 5 for k in td['kind']],
+                                color=self.teamcolors[team]),
+                    customdata=np.stack([[team] * len(td), td['desc'], td['delta']], axis=-1),
+                    hovertemplate="<b>%{customdata[0]}</b><br>%{customdata[1]} "
+                                  "(%{customdata[2]:+.2f})<br>Total: <b>%{y:.2f}</b><extra></extra>",
+                ), row=r, col=c)
+
+        # Ticks at this week's kickoff slots, labelled like the per-game chart.
+        slots = (self.league.ScheduleGroup.get_group(self.week)
+                 .drop_duplicates('Tick')[['gametime_gameday', 'Tick']])
+        play_ts = pt.play_times(pbp, schedule)
+        fig.update_xaxes(rangebreaks=pt.axis_breaks(pd.concat([play_ts, tl['ts']])),
+                         tickvals=slots['gametime_gameday'], ticktext=slots['Tick'],
+                         tickfont=dict(size=14), side='bottom', matches='x', showgrid=False)
+        fig.update_yaxes(title_text='')
+        for a in fig.layout.annotations:
+            a.font.size = 23
+
+        fig.update_layout(template='gridiron_ink', height=1200, width=1000, showlegend=False,
+                          title=f'<b>Points Timeline · By Play</b><br><sup>Week {self.week}</sup>',
+                          margin=dict(t=120, b=90, l=50, r=50))
+        apply_logo_to_fig(fig, xval=0, yval=1.06)
+        return fig
+
+
 class Season(TeamColorsMixin):
     def __init__(self, league):
         self.league = league

@@ -226,3 +226,42 @@ class TestPlayoffCharts:
         n_teams = len(playoff_snapshots_2024)
         assert len(fig.data) == n_teams, \
             f"Expected {n_teams} team traces, got {len(fig.data)}"
+
+
+# ── Points timeline, by play ─────────────────────────────────────────────────
+
+class TestPointsTimelinePBP:
+    """Week.PointsTimelinePBP on 2025 week 3 (needs its play-by-play cached)."""
+
+    @pytest.fixture(scope='class')
+    def week3(self, season_2025):
+        import os
+        import data_loader as dl
+        if not os.path.exists(dl._cache_path(dl.pbp_cache_key(2025, 3, final=True))):
+            pytest.skip('2025 week 3 play-by-play not cached')
+        return season_2025[2][3]
+
+    def test_one_trace_per_team(self, week3):
+        fig = week3.PointsTimelinePBP()
+        starters = week3.Breakout[week3.Breakout['starter'] == 1]
+        assert len(fig.data) == starters['team'].nunique()
+        assert len(fig.data) == 2 * starters['matchup'].nunique()
+
+    def test_each_line_ends_on_the_sleeper_total(self, week3):
+        fig = week3.PointsTimelinePBP()
+        totals = week3.Breakout[week3.Breakout['starter'] == 1].groupby('team')['points'].sum()
+        for trace in fig.data:
+            assert trace.y[-1] == pytest.approx(totals[trace.name], abs=0.01), trace.name
+
+    def test_dead_time_is_cut_from_the_axis(self, week3):
+        fig = week3.PointsTimelinePBP()
+        assert fig.layout.xaxis.rangebreaks
+        # Thursday night → Sunday is the week's biggest gap: well over a day.
+        assert max(rb.dvalue for rb in fig.layout.xaxis.rangebreaks) > 24 * 3600 * 1000
+
+    def test_unpublished_week_raises(self, week3, monkeypatch):
+        import data_loader as dl
+        import pbp_timeline as pt
+        monkeypatch.setattr(dl, 'fetch_pbp_week', lambda year, week: None)
+        with pytest.raises(pt.PBPUnavailable):
+            week3.PointsTimelinePBP()
