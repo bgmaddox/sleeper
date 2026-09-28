@@ -30,7 +30,7 @@ numbers on purpose; they drift). Sections appear in this order:
   Tab: Side Bets                             — _tab_sidebets(); winner badges via
                                                _winner_tooltip/_tbd_label
   Tab: Survivor                              — _tab_survivor(), _survivor_win_margin() callback
-  Tab: Pick 'Em                              — _tab_pickem()
+  Tab: Pick 'Em                              — _tab_pickem(), _pickem_standings_table()
   Toggle callbacks                           — luck/timeline/pfa/freq/bench/bump/violin/top-players/playoff-view
   D3 store population                        — _populate_d3_stores() (snake draft, schedule, matchups)
   Clientside callbacks (D3 rendering)        — wires D3 renderers to their stores
@@ -2815,7 +2815,11 @@ def _tab_pickem(year):
     # have joined — the header read "0 players" for a pool of six.
     n_players = len(pe.user_map) or len(pe.Totals)
     status_label = 'Season Complete' if pe.n_weeks >= 18 else f'Through Week {pe.n_weeks}'
-    leader = pe.Totals.index[0] if not pe.Totals.empty else '—'
+    leaders = pe.leaders()
+    if len(leaders) > 1:
+        leader_label = f'Leaders: {", ".join(leaders)} ({pe.Totals.max():g})'
+    else:
+        leader_label = f'Leader: {leaders[0] if leaders else "—"}'
 
     def _pchart(method, h=None):
         try:
@@ -2840,21 +2844,53 @@ def _tab_pickem(year):
     ], className='chart-card chart-col-full')
 
     row3 = html.Div([
-        html.Div('Season Leaderboard', className='chart-title'),
-        html.Div('Total correct picks, with weekly first-place finishes (ties split)', className='chart-subtitle'),
-        _pchart('leaderboard_fig', h=max(280, 55 * n_players)),
+        html.Div('Standings', className='chart-title'),
+        html.Div('Total correct picks · weeks won splits ties · best is the top single week',
+                 className='chart-subtitle'),
+        _pickem_standings_table(pe),
     ], className='chart-card chart-col-full')
 
     return html.Div([
         html.Div([
             html.Div("Pick 'Em Pool", className='chart-title'),
-            html.Div(f'{pickem_year} · {n_players} players · {status_label} · Leader: {leader}',
+            html.Div(f'{pickem_year} · {n_players} players · {status_label} · {leader_label}',
                      className='chart-subtitle'),
         ], className='chart-card chart-col-full', style={'paddingBottom': '8px'}),
         html.Div([row1], className='charts-row'),
         html.Div([row2], className='charts-row'),
         html.Div([row3], className='charts-row'),
     ])
+
+
+def _pickem_standings_table(pe):
+    """Standings table from PickEm.standings(); the swatch carries identity."""
+    st = pe.standings()
+    if st.empty:
+        return html.Div('No picks scored yet.', className='loading-msg')
+    colors = pe.colors()
+    head = html.Thead(html.Tr([
+        html.Th('#',        className='pr-th pr-th-center'),
+        html.Th('Player',   className='pr-th'),
+        html.Th('Correct',  className='pr-th pr-th-right'),
+        html.Th('Behind',   className='pr-th pr-th-right'),
+        html.Th('Wks Won',  className='pr-th pr-th-right'),
+        html.Th('Best Wk',  className='pr-th pr-th-right'),
+    ]))
+    rows = []
+    for r in st.itertuples():
+        best = f'{r.best} (wk {r.best_week})' if r.best is not None else '—'
+        rows.append(html.Tr([
+            html.Td(r.rank_label, className='pr-td pr-td-rank'),
+            html.Td([html.Span(className='pickem-swatch',
+                               style={'background': colors.get(r.username)}),
+                     r.username], className='pr-td pr-td-team'),
+            html.Td(str(r.correct), className='pr-td pr-td-score'),
+            html.Td('—' if r.behind == 0 else f'-{r.behind}',
+                    className='pr-td pr-td-right pr-td-muted'),
+            html.Td(r.weeks_won_label, className='pr-td pr-td-right'),
+            html.Td(best, className='pr-td pr-td-right pr-td-muted'),
+        ], className='pr-data-row'))
+    return html.Table([head, html.Tbody(rows)], className='pr-table')
 
 
 @app.callback(

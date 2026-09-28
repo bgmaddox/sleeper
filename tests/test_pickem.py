@@ -87,7 +87,7 @@ class TestPickEmParse:
         assert pe.n_weeks == 0
         assert isinstance(pe.behind_leader_fig(), go.Figure)
         assert isinstance(pe.weekly_points_fig(), go.Figure)
-        assert isinstance(pe.leaderboard_fig(), go.Figure)
+        assert pe.standings().empty
 
     def test_missing_metadata(self):
         pe = _make_pickem([{'owner_id': 'u1', 'metadata': None}], SYNTH_USERS)
@@ -129,11 +129,10 @@ class TestPickEmCharts:
         assert isinstance(fig, go.Figure)
         assert len(fig.data) == 1
 
-    def test_leaderboard_fig(self, pickem_2025):
-        fig = pickem_2025.leaderboard_fig()
-        assert isinstance(fig, go.Figure)
-        assert len(fig.data) == 1
-        assert len(fig.data[0].y) == 6
+    def test_standings(self, pickem_2025):
+        st = pickem_2025.standings()
+        assert len(st) == 6
+        assert st.iloc[0]['behind'] == 0
 
 
 class TestPickEmPreseasonHeader:
@@ -143,7 +142,7 @@ class TestPickEmPreseasonHeader:
     — the tab header used to report "0 players" for a pool of six.
     """
 
-    def _tab(self, monkeypatch, user_map, totals_index):
+    def _tab(self, monkeypatch, user_map, totals_index, tied=False):
         import os
         import sys
 
@@ -162,9 +161,10 @@ class TestPickEmPreseasonHeader:
         pe.year = 2026
         pe.user_map = user_map
         pe.n_weeks = 0 if not totals_index else 3
+        values = [5] * len(totals_index) if tied else range(len(totals_index))
         pe.Totals = pd.Series(
-            range(len(totals_index)), index=totals_index, dtype=float, name="points"
-        ).sort_values(ascending=False)
+            values, index=totals_index, dtype=float, name="points"
+        ).sort_values(ascending=False, kind="stable")
         pe.WeeksWon = pd.Series(dtype=float)
         pe.Data = pd.DataFrame(columns=["username", "week", "points", "year"])
         monkeypatch.setattr(app.dl, "load_pickem_for_year", lambda y: pe)
@@ -178,6 +178,12 @@ class TestPickEmPreseasonHeader:
     def test_leader_is_a_dash_before_any_scoring(self, monkeypatch):
         out = self._tab(monkeypatch, {f"u{i}": f"p{i}" for i in range(6)}, [])
         assert "Leader: —" in out
+
+    def test_tied_leaders_are_all_named(self, monkeypatch):
+        """2026 week 2 was tied at 23; the header named only one of them."""
+        out = self._tab(monkeypatch, {"u0": "alice", "u1": "bob"}, ["alice", "bob"],
+                        tied=True)
+        assert "Leaders: alice, bob" in out
 
     def test_leader_appears_once_scores_exist(self, monkeypatch):
         out = self._tab(monkeypatch, {"u0": "alice", "u1": "bob"}, ["alice", "bob"])

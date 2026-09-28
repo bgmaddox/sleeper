@@ -6006,31 +6006,42 @@ class PickEm:
         )
         return fig
 
-    def leaderboard_fig(self) -> go.Figure:
-        """Horizontal bar of season totals, annotated with weeks won."""
+    def leaders(self) -> list:
+        """Everyone tied for first, in standings order; [] before any scoring."""
         if self.Totals.empty:
-            return go.Figure(layout=go.Layout(template='gridiron_ink'))
-        order = list(self.Totals.index)[::-1]  # leader at top
-        totals = self.Totals[order]
-        colors = self.colors()
-        labels = [
-            f'{totals[name]:g}  ({_fraction(self.WeeksWon[name])} wk won)'
-            for name in order
-        ]
-        fig = go.Figure(go.Bar(
-            y=order, x=totals.values, orientation='h',
-            marker_color=[colors[name] for name in order],
-            text=labels, textposition='outside', cliponaxis=False,
-            hovertemplate='%{y}: %{x} correct picks<extra></extra>',
-        ))
-        fig.update_layout(
-            template='gridiron_ink',
-            title=dict(text='<b>Season Leaderboard</b>', x=0.5),
-            xaxis=dict(title='Total Correct Picks'),
-            yaxis=dict(title=None),
-            margin=dict(t=80, l=140, r=110, b=50),
-        )
-        return fig
+            return []
+        return list(self.Totals[self.Totals == self.Totals.max()].index)
+
+    def standings(self) -> pd.DataFrame:
+        """One row per scorer, leader first.
+
+        Replaces the leaderboard bar chart: totals of 161–176 drawn from zero
+        looked identical, and the numbers were the point anyway. Columns:
+        rank_label ('T1' on ties), username, correct, behind (picks behind the
+        leader), weeks_won_label (ties split, e.g. '3⅔'), best, best_week.
+        """
+        cols = ['rank_label', 'username', 'correct', 'behind',
+                'weeks_won_label', 'best', 'best_week']
+        if self.Totals.empty:
+            return pd.DataFrame(columns=cols)
+        totals = self.Totals
+        ranks = totals.rank(method='min', ascending=False).astype(int)
+        tied = ranks.duplicated(keep=False)
+        played = self.Data[self.Data['week'] > 0]
+        rows = []
+        for name, total in totals.items():
+            mine = played[played['username'] == name].sort_values('week')
+            best = mine.loc[mine['points'].idxmax()] if not mine.empty else None
+            rows.append({
+                'rank_label': f"{'T' if tied[name] else ''}{ranks[name]}",
+                'username': name,
+                'correct': int(total),
+                'behind': int(totals.max() - total),
+                'weeks_won_label': _fraction(self.WeeksWon.get(name, 0.0)),
+                'best': int(best['points']) if best is not None else None,
+                'best_week': int(best['week']) if best is not None else None,
+            })
+        return pd.DataFrame(rows, columns=cols)
 
 
 # ── Playoff Probability Calculator ───────────────────────────────────────────

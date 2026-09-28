@@ -226,25 +226,73 @@ class TestPickEmColors:
         race = {t.name: t.line.color for t in pickem.behind_leader_fig().data}
         assert race == {'bgmaddox': league['bgmaddox'], 'sgmaddox': league['sgmaddox']}
 
-    def test_leaderboard_matches_race(self, pickem):
-        race = {t.name: t.line.color for t in pickem.behind_leader_fig().data}
-        bar = pickem.leaderboard_fig().data[0]
-        assert dict(zip(bar.y, bar.marker.color)) == race
-
     def test_color_does_not_follow_rank(self):
         """Swap who's winning; each player keeps their color."""
         a = _make_pickem({'u1': 'bgmaddox', 'u2': 'sgmaddox'},
                          {'u1': {'regular:1': 12.0}, 'u2': {'regular:1': 5.0}})
         b = _make_pickem({'u1': 'bgmaddox', 'u2': 'sgmaddox'},
                          {'u1': {'regular:1': 5.0}, 'u2': {'regular:1': 12.0}})
-        ca, cb = (dict(zip(p.leaderboard_fig().data[0].y,
-                           p.leaderboard_fig().data[0].marker.color)) for p in (a, b))
-        assert ca == cb
+        assert a.colors() == b.colors()
 
     def test_weeks_won_label_is_readable(self):
         pe = _make_pickem({'u1': 'bgmaddox', 'u2': 'sgmaddox', 'u3': 'jhmad'},
                           {'u1': {'regular:1': 9.0}, 'u2': {'regular:1': 9.0},
                            'u3': {'regular:1': 9.0}})
-        labels = pe.leaderboard_fig().data[0].text
-        assert all('0.333' not in t for t in labels)
-        assert all('⅓' in t for t in labels)
+        assert set(pe.standings()['weeks_won_label']) == {'⅓'}
+
+
+class TestStandings:
+    """Replaces the leaderboard bars: 161 vs 176 on a zero-based axis looked equal."""
+
+    @pytest.fixture
+    def pe(self):
+        # alice 10+8+12=30, bob 11+0+7=18 (skipped wk 2), cat 10+8+12=30
+        return _make_pickem(
+            {'u1': 'alice', 'u2': 'bob', 'u3': 'cat'},
+            {'u1': {'regular:1': 10.0, 'regular:2': 8.0, 'regular:3': 12.0},
+             'u2': {'regular:1': 11.0, 'regular:3': 7.0},
+             'u3': {'regular:1': 10.0, 'regular:2': 8.0, 'regular:3': 12.0}})
+
+    def test_order_and_totals(self, pe):
+        st = pe.standings()
+        assert list(st['correct']) == [30, 30, 18]
+        assert list(st['username'])[-1] == 'bob'
+
+    def test_ties_share_a_rank(self, pe):
+        st = pe.standings().set_index('username')
+        assert st.loc['alice', 'rank_label'] == st.loc['cat', 'rank_label'] == 'T1'
+        assert st.loc['bob', 'rank_label'] == '3'
+
+    def test_behind_leader(self, pe):
+        st = pe.standings().set_index('username')
+        assert st.loc['alice', 'behind'] == 0
+        assert st.loc['bob', 'behind'] == 12
+
+    def test_best_week(self, pe):
+        st = pe.standings().set_index('username')
+        assert (st.loc['alice', 'best'], st.loc['alice', 'best_week']) == (12, 3)
+        assert (st.loc['bob', 'best'], st.loc['bob', 'best_week']) == (11, 1)
+
+    def test_weeks_won_split_on_ties(self, pe):
+        """Wk1 bob alone; wk2 and wk3 alice/cat split → ½ + ½ = 1 each."""
+        st = pe.standings().set_index('username')
+        assert st.loc['bob', 'weeks_won_label'] == '1'
+        assert st.loc['alice', 'weeks_won_label'] == '1'
+
+    def test_empty_before_scoring(self):
+        pe = _make_pickem({'u1': 'alice'}, {'u1': {}})
+        assert pe.standings().empty
+
+
+class TestLeaders:
+    def test_tie_names_everyone(self):
+        pe = _make_pickem({'u1': 'alice', 'u2': 'bob', 'u3': 'cat'},
+                          {'u1': {'regular:1': 9.0}, 'u2': {'regular:1': 9.0},
+                           'u3': {'regular:1': 4.0}})
+        assert sorted(pe.leaders()) == ['alice', 'bob']
+
+    def test_single_leader(self, pickem):
+        assert pickem.leaders() == ['bgmaddox']
+
+    def test_none_before_scoring(self):
+        assert _make_pickem({'u1': 'alice'}, {'u1': {}}).leaders() == []

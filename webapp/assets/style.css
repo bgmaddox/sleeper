@@ -319,17 +319,6 @@ html, body {
   letter-spacing: 0.5px;
 }
 
-/* Tighten dropdown height inside the controls bar */
-.controls-bar .dash-dropdown .Select-control {
-  min-height: 30px !important;
-  height: 30px !important;
-}
-.controls-bar .dash-dropdown .Select-placeholder,
-.controls-bar .dash-dropdown .Select-value-label {
-  line-height: 30px !important;
-  color: var(--text-main) !important;
-}
-
 /* ── Toggle group (RadioItems rendered as button row) ────────────────────── */
 
 .toggle-group {
@@ -499,10 +488,14 @@ html, body {
   text-shadow: 0 0 8px var(--accent-glow);
 }
 
-/* ── Dropdowns (react-select overrides) ──────────────────────────────────── */
+/* ── Dropdowns (Dash 4) ──────────────────────────────────────────────────── */
+/* Dash 4 replaced react-select with its own component, so the old
+   .Select-control overrides stopped matching and every dropdown fell back to
+   Dash's white default with this theme's pale text on it. The menu renders in
+   a popover outside the button, hence the separate .dash-dropdown-content. */
 
-.dash-dropdown .Select-control,
-.dash-dropdown .Select-menu-outer {
+button.dash-dropdown,
+.dash-dropdown-content {
   background: var(--bg-input) !important;
   border: 1px solid var(--border) !important;
   color: var(--text-main) !important;
@@ -510,25 +503,22 @@ html, body {
   font-size: 0.82rem !important;
   border-radius: var(--radius) !important;
 }
-.dash-dropdown .Select-value-label,
-.dash-dropdown .Select-placeholder { color: var(--text-main) !important; }
-.dash-dropdown .Select-option { background: var(--bg-input) !important; color: var(--text-main) !important; }
-.dash-dropdown .Select-option:hover,
-.dash-dropdown .Select-option.is-focused { background: #1e4060 !important; }
-.dash-dropdown .Select-option.is-selected { background: #24516e !important; color: var(--accent) !important; }
-.dash-dropdown .Select-arrow { border-top-color: var(--text-muted) !important; }
-.dash-dropdown .Select-clear { color: var(--text-muted) !important; }
-.dash-dropdown .Select-input input { color: var(--text-main) !important; background: transparent !important; }
-.dash-dropdown .Select-value {
-  background: rgba(84, 162, 229, 0.15) !important;
+button.dash-dropdown:hover,
+button.dash-dropdown:focus-visible { border-color: var(--text-muted) !important; }
+button.dash-dropdown svg { color: var(--text-muted) !important; }
+.dash-dropdown-placeholder { color: var(--text-muted) !important; }
+.dash-dropdown-search-container {
+  background: var(--bg-input) !important;
   border-color: var(--border) !important;
+}
+.dash-dropdown-search {
   color: var(--text-main) !important;
+  font-family: var(--font-main) !important;
 }
-.dash-dropdown .Select-value-icon {
-  color: var(--text-muted) !important;
-  border-right-color: var(--border) !important;
-}
-.dash-dropdown .Select-value-icon:hover { color: var(--text-main) !important; background: transparent !important; }
+.dash-dropdown-option { color: var(--text-main) !important; }
+.dash-dropdown-option:hover,
+.dash-dropdown-option:focus-within { background: #1e4060 !important; }
+.dash-dropdown-option.selected { background: #24516e !important; color: var(--accent) !important; }
 
 /* ── Week slider ─────────────────────────────────────────────────────────── */
 
@@ -1113,6 +1103,15 @@ html, body {
 }
 
 .pr-data-row { border-radius: 6px; transition: background 0.15s; }
+
+/* Pick 'Em standings: identity lives in the swatch, the name stays in text ink */
+.pickem-swatch {
+  display: inline-block;
+  width: 10px; height: 10px;
+  border-radius: 50%;
+  margin-right: 8px;
+  vertical-align: middle;
+}
 .pr-data-row:hover td { background: rgba(84, 162, 229, 0.07); }
 
 .pr-td-rank  { text-align: center; font-weight: bold; line-height: 1; }
