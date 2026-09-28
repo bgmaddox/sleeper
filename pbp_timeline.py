@@ -365,9 +365,11 @@ def axis_breaks(times, min_gap=pd.Timedelta(minutes=60), pad=pd.Timedelta(minute
     gaps = ts.diff()
     breaks = []
     for end, gap in zip(ts[gaps > min_gap], gaps[gaps > min_gap]):
-        start = end - gap + pad
-        hidden = gap - 2 * pad
-        breaks.append(dict(values=[start.isoformat()], dvalue=hidden / pd.Timedelta(milliseconds=1)))
+        # Whole minutes: play times carry milliseconds, which only add noise
+        # to the figure JSON.
+        start = (end - gap + pad).ceil('min')
+        stop = (end - pad).floor('min')
+        breaks.append(dict(values=[start.isoformat()], dvalue=(stop - start) / pd.Timedelta(milliseconds=1)))
     return breaks
 
 

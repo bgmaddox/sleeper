@@ -215,3 +215,50 @@ def test_coalesce_merges_simultaneous_events():
     assert list(out['delta']) == [7.0, 2.0]
     assert list(out['cum']) == [7.0, 9.0]
     assert out['desc'].iloc[0] == 'X: TD catch<br>Y: XP'
+
+
+# ── App wiring ───────────────────────────────────────────────────────────────
+
+class _FakeWeek:
+    """Stands in for a Week: records which timeline method the callback used."""
+    def __init__(self, pbp_available):
+        self.pbp_available, self.calls = pbp_available, []
+
+    def PointsTimelinePBP(self):
+        self.calls.append('pbp')
+        if not self.pbp_available:
+            raise pt.PBPUnavailable('not yet')
+        return __import__('plotly.graph_objects', fromlist=['Figure']).Figure()
+
+    def PointsOverTheWeekend(self, animate=False):
+        self.calls.append('animated' if animate else 'static')
+        return __import__('plotly.graph_objects', fromlist=['Figure']).Figure()
+
+
+@pytest.fixture
+def app_module(monkeypatch):
+    import sys
+    root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    monkeypatch.syspath_prepend(os.path.join(root, 'webapp'))
+    os.environ.setdefault('SLEEPER_SKIP_EAGER_LOAD', '1')
+    return pytest.importorskip('app', reason='webapp/app.py not importable')
+
+
+def _text(component) -> str:
+    return str(component.to_plotly_json())
+
+
+def test_by_play_mode_renders_the_pbp_chart(app_module, monkeypatch):
+    week = _FakeWeek(pbp_available=True)
+    monkeypatch.setattr(app_module, '_week', lambda year, wk: week)
+    out = app_module._update_timeline_chart('pbp', 2025, 3)
+    assert week.calls == ['pbp']
+    assert "isn't published yet" not in _text(out)
+
+
+def test_by_play_mode_falls_back_when_unpublished(app_module, monkeypatch):
+    week = _FakeWeek(pbp_available=False)
+    monkeypatch.setattr(app_module, '_week', lambda year, wk: week)
+    out = app_module._update_timeline_chart('pbp', 2026, 4)
+    assert week.calls == ['pbp', 'static']
+    assert "isn't published yet" in _text(out)

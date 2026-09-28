@@ -62,6 +62,7 @@ from itsdangerous import URLSafeTimedSerializer, BadSignature, SignatureExpired
 import sleeper_core as core
 import data_loader as dl
 import side_bet_resolver
+import pbp_timeline
 
 
 # ── NFL Stadium Coordinates ───────────────────────────────────────────────────
@@ -1984,10 +1985,13 @@ def _tab_week(year, week, teams):
         initial_timeline = _err_graph(e)
     cards.append(html.Div([
         html.Div(f'Week {week} · Points Timeline', className='chart-title'),
-        html.Div('How scores accumulated by day through the matchup window', className='chart-subtitle'),
+        html.Div('How scores accumulated through the matchup window — By play steps at every '
+                 'scoring play once the NFL publishes play-by-play (usually the morning after)',
+                 className='chart-subtitle'),
         dcc.RadioItems(id='timeline-animate-toggle', options=[
             {'label': 'Static', 'value': 'static'},
             {'label': 'Animated', 'value': 'animated'},
+            {'label': 'By play', 'value': 'pbp'},
         ], value='static', className='toggle-group', inline=True),
         html.Div(initial_timeline, id='timeline-chart'),
     ], className='chart-card chart-col-full'))
@@ -3117,7 +3121,19 @@ def _update_timeline_chart(mode, year, week):
     if week_obj is None:
         return _loading_placeholder(year)
     try:
-        fig = week_obj.PointsOverTheWeekend(animate=(mode == 'animated'))
+        if mode == 'pbp':
+            try:
+                fig = week_obj.PointsTimelinePBP()
+            except pbp_timeline.PBPUnavailable:
+                fig = week_obj.PointsOverTheWeekend()
+                _strip(fig, 950).update_layout(margin=dict(t=80, b=100, l=80, r=40))
+                return html.Div([
+                    html.Div("Play-by-play for this week isn't published yet — showing the "
+                             "per-game view.", className='chart-subtitle'),
+                    _graph(fig),
+                ])
+        else:
+            fig = week_obj.PointsOverTheWeekend(animate=(mode == 'animated'))
         _strip(fig, 950).update_layout(margin=dict(t=80, b=100, l=80, r=40))
         return _graph(fig)
     except Exception as e:

@@ -81,6 +81,29 @@ the original hand entry — the starter-flag integrity test proves the underlyin
 exact — and the rest are challenges with only one or two data points. Do not "fix" a
 rule to match a hand entry without checking the data first.
 
+## Play-by-Play Timeline
+
+The This Week → Points Timeline card has a **By play** mode (`Week.PointsTimelinePBP`)
+that rebuilds each team's score play by play from nflverse play-by-play. The logic lives
+in `pbp_timeline.py`; `data_loader.fetch_pbp_week` fetches and caches one week at a time.
+
+- **Scoring comes from the league.** Per-play stats are keyed by Sleeper's stat names and
+  multiplied by that season's `scoring_settings`. Never hardcode a point value.
+- **Every line ends on the Sleeper total.** Whatever the plays don't explain lands as one
+  `final_adjust` step at the game's last play. For a team defense that step is the
+  points/yards-allowed tier bonus, by design.
+- **The backtest governs attribution changes.** `tests/test_pbp_timeline.py` requires ≥98%
+  of 2025 offensive starter-weeks within 0.5 pts of Sleeper (measured 99.9%). The tests
+  read cached PBP only. Warm it with `dl.fetch_pbp_weeks(2025, range(1, 18))`.
+- **Not live.** nflverse publishes PBP after games end, so an unpublished week falls back
+  to the per-game chart with a note, and a partly published week shows the missing games'
+  players as one step at their scheduled end.
+- **Place players by their plays, not by `Breakout.game_id`.** `Breakout`'s game columns
+  come from the player's end-of-season team, which is wrong for traded players before the
+  trade.
+- **Cache keys.** `PBP_COLUMNS` is part of what gets cached. Bump `_PBP_VERSION` when it
+  changes.
+
 ## Keeping Docs Current
 
 After any edit to `webapp/app.py`:
