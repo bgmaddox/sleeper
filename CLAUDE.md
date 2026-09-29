@@ -229,7 +229,7 @@ Key config dicts (loaded at import from `config/*.json` — edit the JSON, not t
 2. **Season** — win progression (wins / points toggle), points for/against (avg line toggle), scoring frequency (all/wins/losses toggle), bench strength (season / by-week toggle)
 3. **Players** — player points, violin distributions (4-way toggle: starters / all rostered / by-position starters / by-position all), score trends, top players (QB/RB/WR/TE toggle)
 4. **Playoffs** — winners + losers bracket cards, analytics charts (Champion's Road, Playoff Heat Check, Bench Points Left), all-time playoff history charts (Playoff Pedigree, Win Rate, Seeding vs. Finish, Records, Path to Glory)
-5. **All-Time** — hall of fame/shame, highest-scoring losses, closest margins, cumulative stats
+5. **All-Time** — career standings table (`AllTime.Standings()`: regular-season W-L/PF/PA, all-play and luck, playoffs and titles, per-season strip; a current-season week counts once its last game day has passed), hall of fame/shame, highest-scoring losses, closest margins, cumulative stats
 6. **Side Bets** — season scoreboard (D3 leaderboard), week navigator, per-week challenge cards with charts; supports all years in `SIDE_BET_SEASONS` (2019–2025)
 7. **Survivor** — survivor pool pick history and elimination tracking (2024–2025)
 8. **Head-to-Head** — all-time matchup history between two selected teams

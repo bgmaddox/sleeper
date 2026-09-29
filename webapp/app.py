@@ -667,6 +667,18 @@ def _card(fig, title='', half=False, subtitle=''):
     return html.Div(kids, className=f'chart-card {cls}')
 
 
+def _sort_th(label, col_idx, extra_cls=''):
+    """Header cell with sort toggle icon (wired up by assets/tablesort.js)."""
+    return html.Th(
+        [label, html.Span([
+            html.Span(className='pr-sort-up'),
+            html.Span(className='pr-sort-dn'),
+        ], className='pr-sort')],
+        className=f'pr-th pr-th-sortable {extra_cls}'.strip(),
+        **{'data-sortcol': str(col_idx)},
+    )
+
+
 def _power_rankings_native(sf, week_obj):
     """Native HTML power rankings table — replaces the buggy Plotly indicator chart."""
     sf.Calc(week_obj)
@@ -709,17 +721,6 @@ def _power_rankings_native(sf, week_obj):
     teams = sorted(Scores.keys(), key=lambda t: Ranks[t])
 
     RANK_COLORS = {1: '#FFC300', 2: '#A8BCC8', 3: '#CD8C52'}
-
-    def _sort_th(label, col_idx, extra_cls=''):
-        """Header cell with sort toggle icon."""
-        return html.Th(
-            [label, html.Span([
-                html.Span(className='pr-sort-up'),
-                html.Span(className='pr-sort-dn'),
-            ], className='pr-sort')],
-            className=f'pr-th pr-th-sortable {extra_cls}'.strip(),
-            **{'data-sortcol': str(col_idx)},
-        )
 
     # Col indices: 0=Rank 1=Pwr 2=chg(nosort) 3=Team 4=Score 5=Margin
     #              6=Efficiency 7=Record 8=Streak(nosort) 9=SsnPF 10=vsAvg 11=vsLeague 12=PwrWin%
@@ -2315,6 +2316,111 @@ def _tab_players(year, week, teams):
 
 # ── Tab: All-Time ─────────────────────────────────────────────────────────────
 
+def _alltime_standings_card(at):
+    """Career standings table from AllTime.Standings(), sortable by column."""
+    try:
+        results = core.AllTimePlayoffs().playoff_results
+    except Exception:
+        traceback.print_exc()
+        results = None
+    st = at.Standings(results)
+    if st.empty:
+        return _card(_err('No completed weeks yet.'), 'All-Time Standings')
+
+    colors = core.get_alltime_teamcolors()
+    years = sorted(y for y in ALL_YEARS if y not in _failed_years)
+
+    def _signed(val, fmt, suffix=''):
+        return html.Span(f'{val:+{fmt}}{suffix}',
+                         style={'color': '#90BE6D' if val >= 0 else '#F94144'})
+
+    def _strip(r):
+        played, won = set(r.seasons), set(r.title_years)
+        cells = []
+        for y in years:
+            state = 'title' if y in won else 'played' if y in played else 'absent'
+            note = {'title': 'Champion', 'played': 'played', 'absent': 'did not play'}[state]
+            cells.append(html.Span(
+                className=f'st-season st-season--{state}', title=f'{y} · {note}',
+                style={'background': colors.get(r.team, '#BDE2FF')} if state != 'absent' else None))
+        return cells
+
+    # Col indices match data-sortcol below
+    head = html.Thead(html.Tr([
+        _sort_th('#',        0,  'pr-th-center'),
+        _sort_th('Manager',  1),
+        _sort_th(f"Seasons '{str(years[0])[2:]}-'{str(years[-1])[2:]}", 2),
+        _sort_th('W-L',      3,  'pr-th-center'),
+        _sort_th('Win%',     4,  'pr-th-right'),
+        _sort_th('PF',       5,  'pr-th-right'),
+        _sort_th('PA',       6,  'pr-th-right st-hide-sm'),
+        _sort_th('Diff',     7,  'pr-th-right'),
+        _sort_th('PPG',      8,  'pr-th-right st-hide-sm'),
+        _sort_th('High',     9,  'pr-th-right st-hide-sm'),
+        _sort_th('All-Play', 10, 'pr-th-center st-hide-sm'),
+        _sort_th('Luck',     11, 'pr-th-right'),
+        _sort_th('Playoffs', 12, 'pr-th-center'),
+        _sort_th('PO W-L',   13, 'pr-th-center st-hide-sm'),
+        _sort_th('Titles',   14, 'pr-th-center'),
+    ]))
+
+    rows = []
+    for r in st.itertuples():
+        rec = f'{r.wins}-{r.losses}' + (f'-{r.ties}' if r.ties else '')
+        ap = f'{r.ap_w:g}-{r.ap_l:g}'
+        rows.append(html.Tr([
+            html.Td(str(r.rank), className='pr-td pr-td-rank', **{'data-val': str(r.rank)}),
+            html.Td(r.team, className='pr-td pr-td-team',
+                    style={'color': colors.get(r.team, '#BDE2FF')},
+                    **{'data-val': r.team, 'data-sort-type': 'str'}),
+            html.Td(_strip(r), className='pr-td st-td-seasons',
+                    **{'data-val': str(len(r.seasons))}),
+            html.Td(rec, className='pr-td pr-td-center', **{'data-val': str(r.wins)}),
+            html.Td(f'{r.win_pct:.3f}'.lstrip('0'), className='pr-td pr-td-score',
+                    **{'data-val': str(r.win_pct)}),
+            html.Td(f'{r.pf:,.0f}', className='pr-td pr-td-right', **{'data-val': str(r.pf)}),
+            html.Td(f'{r.pa:,.0f}', className='pr-td pr-td-right pr-td-muted st-hide-sm',
+                    **{'data-val': str(r.pa)}),
+            html.Td(_signed(r.diff, ',.0f'), className='pr-td pr-td-right',
+                    **{'data-val': str(r.diff)}),
+            html.Td(f'{r.ppg:.1f}', className='pr-td pr-td-right st-hide-sm',
+                    **{'data-val': str(r.ppg)}),
+            html.Td(f'{r.high:.1f}', className='pr-td pr-td-right pr-td-muted st-hide-sm',
+                    **{'data-val': str(r.high)}),
+            html.Td(ap, className='pr-td pr-td-center pr-td-muted st-hide-sm',
+                    title=f'{r.ap_pct:.1%} all-play win rate', **{'data-val': str(r.ap_pct)}),
+            html.Td(_signed(r.luck * 100, '.1f', '%'), className='pr-td pr-td-right',
+                    **{'data-val': str(r.luck)}),
+            html.Td(str(r.playoffs) if r.playoffs else '—',
+                    className='pr-td pr-td-center', **{'data-val': str(r.playoffs)}),
+            html.Td(f'{r.po_wins}-{r.po_losses}' if r.playoffs else '—',
+                    className='pr-td pr-td-center pr-td-muted st-hide-sm',
+                    **{'data-val': str(r.po_wins)}),
+            html.Td(str(r.titles) if r.titles else '—',
+                    className='pr-td pr-td-center' + (' st-td-titles' if r.titles else ' pr-td-muted'),
+                    title=', '.join(map(str, r.title_years)) or None,
+                    **{'data-val': str(r.titles * 10 + r.runner_up)}),
+        ], className='pr-data-row' + ('' if r.active else ' st-row-former')))
+
+    return html.Div([
+        html.Div('All-Time Standings', className='chart-title'),
+        html.Div('Career regular-season record for every manager in league history. '
+                 'All-Play is the record from playing every team every week; Luck is '
+                 'win % above or below it. Playoffs and titles count the winners bracket.',
+                 className='chart-subtitle'),
+        html.Div([
+            html.Span([html.Span(className='st-season st-season--played st-legend-swatch'), 'played']),
+            html.Span([html.Span(className='st-season st-season--title st-legend-swatch'), 'champion']),
+            html.Span([html.Span(className='st-season st-season--absent'), 'not in league']),
+            html.Span('Dimmed rows: no longer in the league', className='pr-td-muted'),
+        ], className='st-legend'),
+        html.Div(html.Table([head, html.Tbody(rows)], className='pr-table',
+                            **{'data-sortable': 'true'}),
+                 className='st-scroll'),
+    ], className='chart-card chart-col-full')
+
+
+
 def _tab_alltime(teams, year=None):
     missing = [y for y in ALL_YEARS if y not in _data and y not in _failed_years]
     if missing:
@@ -2331,6 +2437,12 @@ def _tab_alltime(teams, year=None):
     banner = _failed_years_banner()
     if banner is not None:
         cards.append(banner)
+
+    try:
+        cards.append(_alltime_standings_card(at))
+    except Exception as e:
+        traceback.print_exc()
+        cards.append(_card(_err(str(e)), 'All-Time Standings'))
 
     _alltime_meta = [
         ('HallofFame_Team',     'Hall of Fame · Best Team Scores',    False, 'The highest single-week team scores across all seasons'),

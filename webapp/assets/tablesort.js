@@ -1,26 +1,30 @@
-/* Power rankings table — client-side column sort.
-   Survives Dash re-renders via MutationObserver. */
+/* Client-side column sort for the Power Rankings table and any table marked
+   data-sortable. Survives Dash re-renders via MutationObserver. */
 (function () {
-  var sortState = { col: null, dir: 1 };
+  var SELECTOR = '#pr-table, table[data-sortable]';
 
-  function attachSort() {
-    var table = document.getElementById('pr-table');
-    if (!table || table._sortAttached) return;
+  function attachSort(table) {
+    if (table._sortAttached) return;
     table._sortAttached = true;
+    var state = { col: null, dir: 1 };
 
     table.querySelectorAll('th[data-sortcol]').forEach(function (th) {
       th.addEventListener('click', function () {
         var col = parseInt(th.dataset.sortcol, 10);
-        if (sortState.col === col) {
-          sortState.dir *= -1;
+        if (state.col === col) {
+          state.dir *= -1;
         } else {
-          sortState.col = col;
-          sortState.dir = 1;
+          state.col = col;
+          state.dir = 1;
         }
-        sortRows(table, col, sortState.dir);
-        updateIcons(table, col, sortState.dir);
+        sortRows(table, col, state.dir);
+        updateIcons(table, col, state.dir);
       });
     });
+  }
+
+  function attachAll() {
+    document.querySelectorAll(SELECTOR).forEach(attachSort);
   }
 
   function sortRows(table, colIdx, dir) {
@@ -59,14 +63,8 @@
   }
 
   /* Re-attach after each Dash render that swaps the DOM */
-  var observer = new MutationObserver(function () {
-    var table = document.getElementById('pr-table');
-    if (table && !table._sortAttached) {
-      sortState = { col: null, dir: 1 };
-      attachSort();
-    }
-  });
+  var observer = new MutationObserver(attachAll);
   observer.observe(document.body, { childList: true, subtree: true });
 
-  attachSort();
+  attachAll();
 })();

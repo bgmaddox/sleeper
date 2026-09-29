@@ -11,6 +11,7 @@ from pandas import json_normalize
 import json
 import numpy as np
 import re
+from datetime import datetime
 import plotly.express as px
 import plotly.io as pio
 import plotly.graph_objects as go
@@ -615,7 +616,11 @@ class Week(TeamColorsMixin):
         self.league = league
         self.id = self.league.id
         self.year = self.league.year
-        
+        # 2019-2020 playoffs began in week 14, later seasons in week 15
+        self.playoff_week_start = int(
+            self.league.league_settings.get('settings.playoff_week_start', 15))
+        self.season_label = 'Regular' if week < self.playoff_week_start else 'Playoff'
+
         self.ImportWeek()
         self.WeeklyDataframe()
         self.SetTeamColors()
@@ -643,9 +648,6 @@ class Week(TeamColorsMixin):
         # Initialize an empty list to hold the rows
         JSON_data = self.json
         rows = []
-
-        Regular = list(range(1,15))
-        Playoff = list(range(15,19))
 
         WeeklyNFLData = self.league.WeeklyNFLData
         schedule = self.league.schedule
@@ -714,10 +716,7 @@ class Week(TeamColorsMixin):
 
         dfBreakout['week_id'] = dfBreakout['recent_teams'] + '-' + dfBreakout['week'].astype(str)
         
-        if self.week in Regular:
-            dfBreakout['Season'] = 'Regular'
-        elif self.week in Playoff:
-            dfBreakout['Season'] = 'Playoff'
+        dfBreakout['Season'] = self.season_label
 
         # ID-based join: Sleeper player_id → GSIS player_id → nflverse stats row.
         # DEF and any unmatched players get gsis_id=NaN and won't match stats (same as before).
@@ -806,7 +805,7 @@ class Week(TeamColorsMixin):
         WeeklyDf = WeeklyDf.rename(columns=positions).sort_values('Matchup')
         WeeklyDf = WeeklyDf.reset_index().rename({'index':'Team'}, axis = 1)
         WeeklyDf['Week'] = self.week
-        WeeklyDf['Season'] = "Regular" if self.week < 15 else "Playoff"
+        WeeklyDf['Season'] = self.season_label
         WeeklyDf['Week Index'] = self.week + (14 * (self.year - 2019))
         WeeklyDf['Year'] = self.year
         
@@ -3463,6 +3462,10 @@ class AllTimePlayoffs:
                           if wk < playoff_week_start and not df.empty}
         if not reg_weeks_data:
             return
+        # Sleeper seeds the bracket from live standings all season; it only
+        # means anything once the regular season is over.
+        if max(AllMatchesDict.get(year, {}), default=0) < playoff_week_start:
+            return
 
         all_reg = pd.concat(list(reg_weeks_data.values()), ignore_index=True)
         rec = all_reg.groupby('Team').agg(wins=('Won', 'sum'), total_pf=('Total', 'sum'))
@@ -3495,7 +3498,9 @@ class AllTimePlayoffs:
                     team1 = roster_map.get(int(t1_id), f"Roster {t1_id}")
                     team2 = roster_map.get(int(t2_id), f"Roster {t2_id}")
                     w_id  = entry.get('w')
-                    winner = roster_map.get(int(w_id)) if w_id else None
+                    if not w_id:
+                        continue  # not played yet — neither a win nor a loss
+                    winner = roster_map.get(int(w_id))
                     is_placement = entry.get('p') is not None
 
                     score1 = self._get_score(matches_df, team1)
@@ -3794,7 +3799,84 @@ class AllTime(TeamColorsMixin):
     def _default_teamcolors(self):
         return get_alltime_teamcolors()
 
-    
+    def _final_regular_season(self, now=None):
+        """Regular-season rows from weeks whose last game day has passed.
+
+        Past seasons are always final. In the current season a week still being
+        played would hand out wins on partial scores, so it waits until the day
+        after its last game.
+        """
+        reg = self.Matches[self.Matches['Season'] == 'Regular']
+        now = now or datetime.now(side_bet_resolver.LEAGUE_TZ)
+        live = []
+        for week, bo in AllBreakoutDict.get(CURRENT_SEASON, {}).items():
+            last = side_bet_resolver.last_gameday(bo)
+            if last is None or last >= now.date():
+                live.append(week)
+        return reg[~((reg['Year'] == CURRENT_SEASON) & reg['Week'].isin(live))]
+
+    def Standings(self, playoff_results=None, now=None):
+        """Career regular-season standings, one row per manager.
+
+        W-L, points and all-play come from regular-season weeks only, so
+        consolation games never pad a record. Playoff columns come from
+        ``AllTimePlayoffs.playoff_results`` (winners bracket) when supplied.
+
+        All-play is the record a manager would have if they played every other
+        team every week; ``luck`` is actual win % minus all-play win %.
+        """
+        reg = self._final_regular_season(now).copy()
+        if reg.empty:
+            return pd.DataFrame()
+
+        # All-play: beat every lower score that week, half a win per tie
+        grp = reg.groupby(['Year', 'Week'])['Total']
+        n = grp.transform('size')
+        below = grp.rank(method='average') - 1
+        reg['ap_w'] = below
+        reg['ap_l'] = (n - 1) - below
+        reg['tie'] = (reg['Won'] == 0.5).astype(int)
+
+        g = reg.groupby('Team')
+        st = pd.DataFrame({
+            'games':   g.size(),
+            'wins':    g['Won'].apply(lambda s: int((s == 1).sum())),
+            'losses':  g['Won'].apply(lambda s: int((s == 0).sum())),
+            'ties':    g['tie'].sum().astype(int),
+            'pf':      g['Total'].sum().round(2),
+            'pa':      g['Opp'].sum().round(2),
+            'high':    g['Total'].max().round(2),
+            'ap_w':    g['ap_w'].sum(),
+            'ap_l':    g['ap_l'].sum(),
+            'seasons': g['Year'].apply(lambda s: sorted(int(y) for y in s.unique())),
+        })
+        st['win_pct'] = ((st['wins'] + 0.5 * st['ties']) / st['games']).round(4)
+        st['diff']    = (st['pf'] - st['pa']).round(2)
+        st['ppg']     = (st['pf'] / st['games']).round(2)
+        st['ap_pct']  = (st['ap_w'] / (st['ap_w'] + st['ap_l'])).round(4)
+        st['luck']    = (st['win_pct'] - st['ap_pct']).round(4)
+
+        pr = playoff_results if playoff_results is not None else pd.DataFrame()
+        for col in ('playoffs', 'po_wins', 'po_losses', 'titles', 'runner_up'):
+            st[col] = 0
+        st['title_years'] = [[] for _ in range(len(st))]
+        if not pr.empty:
+            for team, t in pr.groupby('team'):
+                if team not in st.index:
+                    continue
+                st.at[team, 'playoffs']    = len(t)
+                st.at[team, 'po_wins']     = int(t['wins'].sum())
+                st.at[team, 'po_losses']   = int(t['losses'].sum())
+                st.at[team, 'titles']      = int((t['placement'] == 1).sum())
+                st.at[team, 'runner_up']   = int((t['placement'] == 2).sum())
+                st.at[team, 'title_years'] = sorted(int(y) for y in t.loc[t['placement'] == 1, 'year'])
+
+        st['active'] = st.index.isin(roster_ids.get(CURRENT_SEASON, {}).values())
+        st = st.sort_values(['wins', 'win_pct', 'pf'], ascending=False)
+        st['rank'] = range(1, len(st) + 1)
+        return st.reset_index(names='team')
+
+
     def OppWinPercentage(self, team, opp):
         OppTable = pd.pivot_table(self.Matches, values='Won',index='Team',columns='Opp_team',aggfunc='mean').round(2).fillna('')
         result = OppTable.loc[team,opp]

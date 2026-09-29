@@ -110,7 +110,9 @@ def _name_fingerprint(year: int) -> str:
 # column added or derived differently), so every stale pickle — here and on
 # the Pi — rebuilds instead of silently serving the old derivation.
 #   2: Breakout places traded players in the game they played that week.
-SEASON_SCHEMA = 2
+#   3: Season (Regular/Playoff) follows the league's playoff_week_start, so
+#      2019-2020 week 14 is a playoff week rather than a regular-season one.
+SEASON_SCHEMA = 3
 
 
 def season_cache_key(year: int, max_week: int = 18) -> str:

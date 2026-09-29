@@ -1699,3 +1699,34 @@ button.dash-dropdown svg { color: var(--text-muted) !important; }
     transform: none;
   }
 }
+
+/* ── All-Time Standings ──────────────────────────────────────────────────── */
+
+.st-scroll { overflow-x: auto; }
+
+.st-td-seasons { white-space: nowrap; }
+.st-season {
+  display: inline-block;
+  width: 10px; height: 10px;
+  margin-right: 3px;
+  border-radius: 2px;
+  vertical-align: middle;
+}
+.st-season--played { opacity: 0.85; }
+/* Gold ring around the team colour, so it reads even for a gold team */
+.st-season--title  { margin: 0 6px 0 3px; box-shadow: 0 0 0 2px var(--bg-card), 0 0 0 3.5px #FFC300; }
+.st-season--absent { border: 1px solid var(--border); }
+
+.st-td-titles { color: #FFC300; font-weight: bold; }
+.st-row-former td { opacity: 0.55; }
+
+.st-legend {
+  display: flex; flex-wrap: wrap; gap: 6px 18px;
+  font-size: 0.7rem; color: var(--text-muted);
+  margin: 2px 0 6px;
+}
+.st-legend-swatch { background: var(--text-muted); }
+
+@media (max-width: 768px) {
+  .st-hide-sm { display: none; }
+}
