@@ -820,6 +820,14 @@ button.dash-dropdown svg { color: var(--text-muted) !important; }
   margin-bottom: 2px;
 }
 
+/* One-line stand-in for a chart that doesn't exist yet (e.g. locked playoff odds) */
+.chart-locked-note {
+  font-family: var(--font-main);
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  padding: 4px 6px 0;
+}
+
 /* Fine-print caveat line at the bottom of a chart card */
 .chart-footnote {
   font-family: var(--font-main);

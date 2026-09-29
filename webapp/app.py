@@ -1920,10 +1920,12 @@ def _playoff_odds_card(prob_data, year, week):
         ], className='chart-card chart-col-full')
 
     if week < EARLY:
-        locked = _empty(f'Projections unlock Week {EARLY}')
-        locked.update_layout(height=260)
+        # No graph while locked — a blank chart here was a tall empty box.
+        # The card collapses to its header until the odds exist.
+        left = EARLY - week
+        note = f'{left} more week{"s" if left != 1 else ""} of results before the odds mean anything.'
         return _wrap(
-            _graph(locked),
+            html.Div(note, className='chart-locked-note'),
             subtitle=f'Projections unlock Week {EARLY}',
         )
 
