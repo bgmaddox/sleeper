@@ -1224,9 +1224,13 @@ class Week(TeamColorsMixin):
                     fill='tozeroy',
                     marker=dict(size=[0 if k in ('anchor', 'end') else 5 for k in td['kind']],
                                 color=self.teamcolors[team]),
-                    customdata=np.stack([[team] * len(td), td['desc'], td['delta']], axis=-1),
+                    # Pre-format the delta: np.stack with the string columns
+                    # turns it into text, which Plotly's :+.2f can't format —
+                    # the hover then showed raw float noise (0.30000000000000004).
+                    customdata=np.stack([[team] * len(td), td['desc'],
+                                         td['delta'].map('{:+.2f}'.format)], axis=-1),
                     hovertemplate="<b>%{customdata[0]}</b><br>%{customdata[1]} "
-                                  "(%{customdata[2]:+.2f})<br>Total: <b>%{y:.2f}</b><extra></extra>",
+                                  "(%{customdata[2]})<br>Total: <b>%{y:.2f}</b><extra></extra>",
                 ), row=r, col=c)
 
         # Ticks at this week's kickoff slots, labelled like the per-game chart.
