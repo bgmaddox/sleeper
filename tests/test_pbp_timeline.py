@@ -20,6 +20,7 @@ import pytest
 
 import data_loader as dl
 import pbp_timeline as pt
+import sleeper_core as core
 
 SETTINGS = {
     'rec': 0.5, 'rec_yd': 0.1, 'rec_td': 6, 'rush_yd': 0.1, 'rush_td': 6,
@@ -143,6 +144,29 @@ def test_every_team_ends_on_its_sleeper_total(timelines_2025):
         assert (diff < 0.01).all(), f'week {w}: {diff[diff >= 0.01].to_dict()}'
 
 
+def test_matchup_leads_end_on_the_final_margin(timelines_2025):
+    """The lead line is A's running total minus B's, so its last value is the
+    real Sleeper margin — for every matchup in every cached week."""
+    for w, (breakout, tl) in timelines_2025.items():
+        sleeper = breakout[breakout['starter'] == 1].groupby('team')['points'].sum()
+        leads = pt.matchup_leads(tl[tl['matchup'].notna()])
+        for m, g in leads.groupby('matchup'):
+            a, b = g['team_a'].iloc[0], g['team_b'].iloc[0]
+            assert abs(g['lead'].iloc[-1] - (sleeper[a] - sleeper[b])) < 0.01, (w, m)
+
+
+def test_matchup_leads_step_with_each_score():
+    ts = pd.to_datetime(['2025-09-07 13:10', '2025-09-07 13:40', '2025-09-07 16:30'])
+    tl = pd.DataFrame({
+        'ts': [ts[0], ts[1], ts[2]], 'team': ['A', 'B', 'A'], 'matchup': [1, 1, 1],
+        'player': ['p1', 'p2', 'p3'], 'delta': [6.0, 3.0, 3.0], 'cum': [6.0, 3.0, 9.0],
+        'desc': ['TD', 'FG', 'FG'], 'kind': ['play'] * 3,
+    })
+    leads = pt.matchup_leads(tl)
+    assert list(leads['lead']) == [6.0, 3.0, 6.0]
+    assert (leads['team_a'] == 'A').all() and (leads['team_b'] == 'B').all()
+
+
 def test_play_attribution_backtest(timelines_2025):
     """Share of offensive starter-weeks whose reconciliation step is < 0.5 pts."""
     small = total = 0
@@ -262,3 +286,38 @@ def test_by_play_mode_falls_back_when_unpublished(app_module, monkeypatch):
     out = app_module._update_timeline_chart('pbp', 2026, 4)
     assert week.calls == ['pbp', 'static']
     assert "isn't published yet" in _text(out)
+
+
+def test_lead_mode_renders_and_falls_back(app_module, monkeypatch):
+    """'Who led' draws the lead chart, and like By play falls back to the
+    per-game view when the week's play-by-play isn't published."""
+    import plotly.graph_objects as go
+
+    class _LeadWeek(_FakeWeek):
+        def MatchupLeadPBP(self):
+            self.calls.append('lead')
+            if not self.pbp_available:
+                raise pt.PBPUnavailable('not yet')
+            return go.Figure(layout=dict(height=500))
+
+    week = _LeadWeek(pbp_available=True)
+    monkeypatch.setattr(app_module, '_week', lambda year, wk: week)
+    app_module._update_timeline_chart('lead', 2025, 3)
+    assert week.calls == ['lead']
+    week = _LeadWeek(pbp_available=False)
+    monkeypatch.setattr(app_module, '_week', lambda year, wk: week)
+    out = app_module._update_timeline_chart('lead', 2026, 4)
+    assert week.calls[0] == 'lead' and 'static' in week.calls
+    assert "isn't published yet" in _text(out)
+
+
+def test_matchup_lead_figure_has_a_panel_per_matchup(season_2025):
+    league, _, weeks = season_2025
+    cached = _cached_weeks(2025)
+    if not cached:
+        pytest.skip('2025 play-by-play not cached — see module docstring')
+    w = weeks[cached[0]]
+    fig = w.MatchupLeadPBP()
+    n = len(core.roster_ids[2025]) // 2                # every regular-season team has a matchup
+    assert len(fig.layout.annotations) == n          # one title per matchup panel
+    assert len(fig.data) == 3 * n                    # two fills + the lead line each

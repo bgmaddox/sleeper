@@ -26,8 +26,12 @@ def atp():
     path = dl.season_cache_path(2024)
     if not os.path.exists(path):
         pytest.skip("2024 cache not found — start the app once to build it")
-    # Load at least 2024 so AllMatchesDict is populated
-    dl.load_data_for_year(2024, verbose=False)
+    # Load every cached season, as the app does. With only 2024 loaded,
+    # AllTimePlayoffs can't see other years' matchups, so it can't drop
+    # unplayed games — results then depended on which test ran first.
+    for year in core.AVAILABLE_YEARS:
+        if os.path.exists(dl.season_cache_path(year)):
+            dl.load_data_for_year(year, verbose=False)
     return core.AllTimePlayoffs()
 
 
@@ -82,10 +86,15 @@ class TestAllTimePlayoffsData:
         assert (per_year == 6).all(), \
             f"Expected 6 teams per year in results:\n{per_year}"
 
+    # 2020's consolation final (week 16) was never played: those six teams had
+    # no opponent that week in the Sleeper matchups. 3 games fewer = 22 rows.
+    UNPLAYED_ROWS = {2020: 6}
+
     def test_games_has_fourteen_games_per_year(self, atp):
         # 7 winners + 7 losers = 14 matchups × 2 rows each = 28 rows per year
         per_year = atp.playoff_games.groupby('year').size()
-        assert (per_year == 28).all(), \
+        expected = {y: 28 - self.UNPLAYED_ROWS.get(y, 0) for y in per_year.index}
+        assert per_year.to_dict() == expected, \
             f"Expected 28 game rows per year (14 games × 2 teams):\n{per_year}"
 
     def test_no_null_team_names_in_results(self, atp):

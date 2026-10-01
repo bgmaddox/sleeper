@@ -622,11 +622,26 @@ def _chip_abbrev(name):
 
 
 def _strip(fig, h=580):
+    """Card-ready figure: no title (the card has one), full width, fixed height.
+
+    Margins start small and grow to fit (automargin), so long tick labels and
+    axis titles are never clipped. The bottom band is only reserved when a
+    legend is actually shown — otherwise it was ~100px of empty card.
+    """
+    legend_shown = fig.layout.showlegend is True
     fig.update_layout(
         title=None, width=None, height=h,
-        margin=dict(t=20, b=100, l=80, r=40),
-        legend=dict(orientation='h', yanchor='top', y=-0.12, xanchor='center', x=0.5),
+        margin=dict(t=20, b=100 if legend_shown else 30, l=40, r=30),
+        legend=dict(orientation='h', yref='container', yanchor='bottom', y=0,
+                    xanchor='center', x=0.5),
     )
+    return _automargin(fig)
+
+
+def _automargin(fig):
+    """Let every cartesian axis grow its margin to fit its labels and title."""
+    fig.update_xaxes(automargin=True)
+    fig.update_yaxes(automargin=True)
     return fig
 
 
@@ -816,7 +831,9 @@ def _power_rankings_native(sf, week_obj):
     return html.Div([
         html.Div('Power Rankings', className='chart-title'),
         html.Div('Composite rank built from record, points for, and strength of schedule through this week', className='chart-subtitle'),
-        html.Table([thead, html.Tbody(data_rows)], id='pr-table', className='pr-table'),
+        # Scrolls sideways on a phone instead of the card clipping the right columns.
+        html.Div(html.Table([thead, html.Tbody(data_rows)], id='pr-table', className='pr-table'),
+                 className='st-scroll'),
     ], className='chart-card chart-col-full')
 
 
@@ -2024,13 +2041,14 @@ def _tab_week(year, week, teams):
             {'label': 'Static', 'value': 'static'},
             {'label': 'Animated', 'value': 'animated'},
             {'label': 'By play', 'value': 'pbp'},
+            {'label': 'Who led', 'value': 'lead'},
         ], value='static', className='toggle-group', inline=True),
         html.Div(initial_timeline, id='timeline-chart'),
     ], className='chart-card chart-col-full'))
 
     try:
         fig = sf.LuckChart(week)
-        initial_luck = _graph(_strip(fig, 660))
+        initial_luck = _graph(_strip(fig, 660).update_layout(margin_b=50))   # room for the key
     except Exception as e:
         initial_luck = _err_graph(e)
     cards.append(html.Div([
@@ -2045,9 +2063,9 @@ def _tab_week(year, week, teams):
 
     try:
         fig = sf.LineupEfficiencyChart(week)
-        _strip(fig, 680).update_layout(
-            margin=dict(t=80, b=180, l=140, r=40),
-            legend=dict(orientation='h', x=0.5, xanchor='center', y=1.0, yanchor='bottom'),
+        _strip(fig, 620).update_layout(
+            margin=dict(t=20, b=60, l=40, r=40),
+            legend=dict(orientation='h', x=0.5, xanchor='center', yref='container', y=0, yanchor='bottom'),
         )
         cards.append(_card(fig, f'Week {week} · Lineup Efficiency', subtitle='Actual score vs best possible lineup — measures how well each team set their roster'))
     except Exception as e:
@@ -2102,6 +2120,30 @@ def _tab_season(year, week, teams):
         ], value='total', className='toggle-group', inline=True),
         html.Div(initial_pfa, id='pfa-chart'),
     ], className='chart-card chart-col-full'))
+
+    # Schedule swap — built from the unfiltered season: a team's swapped record
+    # needs every opponent's score, even with the team filter on.
+    try:
+        fig = season.ScheduleSwapChart(week)
+        _strip(fig, 640).update_layout(margin=dict(t=20, b=30, l=40, r=30))
+        swap_el = _graph(fig)
+    except Exception as e:
+        swap_el = _err_graph(e)
+    cards.append(html.Div([
+        html.Div('Schedule Swap', className='chart-title'),
+        html.Div("Each row's record had it played each column's schedule. Blue is more wins than it really has, red is fewer; the diagonal is the real record.",
+                 className='chart-subtitle'),
+        swap_el,
+    ], className='chart-card chart-col-full'))
+
+    try:
+        fig = season.RosterSourceChart(week)
+        _strip(fig, fig.layout.height)
+        cards.append(_card(fig, 'Where the Points Came From',
+                           subtitle='Starter points split by how each player arrived: the draft, waivers, free agency or a trade'))
+    except Exception as e:
+        traceback.print_exc()
+        cards.append(_card(_err(str(e)), 'Where the Points Came From'))
 
     try:
         fig = sf.WeeklyWinsGraphBreakout(week)
@@ -2452,14 +2494,16 @@ def _tab_alltime(teams, year=None):
         ('HallofShame_Team',    'Hall of Shame · Worst Scores',       False, 'The lowest team scores across all seasons'),
         ('HighestScoringLosers','Highest-Scoring Losses',             False, 'High scores that still resulted in a loss — the cruelest outcomes'),
         ('SmallestMargins',     'Smallest Margins of Victory',        False, 'Games decided by the narrowest possible margin'),
-        ('ForAgainstwithTeams', 'All-Time Points For & Against',      False, 'Career points scored vs allowed — the all-time offensive and defensive record'),
+        ('CloseGameChart',      'Close Games',                        False, 'All-time record in games decided by under 5 points, regular season and playoffs'),
+        ('ForAgainstwithTeams', 'Points With & Against NFL Teams',    False, "Most fantasy points a manager has scored from one NFL team's players, and against one NFL opponent"),
     ]
     for fn, title, half, sub in _alltime_meta:
         try:
             fig = getattr(at, fn)()
-            stripped = _strip(fig, 700)
-            if fn in ('HallofFame_Team', 'HallofFame_Player', 'HallofShame_Team', 'HighestScoringLosers'):
-                stripped.update_layout(margin=dict(l=280, t=60, b=80))
+            # Close Games sizes itself to the number of managers.
+            stripped = _strip(fig, fig.layout.height if fn == 'CloseGameChart' else 700)
+            if fn == 'ForAgainstwithTeams':
+                stripped.update_layout(margin_t=60)   # the two subplot titles sit above each plot
             cards.append(_card(stripped, title, half=half, subtitle=sub))
         except Exception as e:
             traceback.print_exc()
@@ -2784,9 +2828,14 @@ def _tab_sidebets(year):
                     fig = getattr(sb, method_name)(week_obj, top=None)
                 else:
                     fig = getattr(sb, method_name)(week_obj)
+                # Several side bet charts park their legend at the top, on the
+                # x-axis; send every legend to the bottom of the figure instead.
+                legend_shown = fig.layout.showlegend is True
                 fig.update_layout(title=None, width=None, height=520,
-                                  margin=dict(t=20, b=80, l=220, r=40))
-                chart_el = _graph(fig)
+                                  margin=dict(t=20, b=90 if legend_shown else 40, l=40, r=40),
+                                  legend=dict(yref='container', y=0, yanchor='bottom',
+                                              x=0.5, xanchor='center', orientation='h'))
+                chart_el = _graph(_automargin(fig))
             except Exception as e:
                 chart_el = _err_graph(e)
         else:
@@ -2994,7 +3043,7 @@ def _tab_pickem(year):
         html.Div('Standings', className='chart-title'),
         html.Div('Total correct picks · weeks won splits ties · best is the top single week',
                  className='chart-subtitle'),
-        _pickem_standings_table(pe),
+        html.Div(_pickem_standings_table(pe), className='st-scroll'),
     ], className='chart-card chart-col-full')
 
     return html.Div([
@@ -3197,7 +3246,7 @@ def _update_luck_chart(mode, year, week, teams):
     try:
         if mode == 'ytd':
             fig = sf.LuckChart(week)
-            return _graph(_strip(fig, 660))
+            return _graph(_strip(fig, 660).update_layout(margin_b=50))   # room for the key
 
         # This Week Only — scatter of single-week scores vs opponent scores
         sf.WeeklyWins(week)
@@ -3264,6 +3313,14 @@ def _update_timeline_chart(mode, year, week):
     if week_obj is None:
         return _loading_placeholder(year)
     try:
+        if mode == 'lead':
+            # Matchup leads: one panel per matchup, so the figure sets its own height.
+            try:
+                fig = week_obj.MatchupLeadPBP()
+                _strip(fig, fig.layout.height).update_layout(margin=dict(t=40, b=40, l=40, r=30))
+                return _graph(fig)
+            except pbp_timeline.PBPUnavailable:
+                mode = 'pbp'          # same fallback as By play, below
         if mode == 'pbp':
             try:
                 fig = week_obj.PointsTimelinePBP()

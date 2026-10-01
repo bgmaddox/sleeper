@@ -128,10 +128,23 @@ class TestWeekChartMethods:
         fig = sidebet_2025.Week9(week8_2025)
         assert isinstance(fig, go.Figure), "Week9 should return a go.Figure (data or placeholder)"
 
-    @pytest.mark.slow
     def test_week10_returns_figure(self, sidebet_2025, week8_2025):
         fig = sidebet_2025.Week10(week8_2025)
         assert _is_valid_fig(fig), "Week10 returned empty or invalid figure"
+
+    def test_week10_one_bar_per_manager_led_by_the_resolved_winner(self, sidebet_2025, week8_2025):
+        """NFL Franchise Week: each manager's best single-franchise stack, one bar
+        each, colored by person — and the top bar is who the resolver crowns."""
+        import side_bet_resolver as r
+        fig = sidebet_2025.Week10(week8_2025)
+        bar = fig.data[0]
+        managers = [lbl.split(' · ')[0] for lbl in bar.y]
+        assert sorted(managers) == sorted(core.roster_ids[2025].values())
+        top = managers[list(bar.x).index(max(bar.x))]
+        ctx = r.Ctx(year=2025, week=week8_2025.week, breakout=week8_2025.Breakout,
+                    matches=None, league_id=None)
+        assert top in r.r_nfl_franchise(ctx)
+        assert list(bar.marker.color) == [sidebet_2025.teamcolors[m] for m in managers]
 
     def test_week11_returns_figure(self, sidebet_2025, week8_2025):
         fig = sidebet_2025.Week11(week8_2025)

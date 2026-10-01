@@ -217,15 +217,30 @@ def fetch_losers_bracket(league_id: int) -> list:
     _save_cache(key, data)
     return data
 
-def fetch_transactions_json(league_id: int, week: int) -> list:
-    """All transactions (trades, waivers, FA pickups) for a given week."""
+def fetch_transactions_json(league_id: int, week: int, refresh: bool = False) -> list:
+    """All transactions (trades, waivers, FA pickups) for a given week.
+
+    Cached permanently, which is right for a finished week. For the week still
+    in progress pass refresh=True — a copy cached on Tuesday would otherwise
+    miss every pickup made later that week, for good.
+    """
     key = f"transactions_{league_id}_{week}"
-    cached = _load_cache(key)
+    cached = None if refresh else _load_cache(key)
     if cached is not None:
         return cached
     data = _get_json(
         f"https://api.sleeper.app/v1/league/{league_id}/transactions/{week}"
     )
+    _save_cache(key, data)
+    return data
+
+def fetch_draft_picks_json(draft_id) -> list:
+    """Every pick of a draft. Picks never change once the draft is done."""
+    key = f"draft_picks_{draft_id}"
+    cached = _load_cache(key)
+    if cached is not None:
+        return cached
+    data = _get_json(f"https://api.sleeper.app/v1/draft/{draft_id}/picks")
     _save_cache(key, data)
     return data
 
@@ -630,8 +645,11 @@ def load_data_for_year(year: int, max_week: int = 18, verbose: bool = True):
             opt_df = getattr(wk, "OptimalScoresDF", None)
             if opt_df is not None:
                 core.OptimalScoresByYear.setdefault(year, {})[wk_num] = opt_df
-        # Always refresh teamcolors so cached objects pick up current slot-based palette
+        # Colors are config (config/team_colors.json), not data: re-apply them on
+        # every load so a pickled object never serves the palette it was built with.
         cached["season"].SetTeamColors()
+        for wk in cached["weeks"].values():
+            wk.SetTeamColors()
         return cached["league"], cached["season"], cached["weeks"]
 
     if verbose:

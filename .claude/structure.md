@@ -5,9 +5,9 @@ core:         sleeper_core.py, data_loader.py, side_bet_resolver.py  (project ro
               hand-entered winners in config/side_bet_seasons.json always take priority
               pbp_timeline.py — play-by-play fantasy scoring for the By-play points
               timeline; each line reconciles to the Sleeper total
-web:          webapp/app.py (3400+ lines — grep the "# ── <name>" section markers listed in its docstring SECTION MAP), webapp/assets/style.css, webapp/assets/d3charts.js, webapp/assets/chartdownload.js (per-card PNG export)
+web:          webapp/app.py (3400+ lines — grep the "# ── <name>" section markers listed in its docstring SECTION MAP), webapp/assets/style.css, webapp/assets/d3charts.js, webapp/assets/chartdownload.js (per-card PNG export), webapp/assets/mobilefit.js (phone-width chart fit)
 data:         Data/  — NFL player CSVs; .cache/  — pickled season data
-config:       config/*.json  — league IDs, roster slots, side bets, manager-name aliases,
+config:       config/*.json  — league IDs, roster slots, side bets, manager-name aliases, team colors,
               season date overrides (loaded by sleeper_core at import)
 notebook:     Sleeper_v3.ipynb  (thin wrapper over sleeper_core — the .py is authoritative; old v2 in archive/)
 media:        Photos&Videos/  — league logos and draft media

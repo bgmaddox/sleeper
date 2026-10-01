@@ -39,6 +39,41 @@ Consequences for new chart work:
   A colour that only exists in `style.css` will not survive SVG serialisation.
 - Do not re-enable the Plotly modebar in `_graph()`; the button replaces it.
 
+## Team Colors
+
+**One color per manager, on every tab and in every season.** `config/team_colors.json`
+is the only place a color is set; `get_slot_teamcolors(year)` and `get_alltime_teamcolors()`
+both read it through `TEAM_COLORS`. Slot colors (a newcomer inheriting the slot's color)
+are gone. A manager is the same color in the This Week luck chart and in Hall of Fame.
+
+- **A new manager needs an entry.** `tests/test_teamcolors.py` fails until one exists, and
+  also enforces ≥3:1 contrast on the card background `#163146` and ≥15 OKLab ΔE between
+  every pair in the newest season. Choose new colors with the dataviz palette validator,
+  not by eye.
+- **Colors are config, not data.** `data_loader.load_data_for_year` re-applies them to the
+  cached Season and every Week on load, so changing a color never needs a schema bump.
+- **Saturated hues mean people.** Non-manager series (years, positions, roster sources)
+  use `coastal_colorway` or a single blue family; "leader vs the rest" charts draw the
+  leader in their own color and everyone else in muted `#5A6F80`.
+
+## Phone Layout
+
+Figures are built for a ~1300px desktop card. Two layers make them work on a phone:
+
+- **automargin is on in the `gridiron_ink` template** and in `app._strip()`, so tick labels
+  and axis titles grow the margin instead of being clipped. Put category names on the y
+  axis as tick labels — `sleeper_core._color_ticklabels()` colors them per manager —
+  never as `xref='paper'` annotations, which automargin cannot see.
+- **`webapp/assets/mobilefit.js`** runs after every Plotly render on cards under 600px:
+  it drops fixed left/right margins to a minimum (automargin regrows them), caps tick,
+  title, legend, annotation and bar-text sizes, and lets outside bar labels move inside.
+  No Dash wiring, like `chartdownload.js`.
+- Legends: the template puts them below the plot in paper coordinates (the x-axis owns
+  the top). `_strip()` and the side bet cards anchor them to the figure bottom with
+  `yref='container'` — set all three of `yref`/`y`/`yanchor` together, or a chart's own
+  `y` ends up in the wrong coordinate system.
+- Wide HTML tables sit inside `.st-scroll` so they scroll sideways instead of clipping.
+
 ## Side Bet Winners
 
 Weekly side bet winners are **derived, not typed in**. `side_bet_resolver.py` maps each
@@ -178,6 +213,7 @@ webapp/             — The live Dash web app (active development)
     style.css       — CSS design system (gridiron_ink variables)
     d3charts.js     — D3 clientside chart renderers
     chartdownload.js— Injects the per-card "PNG" download button (Plotly + D3)
+    mobilefit.js    — Shrinks margins/fonts of Plotly charts on cards under 600px
     d3.min.js       — D3 v7 library
 Data/               — NFL player stats CSVs
 Photos&Videos/      — League logos and media assets
@@ -217,6 +253,7 @@ Global dicts populated as objects are built:
 - `OptimalScoresByYear[year][week]` — best possible lineup score per team
 
 Key config dicts (loaded at import from `config/*.json` — edit the JSON, not the module):
+- `TEAM_COLORS` — manager → color, one per person site-wide (`config/team_colors.json`)
 - `leagueNumbers_Dict` — year → Sleeper league ID (`config/league_ids.json`)
 - `roster_ids` — year → {roster_num: username} for 2019–2025 (`config/roster_ids.json`)
 - `SIDE_BET_SEASONS` — year → {week → {name, desc, winner}} for 2019–2025 (`config/side_bet_seasons.json`)
@@ -225,11 +262,11 @@ Key config dicts (loaded at import from `config/*.json` — edit the JSON, not t
 
 ### Dashboard tabs
 
-1. **This Week** — weekly matchups, points timeline, power rankings, luck chart (YTD / This Week toggle), Side Bet of the Week card, Playoff Calculator card
-2. **Season** — win progression (wins / points toggle), points for/against (avg line toggle), scoring frequency (all/wins/losses toggle), bench strength (season / by-week toggle)
+1. **This Week** — weekly matchups, points timeline (per game / animated / by play / who led — `Week.MatchupLeadPBP`), power rankings, luck chart (YTD / This Week toggle), Side Bet of the Week card, Playoff Calculator card
+2. **Season** — win progression (wins / points toggle), points for/against (avg line toggle), schedule swap matrix (`Season.ScheduleSwap`), where the points came from (`Season.RosterSource`: drafted / waiver / free agent / trade), scoring frequency (all/wins/losses toggle), bench strength (season / by-week toggle)
 3. **Players** — player points, violin distributions (4-way toggle: starters / all rostered / by-position starters / by-position all), score trends, top players (QB/RB/WR/TE toggle)
 4. **Playoffs** — winners + losers bracket cards, analytics charts (Champion's Road, Playoff Heat Check, Bench Points Left), all-time playoff history charts (Playoff Pedigree, Win Rate, Seeding vs. Finish, Records, Path to Glory)
-5. **All-Time** — career standings table (`AllTime.Standings()`: regular-season W-L/PF/PA, all-play and luck, playoffs and titles, per-season strip; a current-season week counts once its last game day has passed), hall of fame/shame, highest-scoring losses, closest margins, cumulative stats
+5. **All-Time** — career standings table (`AllTime.Standings()`: regular-season W-L/PF/PA, all-play and luck, playoffs and titles, per-season strip; a current-season week counts once its last game day has passed), hall of fame/shame, highest-scoring losses, closest margins, close-game records (`AllTime.CloseGameRecord`), cumulative stats
 6. **Side Bets** — season scoreboard (D3 leaderboard), week navigator, per-week challenge cards with charts; supports all years in `SIDE_BET_SEASONS` (2019–2025)
 7. **Survivor** — survivor pool pick history and elimination tracking (2024–2025)
 8. **Head-to-Head** — all-time matchup history between two selected teams

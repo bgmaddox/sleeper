@@ -1324,6 +1324,21 @@ button.dash-dropdown svg { color: var(--text-muted) !important; }
   background: rgba(255,255,255,0.06); border: 1px solid var(--border);
   border-radius: 4px; padding: 1px 5px;
 }
+/* Phone: six columns don't fit, so each row stacks into two lines —
+   rank · name · prize, then bar · wins · weeks. */
+@media (max-width: 600px) {
+  .sb-row {
+    grid-template-columns: 32px 1fr auto;
+    grid-template-areas: "rank team prize" ". bar wins" ". weeks weeks";
+    row-gap: 4px; column-gap: 10px;
+  }
+  .sb-rank      { grid-area: rank; }
+  .sb-team      { grid-area: team; }
+  .sb-prize     { grid-area: prize; }
+  .sb-bar-track { grid-area: bar; }
+  .sb-wins      { grid-area: wins; }
+  .sb-weeks-won { grid-area: weeks; }
+}
 
 /* Week navigator */
 .sidebet-week-nav {

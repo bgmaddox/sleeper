@@ -57,6 +57,8 @@ ink_secondary_color = '#8DCEFF'
 ink_font = 'Courier New'
 ink_colorway = ['#AAC49F','#FFBDF9','#234515', '#453215', '#451541', '#5B854A', '#C49FC1', '#C4B59F',
                 '#854A7F', '#FFE5BD','#D0FFBD','#856D4A',]
+# Generic series palette (years, positions, min/max/mean) — NOT manager identity.
+# Managers are colored by config/team_colors.json via TEAM_COLORS.
 coastal_colorway = [
     '#FFC300', # Gold Amber
     '#17BECF', # Vibrant Teal
@@ -66,27 +68,10 @@ coastal_colorway = [
     '#54A2E5', # Sky Blue
     '#FF7F0E', # Bright Orange
     '#9467BD', # Muted Violet
-    '#8C564B', # Muted Brown
+    '#C98B6B', # Clay (was #8C564B — 2.3:1 on the card background)
     '#43AA8B', # Sea Green
     '#C5B0D5', # Light Lavender
     '#F0F0F0'  # Off-White/Silver
-]
-
-# Extended palette for all-time charts — first 12 match coastal_colorway (one per 2019 charter
-# member), then unique colors for each player who joined later, plus extras for future expansion.
-alltime_colorway = coastal_colorway + [
-    '#FF1493', # Deep Pink       — jhmad (joined 2020, formerly jhuntmadd)
-    '#ADFF2F', # Chartreuse      — RReclam (joined 2020)
-    '#1E90FF', # Dodger Blue     — DirtyCommie (joined 2022)
-    '#FF4500', # Orange Red      — sgmaddox (joined 2022)
-    '#9932CC', # Dark Orchid     — Just_Here_For_The_Snacks (joined 2022)
-    '#00FA9A', # Spring Green    — InfiniteJess (joined 2023, formerly InfiniteJesse)
-    '#E8A838', # Warm Amber      — cosmodromedary (joined 2025)
-    '#00CED1', # Dark Turquoise  — future slot
-    '#FF69B4', # Hot Pink        — future slot
-    '#7CFC00', # Lawn Green      — future slot
-    '#6495ED', # Cornflower Blue — future slot
-    '#FFD700', # Pure Gold       — future slot
 ]
 
 neon_future_colorway = [
@@ -170,6 +155,7 @@ gridiron_ink_template.layout = go.Layout(
     # --- Axes ---
     xaxis=dict(
         side = 'top',
+        automargin=True,   # grow the margin to fit labels instead of clipping them
         gridcolor=ink_grid_color,
         linecolor=ink_grid_color,
         zerolinecolor=ink_secondary_color,
@@ -186,6 +172,7 @@ gridiron_ink_template.layout = go.Layout(
                   
     ),
     yaxis=dict(
+        automargin=True,
         gridcolor=ink_grid_color,
         linecolor=ink_grid_color,
         zerolinecolor=ink_secondary_color,
@@ -210,8 +197,12 @@ gridiron_ink_template.layout = go.Layout(
         borderwidth=1,
         font=dict(family='Courier New', size=12, color='#BDE2FF'),
         orientation = 'h',
-        yanchor="middle",
-        y=1,
+        # Below the plot, not y=1: the x-axis sits on top in this theme, so a
+        # legend there covered the tick labels and axis title. Plot (paper)
+        # coordinates on purpose — charts that set their own legend y/yanchor
+        # inherit yref, and a container yref silently moved theirs off-figure.
+        yanchor='top',
+        y=-0.04,
         xanchor="center",
         x=.5
     ),
@@ -319,35 +310,48 @@ roster_ids = {int(y): {slot: canonical_name(name) for slot, name in _intkeys(slo
               for y, slots in _load_config('roster_ids.json').items()}
 
 
-def get_slot_teamcolors(year, colorway=None):
-    """Return {team_name: color} keyed by roster slot order for a given year.
+# {manager: color} — one color per person on every tab and in every season.
+# config/team_colors.json is the only place a manager's color is set.
+TEAM_COLORS = {canonical_name(k): v for k, v in _load_config('team_colors.json').items()
+               if not k.startswith('_')}
+_UNASSIGNED_COLOR = '#8A9BA8'   # a manager missing from team_colors.json (tests fail on this)
 
-    Colors follow the slot number (1-indexed), not alphabetical order.
-    When a player takes over a slot, they inherit that slot's color.
+
+def get_slot_teamcolors(year):
+    """Return {team_name: color} for one season's managers, in roster-slot order.
+
+    The color is the person's (TEAM_COLORS), not the slot's — the same manager
+    is the same color here, on the all-time tabs, and in every other season.
     """
-    if colorway is None:
-        colorway = coastal_colorway
     slots = roster_ids.get(year, {})
-    return {name: colorway[(slot - 1) % len(colorway)]
+    return {name: TEAM_COLORS.get(name, _UNASSIGNED_COLOR)
             for slot, name in sorted(slots.items())}
 
 
-def get_alltime_teamcolors(colorway=None):
-    """Return {team_name: color} for every player across all years.
-
-    Colors are assigned by join order (first appearance across all years/slots),
-    so each player gets a permanently unique color regardless of which slot they occupy.
-    The first 12 entries of alltime_colorway match coastal_colorway, so 2019 charter
-    members' all-time colors align with their per-year slot colors.
-    """
-    if colorway is None:
-        colorway = alltime_colorway
+def get_alltime_teamcolors():
+    """Return {team_name: color} for every manager across all years, in join order."""
     seen = {}
     for year in sorted(roster_ids.keys()):
         for slot, name in sorted(roster_ids[year].items()):
-            if name not in seen:
-                seen[name] = colorway[len(seen) % len(colorway)]
+            seen.setdefault(name, TEAM_COLORS.get(name, _UNASSIGNED_COLOR))
     return seen
+
+
+def _color_ticklabels(fig, labels, teams, teamcolors, size=16):
+    """Show category labels as y tick labels, each in its manager's color.
+
+    These charts used to draw labels as annotations left of the plot, which
+    needed a fixed ~280px margin and could not shrink on a phone. Tick labels
+    count toward automargin, so the margin fits whatever the labels need.
+    """
+    labels, teams = list(labels), list(teams)
+    fig.update_yaxes(
+        showticklabels=True, tickmode='array', tickvals=labels,
+        ticktext=[f"<span style='color:{teamcolors.get(t, TEXT_COLOR)}'>{l}</span>"
+                  for l, t in zip(labels, teams)],
+        tickfont=dict(size=size, family='Courier New'),
+    )
+    return fig
 
 
 positions = {0: 'QB', 1: 'RB1', 2: 'RB2', 3: 'WR1', 4: 'WR2', 5: 'TE', 6: 'WRT', 7: 'K', 8: 'DEF'}
@@ -1178,14 +1182,11 @@ class Week(TeamColorsMixin):
 
         return figWeekLine
 
-    def PointsTimelinePBP(self):
-        """Points timeline rebuilt play by play from nflverse play-by-play.
+    def _pbp_timeline_frame(self):
+        """This week's play-by-play team timeline, ready to plot.
 
-        Each team's line steps at the moment each starter scores, on a clock
-        axis with the dead time between game windows cut out. Raises
-        ``pbp_timeline.PBPUnavailable`` when nflverse has published nothing for
-        the week yet; the scoring and reconciliation rules live in
-        ``pbp_timeline`` (each line ends exactly on the Sleeper total).
+        Returns (timeline, pbp, schedule). Raises ``pbp_timeline.PBPUnavailable``
+        when nflverse has published nothing for the week yet.
         """
         import data_loader as dl
         import pbp_timeline as pt
@@ -1204,7 +1205,70 @@ class Week(TeamColorsMixin):
         last = tl.groupby('team').tail(1).assign(ts=tl['ts'].max(), delta=0.0,
                                                  desc='Final', kind='end')
         tl = pd.concat([tl, last[last['ts'] != tl.loc[last.index, 'ts']]]).sort_values(['team', 'ts'])
+        return tl, pbp, schedule
 
+    def MatchupLeadPBP(self):
+        """Who led each matchup, play by play — one stacked panel per matchup.
+
+        The line is the lead (first team in name order minus the second); the
+        area is shaded in the leader's color, so a lead change shows as the
+        fill switching sides of zero. Single column, so it reads on a phone.
+        """
+        import pbp_timeline as pt
+
+        tl, pbp, schedule = self._pbp_timeline_frame()
+        leads = pt.matchup_leads(tl)
+        matchups = sorted(leads['matchup'].unique())
+        pairs = {m: leads.loc[leads['matchup'] == m, ['team_a', 'team_b']].iloc[0] for m in matchups}
+        titles = [f"<span style='color:{self.teamcolors[p.team_a]}'>{p.team_a}</span> vs "
+                  f"<span style='color:{self.teamcolors[p.team_b]}'>{p.team_b}</span>"
+                  for p in pairs.values()]
+        fig = make_subplots(rows=len(matchups), cols=1, subplot_titles=titles,
+                            shared_xaxes=True, vertical_spacing=0.045)
+        for i, m in enumerate(matchups, start=1):
+            g = leads[leads['matchup'] == m]
+            a, b = pairs[m].team_a, pairs[m].team_b
+            for team, part in ((a, g['lead'].clip(lower=0)), (b, g['lead'].clip(upper=0))):
+                fig.add_trace(go.Scatter(
+                    x=g['ts'], y=part, mode='lines', line=dict(width=0, shape='hv'),
+                    fill='tozeroy', fillcolor=self.teamcolors[team], opacity=0.35,
+                    hoverinfo='skip', showlegend=False,
+                ), row=i, col=1)
+            leader = np.where(g['lead'] > 0, a, np.where(g['lead'] < 0, b, 'Tied'))
+            fig.add_trace(go.Scatter(
+                x=g['ts'], y=g['lead'], mode='lines', line=dict(color=TEXT_COLOR, width=1.5, shape='hv'),
+                customdata=np.stack([leader, g['lead'].abs().map('{:.2f}'.format), g['event']], axis=-1),
+                hovertemplate='<b>%{customdata[0]}</b> by %{customdata[1]}<br>%{customdata[2]}<extra></extra>',
+                showlegend=False,
+            ), row=i, col=1)
+            lim = max(10.0, float(g['lead'].abs().max()) * 1.15)
+            fig.update_yaxes(range=[-lim, lim], zeroline=True, zerolinewidth=1,
+                             tickfont=dict(size=11), row=i, col=1)
+
+        slots = (self.league.ScheduleGroup.get_group(self.week)
+                 .drop_duplicates('Tick')[['gametime_gameday', 'Tick']])
+        play_ts = pt.play_times(pbp, schedule)
+        fig.update_xaxes(rangebreaks=pt.axis_breaks(pd.concat([play_ts, tl['ts']])),
+                         tickvals=slots['gametime_gameday'], ticktext=slots['Tick'],
+                         tickfont=dict(size=12), side='bottom', showgrid=False)
+        for ann in fig.layout.annotations:
+            ann.font.size = 16
+        fig.update_layout(template='gridiron_ink', height=190 * len(matchups) + 80, showlegend=False,
+                          title=f'<b>Matchup Leads · By Play</b><br><sup>Week {self.week}</sup>')
+        return fig
+
+    def PointsTimelinePBP(self):
+        """Points timeline rebuilt play by play from nflverse play-by-play.
+
+        Each team's line steps at the moment each starter scores, on a clock
+        axis with the dead time between game windows cut out. Raises
+        ``pbp_timeline.PBPUnavailable`` when nflverse has published nothing for
+        the week yet; the scoring and reconciliation rules live in
+        ``pbp_timeline`` (each line ends exactly on the Sleeper total).
+        """
+        import pbp_timeline as pt
+
+        tl, pbp, schedule = self._pbp_timeline_frame()
         matchups = sorted(tl['matchup'].unique())
         teams_in = {m: sorted(tl.loc[tl['matchup'] == m, 'team'].unique()) for m in matchups}
         titles = [f"<span style='color:{self.teamcolors[a]}'>{a}</span> vs "
@@ -1560,7 +1624,7 @@ class Season(TeamColorsMixin):
         df = pd.concat([df,week_zero_df], ignore_index=True,)
         df = df.sort_values('Week', ascending=True)
         
-        fig2 = px.line(df,x='Week',y='Total Wins', color = 'Team',template='gridiron_ink',line_shape = 'spline', title = 'Win Progression')
+        fig2 = px.line(df,x='Week',y='Total Wins', color = 'Team',template='gridiron_ink', color_discrete_map=self.teamcolors,line_shape = 'spline', title = 'Win Progression')
         fig2.update_xaxes(dtick=1,
                         tickfont=dict(
                 size=18,         # Font size
@@ -1642,6 +1706,145 @@ class Season(TeamColorsMixin):
 
         return fig2
 
+    # ── Schedule swap ─────────────────────────────────────────────────────
+    # Diverging scale for "wins vs your real record": blue = a kinder schedule,
+    # red = a harsher one, neutral gray at zero (no hue at the midpoint).
+    SWAP_SCALE = [[0.0, '#E34948'], [0.5, '#3B4249'], [1.0, '#3987E5']]
+
+    def ScheduleSwap(self, through_week):
+        """{team x schedule} regular-season wins, through `through_week`.
+
+        Cell [A, B] is A's win total had A played B's schedule. The week B met
+        A, A meets B instead (the usual swap convention). The diagonal is each
+        team's real record. Ties count as no win.
+        """
+        m = self.Matches
+        reg = m[(m['Season'] == 'Regular') & m['Opp_team'].notna() & (m['Week'] <= through_week)]
+        score = reg.pivot_table(index='Week', columns='Team', values='Total')
+        opp = reg.pivot(index='Week', columns='Team', values='Opp_team')
+        teams = list(score.columns)
+        grid = pd.DataFrame(0, index=teams, columns=teams, dtype=int)
+        for a in teams:
+            for b in teams:
+                wins = 0
+                for w in score.index:
+                    o = opp.at[w, b]
+                    if pd.isna(o) or pd.isna(score.at[w, a]):
+                        continue
+                    o = b if o == a else o
+                    wins += int(score.at[w, a] > score.at[w, o])
+                grid.at[a, b] = wins
+        return grid
+
+    def ScheduleSwapChart(self, through_week):
+        """Heatmap of ScheduleSwap: each row is a team, each column a schedule.
+
+        Color is wins gained (blue) or lost (red) against the team's real
+        record; the cell text is the full W-L, so nothing rests on color alone.
+        """
+        grid = self.ScheduleSwap(through_week)
+        actual = pd.Series({t: grid.at[t, t] for t in grid.index})
+        order = actual.sort_values(ascending=False).index.tolist()
+        grid = grid.loc[order, order]
+        m = self.Matches
+        played = m[(m['Season'] == 'Regular') & m['Opp_team'].notna() & (m['Week'] <= through_week)]
+        games = played.groupby('Team')['Week'].nunique()
+        delta = grid.sub(actual[order], axis=0)
+        text = [[f'{grid.at[a, b]}-{games.get(a, 0) - grid.at[a, b]}' for b in order] for a in order]
+        hover = [[(f'<b>{a}</b> with <b>{b}</b>\'s schedule<br>{text[i][j]} '
+                   f'({delta.at[a, b]:+d} vs actual)') if a != b else f'<b>{a}</b><br>actual record {text[i][j]}'
+                  for j, b in enumerate(order)] for i, a in enumerate(order)]
+        lim = max(1, int(delta.abs().values.max()))
+        fig = go.Figure(go.Heatmap(
+            z=delta.values, x=order, y=order, zmid=0, zmin=-lim, zmax=lim,
+            colorscale=self.SWAP_SCALE, xgap=2, ygap=2,
+            text=text, texttemplate='%{text}', textfont=dict(size=11),
+            hovertext=hover, hovertemplate='%{hovertext}<extra></extra>',
+            colorbar=dict(title=dict(text='wins vs<br>actual', side='top'), thickness=10,
+                          tickfont=dict(size=11), dtick=1),
+        ))
+        fig.update_layout(template='gridiron_ink', height=640,
+                          title=f'<b>Schedule Swap</b><br><sup>Through week {through_week}</sup>')
+        fig.update_xaxes(title=dict(text="…with this team's schedule", font=dict(size=13)),
+                         tickangle=-45, tickfont=dict(size=11), showgrid=False)
+        fig.update_yaxes(autorange='reversed', tickfont=dict(size=11), showgrid=False)
+        return self.UpdateColors(fig)
+
+    # ── Points by roster source ───────────────────────────────────────────
+    # One blue family stepped by lightness, plus neutral gray: every saturated
+    # hue is some manager's identity color, and these segments are not people.
+    ROSTER_SOURCES = {'Drafted': '#E6F3FF', 'Waiver': '#A8D8FF', 'Free agent': '#62AEEA',
+                      'Trade': '#3D86C6', 'Other': '#8C9AA6'}
+    _TXN_SOURCE = {'waiver': 'Waiver', 'free_agent': 'Free agent', 'trade': 'Trade'}
+
+    def RosterSource(self, through_week, refresh_latest=True):
+        """{team x source} starter points through `through_week`.
+
+        Each starter-week is credited to how that player last arrived on the
+        roster before that week: the latest completed transaction adding him
+        to this team (waiver / free agent / trade), else Drafted if this team
+        drafted him, else Other. A drafted player dropped and picked back up
+        counts as the pickup. `refresh_latest` refetches the newest week's
+        transactions, whose cached copy may predate later moves.
+        """
+        import data_loader as dl
+        slots = {int(k): v for k, v in roster_ids[self.year].items()}
+        weeks = sorted(w for w in self.Breakout_dict if w <= through_week)
+        newest = max(self.Breakout_dict)
+
+        adds = []        # (player_id, team, leg, ts, source)
+        for w in weeks:
+            txns = dl.fetch_transactions_json(self.id, w, refresh=(refresh_latest and w == newest)) or []
+            for t in txns:
+                if t.get('status') != 'complete' or t.get('type') not in self._TXN_SOURCE:
+                    continue
+                for pid, rid in (t.get('adds') or {}).items():
+                    adds.append((str(pid), slots.get(int(rid)), int(t.get('leg') or w),
+                                 t.get('status_updated') or 0, self._TXN_SOURCE[t['type']]))
+        adds = pd.DataFrame(adds, columns=['player_id', 'team', 'leg', 'ts', 'source'])
+
+        draft_id = dl.fetch_league_json(self.id)['draft_id']
+        drafted = {(str(p['player_id']), slots.get(int(p['roster_id'])))
+                   for p in dl.fetch_draft_picks_json(draft_id) if p.get('player_id')}
+
+        rows = []
+        for w in weeks:
+            st = self.Breakout_dict[w]
+            st = st[st['starter'] == 1]
+            for pid, team, pts in zip(st['player_id'].astype(str), st['team'], st['points']):
+                a = adds[(adds['player_id'] == pid) & (adds['team'] == team) & (adds['leg'] <= w)]
+                if not a.empty:
+                    src = a.sort_values(['leg', 'ts']).iloc[-1]['source']
+                elif (pid, team) in drafted:
+                    src = 'Drafted'
+                else:
+                    src = 'Other'
+                rows.append((team, src, pts))
+        df = pd.DataFrame(rows, columns=['team', 'source', 'points'])
+        out = df.pivot_table(index='team', columns='source', values='points', aggfunc='sum', fill_value=0.0)
+        return out.reindex(columns=[c for c in self.ROSTER_SOURCES if c in out.columns]).round(2)
+
+    def RosterSourceChart(self, through_week, refresh_latest=True):
+        """Stacked bars: each team's starter points split by how it got the player."""
+        src = self.RosterSource(through_week, refresh_latest=refresh_latest)
+        src = src.loc[src.sum(axis=1).sort_values().index]          # biggest total on top
+        share = src.div(src.sum(axis=1), axis=0)
+        fig = go.Figure()
+        for col in src.columns:
+            fig.add_trace(go.Bar(
+                y=src.index, x=src[col], name=col, orientation='h',
+                marker=dict(color=self.ROSTER_SOURCES[col], line=dict(color='#163146', width=2)),
+                customdata=share[col],
+                hovertemplate=f'<b>%{{y}}</b><br>{col}: %{{x:.1f}} pts (%{{customdata:.0%}})<extra></extra>',
+            ))
+        fig.update_layout(template='gridiron_ink', barmode='stack', showlegend=True,
+                          legend_traceorder='normal',            # Drafted first, as stacked
+                          height=max(420, 36 * len(src) + 120),
+                          title=f'<b>Where the Points Came From</b><br><sup>Starter points through week {through_week}</sup>')
+        fig.update_xaxes(title=None)
+        fig.update_yaxes(title=None)
+        return self.UpdateColors(fig)
+
     def LuckChart(self, current_week):
         
         self.WeeklyWins(current_week)
@@ -1701,16 +1904,9 @@ class Season(TeamColorsMixin):
                     size=20,
                     color=LABEL_COLOR
                     ), bgcolor='rgba(26,58,82,0.7)')
-        figScat.update_layout(
-            xaxis_title="Points Against",
-            yaxis_title="Points For",
-            xaxis=dict(
-                title_font=dict(color='#F94144', shadow='none')
-            ),
-            yaxis=dict(
-                title_font=dict(color='#90BE6D', shadow='none')
-            )
-        )
+        # Axis titles wear the template's text color: red/green here read as
+        # two managers' identity colors.
+        figScat.update_layout(xaxis_title="Points Against", yaxis_title="Points For")
 
         figScat.update_yaxes(dtick=100,
                         tickfont=dict(
@@ -1720,14 +1916,11 @@ class Season(TeamColorsMixin):
                         tickfont=dict(
                 size=16, family='Courier New',
             ))
+        # Key sits under the plot: the x-axis and its title own the top edge.
         figScat.add_annotation(
-        text="O Size = Wins | --- = Avg",
-        xref="paper", yref="paper",
-        x=0.5, y=1.15, # Position relative to figure (right side, middle)
-        showarrow=False,
-        font=dict(
-            size=12,
-        )
+            text="Dot size = wins · dashed = median",
+            xref="paper", yref="paper", x=0.5, y=-0.03, yanchor='top',
+            showarrow=False, font=dict(size=12, color=LABEL_COLOR),
         )
         
         
@@ -2199,7 +2392,7 @@ class Season(TeamColorsMixin):
             titleText = "<b>Positional Points Distribution</b><br><sup>Starters by Position</sup>"
         
         figViolin2 = px.violin(df,x='points', y='team',facet_col='position',facet_col_wrap=2, color = 'team', 
-                       template='gridiron_ink',category_orders={
+                       template='gridiron_ink', color_discrete_map=self.teamcolors,category_orders={
                            "position": ["QB", "RB", "WR", "TE", "K", "DEF"],
                               })
         figViolin2.update_traces(orientation='h', side='positive', width=3, points=False, spanmode='hard')
@@ -3176,19 +3369,8 @@ class Season(TeamColorsMixin):
                 showticklabels=False,
             ),
         )
-        # Colored team name labels via annotations (Plotly doesn't support per-tick colors)
-        for team in df['Team']:
-            color = self.teamcolors.get(team, '#BDE2FF')
-            fig_h.add_annotation(
-                x=0, y=team,
-                xref='paper', yref='y',
-                text=f'<b>{team}</b>',
-                showarrow=False,
-                font=dict(color=color, size=13, family='Courier New'),
-                xanchor='right',
-                xshift=-6,
-                align='right',
-            )
+        # Colored team names as tick labels (span-styled ticktext), so automargin fits them.
+        _color_ticklabels(fig_h, df['Team'], df['Team'], self.teamcolors, size=13)
         return fig_h
 
 
@@ -3349,8 +3531,9 @@ class Playoffs:
         opponents   = [d['opponent']    for d in rounds_data]
 
         fig = go.Figure([
+            # The champion's own color — a fixed gold read as bgmaddox's.
             go.Bar(name=champion,   y=labels, x=champ_scores, orientation='h',
-                   marker_color='#FFC300',
+                   marker_color=TEAM_COLORS.get(champion, TEXT_COLOR),
                    text=[f"{s:.1f}" for s in champ_scores], textposition='outside'),
             go.Bar(name='Opponent', y=labels, x=opp_scores,   orientation='h',
                    marker_color='#3D5E78',
@@ -3819,6 +4002,50 @@ class AllTime(TeamColorsMixin):
                 live.append(week)
         return reg[~((reg['Year'] == CURRENT_SEASON) & reg['Week'].isin(live))]
 
+    def CloseGameRecord(self, threshold=5):
+        """Each manager's all-time record in games decided by under `threshold`.
+
+        Every played game (regular season and playoffs) with an opponent;
+        exact ties are left out, so the league's close wins equal its close losses.
+        """
+        m = self.Matches
+        close = m[m['Opp_team'].notna() & (m['Abs Margin'] < threshold) & (m['Abs Margin'] > 0)]
+        rec = close.groupby('Team')['Won'].agg(W='sum', G='count')
+        rec['L'] = rec['G'] - rec['W']
+        rec['Pct'] = (rec['W'] / rec['G']).round(3)
+        rec = rec[['W', 'L', 'Pct']].astype({'W': int, 'L': int})
+        # Net close wins first: sorting by Pct put a 1-0 manager above a 6-1 one.
+        return rec.assign(_net=rec['W'] - rec['L']).sort_values(['_net', 'W'], ascending=False).drop(columns='_net')
+
+    def CloseGameChart(self, threshold=5):
+        """Close-game wins (right) and losses (left) per manager, best record on top."""
+        rec = self.CloseGameRecord(threshold).iloc[::-1]       # best drawn last = top
+        names = rec.index.tolist()
+        colors = [self.teamcolors.get(n, TEXT_COLOR) for n in names]
+        fig = go.Figure()
+        fig.add_trace(go.Bar(
+            y=names, x=-rec['L'], orientation='h', name='Losses',
+            marker_color=colors, opacity=0.45,
+            text=rec['L'], textposition='outside', cliponaxis=False,
+            hovertemplate='<b>%{y}</b><br>%{text} close losses<extra></extra>',
+        ))
+        fig.add_trace(go.Bar(
+            y=names, x=rec['W'], orientation='h', name='Wins',
+            marker_color=colors,
+            text=[f"{w}  ({p:.0%})" for w, p in zip(rec['W'], rec['Pct'])],
+            textposition='outside', cliponaxis=False,
+            customdata=rec['L'],
+            hovertemplate='<b>%{y}</b><br>%{x}-%{customdata} in close games<extra></extra>',
+        ))
+        lim = max(rec['W'].max(), rec['L'].max()) * 1.35
+        fig.update_layout(template='gridiron_ink', barmode='relative', showlegend=False,
+                          height=max(420, 34 * len(names) + 80),
+                          title=f'<b>Close Games</b><br><sup>Decided by under {threshold} points</sup>')
+        fig.update_xaxes(range=[-lim, lim], title=None, zeroline=True,
+                         tickvals=[-lim * 2 / 3, 0, lim * 2 / 3], ticktext=['losses', '', 'wins'])
+        fig.update_yaxes(title=None)
+        return self.UpdateColors(fig)
+
     def Standings(self, playoff_results=None, now=None):
         """Career regular-season standings, one row per manager.
 
@@ -3949,7 +4176,7 @@ class AllTime(TeamColorsMixin):
             
         
             
-        figTopScores = px.bar(dfgraph , y='Names', x=x_graph, template = 'gridiron_ink',
+        figTopScores = px.bar(dfgraph , y='Names', x=x_graph, template = 'gridiron_ink', color_discrete_map=self.teamcolors,
                              color = 'Team', orientation='h', text = 'Names', title =Title,)
                              
                              
@@ -3976,7 +4203,7 @@ class AllTime(TeamColorsMixin):
 
     def AllTimeGraphing(self,df,week):
         df = pd.concat(AllMatches).sort_values('Week Index')
-        fig2 = px.line(df,x='Week Index',y='Total Wins', color = 'Team',template='gridiron_ink',line_shape = 'spline', title = 'All-Time Wins')
+        fig2 = px.line(df,x='Week Index',y='Total Wins', color = 'Team',template='gridiron_ink', color_discrete_map=self.teamcolors,line_shape = 'spline', title = 'All-Time Wins')
         fig2.update_xaxes(
                         tickfont=dict(
                 family='Courier New',  # Font family
@@ -4171,7 +4398,7 @@ class AllTime(TeamColorsMixin):
             y = TopTenLosers['TeamName'],
             name = 'Losers',
             orientation='h',
-            text = TopTenLosers['Total'],
+            texttemplate='%{x:.2f}',
             textfont=dict(size=25),
             marker_color=[self.teamcolors.get(t, '#BDE2FF') for t in TopTenLosers['Team']],
         ))
@@ -4189,13 +4416,7 @@ class AllTime(TeamColorsMixin):
         figLosers.update_layout(width=800, height=1200)
         figLosers.update_layout(showlegend=False)
         figLosers.update_yaxes(showticklabels=False, title=None)
-        for label, team in zip(TopTenLosers['TeamName'], TopTenLosers['Team']):
-            figLosers.add_annotation(
-                x=0, y=label, xref='paper', yref='y',
-                text=label, showarrow=False,
-                xanchor='right', align='right', xshift=-8,
-                font=dict(color=self.teamcolors.get(team, '#BDE2FF'), size=16, family='Courier New'),
-            )
+        _color_ticklabels(figLosers, TopTenLosers['TeamName'], TopTenLosers['Team'], self.teamcolors)
         figLosers.update_layout(
             title = "<b>Biggest Losers</b><br><sup>Highest Scores in Loss</sup>",
         )
@@ -4206,40 +4427,35 @@ class AllTime(TeamColorsMixin):
         return figLosers
         
     def SmallestMargins(self):
-        TenSmallestMargins = self.Matches.sort_values('Abs Margin', ascending=True)[:20]
-        TenSmallestMargins = TenSmallestMargins.sort_values('Margin').reset_index()
-        TenSmallestMargins['TeamGraph'] = TenSmallestMargins['Team'] + ' - ' + TenSmallestMargins['Year'].astype(str) + ' [' + TenSmallestMargins['Margin'].astype(str) + ']'
-        
-    
-        figMargin = px.bar(TenSmallestMargins, x='Margin',y=TenSmallestMargins.index,template = 'gridiron_ink',title='<b>Top 10 Smallest Margins</b>', color = 'Team', orientation='h', text='TeamGraph', color_discrete_map=self.teamcolors)
-        figMargin.update_layout(barmode='stack', yaxis={'categoryorder':'total ascending'})
-        figMargin.update_layout(width=None, height=800)
+        """The ten closest games ever — one bar per game, from the winner's row.
 
-        figMargin.update_traces(textfont_size=20, textangle=0, cliponaxis=True, textposition = 'auto', textfont=dict(weight='bold', size=15))
-        figMargin.update_layout(
-                xaxis_title="Margin",
-                yaxis_title="",
-            )
-        figMargin.update_layout(yaxis=dict(showticklabels=False))
-        #Update the layout to hide the legend:
-        figMargin.update(layout_coloraxis_showscale=False)
-        figMargin.update_xaxes(
-                tickfont=dict(
-                    size=22,         # Font size
-                ),
-                title = None,
-                dtick=.2
-            )
-        figMargin.update_layout(title=dict(y=.90))
-        figMargin.update_layout(margin=dict(t=130, b=100, l=40, r=40))
+        Matches holds every game twice (winner +m, loser -m); plotting both
+        showed each game as a mirrored pair. Ties (margin 0) keep one row.
+        """
+        m = self.Matches
+        games = m[m['Margin'] > 0]
+        ties = m[m['Margin'] == 0].copy()
+        if not ties.empty:
+            ties['_game'] = ties.apply(lambda r: (r['Year'], r['Week'], *sorted([r['Team'], r['Opp_team']])), axis=1)
+            games = pd.concat([games, ties.drop_duplicates('_game').drop(columns='_game')])
+        top = games.nsmallest(10, 'Margin').sort_values('Margin', ascending=False)   # closest drawn last = top
+        top = top.assign(Label=top['Team'] + '<br>over ' + top['Opp_team'] + ' · W'
+                         + top['Week'].astype(str) + ' ' + top['Year'].astype(str))
+        fig = go.Figure(go.Bar(
+            x=top['Margin'].round(2), y=top['Label'], orientation='h',
+            marker_color=[self.teamcolors.get(t, TEXT_COLOR) for t in top['Team']],
+            texttemplate='%{x:.2f}', textposition='outside', cliponaxis=False,
+            hovertemplate='%{y}<br>won by %{x:.2f}<extra></extra>', showlegend=False,
+        ))
+        fig.update_layout(template='gridiron_ink', height=700,
+                          title='<b>Smallest Margins of Victory</b>')
+        fig.update_xaxes(title=None, range=[0, top['Margin'].max() * 1.3])
+        fig.update_yaxes(title=None, tickfont=dict(size=13))
+        return fig
 
-        apply_logo_to_fig(figMargin,yval= -0.07)
-
-        return figMargin
-        
     def HallofShame_Team(self):
         Worst10 = self.Matches.sort_values('Total')[0:10]
-        Worst10['Total'] = Worst10['Total'].astype(int)
+        Worst10['Total'] = Worst10['Total'].round(2)   # round, never truncate: 59.96 is not 59
         Worst10['TeamName'] = '<b>' + Worst10['Team'] + '</b><br>W' + Worst10['Week'].astype(str) + " " + Worst10['Year'].astype(str)
         Worst10 = Worst10.sort_values('Total')
         
@@ -4255,15 +4471,9 @@ class AllTime(TeamColorsMixin):
                 title = None,
             )
         figWorst.update_yaxes(showticklabels=False, title=None, categoryorder="total descending")
-        for label, team in zip(Worst10['TeamName'], Worst10['Team']):
-            figWorst.add_annotation(
-                x=0, y=label, xref='paper', yref='y',
-                text=label, showarrow=False,
-                xanchor='right', align='right', xshift=-8,
-                font=dict(color=self.teamcolors.get(team, '#BDE2FF'), size=16, family='Courier New'),
-            )
+        _color_ticklabels(figWorst, Worst10['TeamName'], Worst10['Team'], self.teamcolors)
 
-        figWorst.update_traces(textposition='inside', textfont_size=80)
+        figWorst.update_traces(textposition='inside', textfont_size=48, texttemplate='%{x:.2f}')
         figWorst.update_layout(margin=MARGIN_HBAR)
         
         apply_logo_to_fig(figWorst,xval=.40)
@@ -4272,7 +4482,7 @@ class AllTime(TeamColorsMixin):
     
     def HallofFame_Team(self):
         Best10 = self.Matches.sort_values('Total', ascending=False)[0:10]
-        Best10['Total'] = Best10['Total'].astype(int)
+        Best10['Total'] = Best10['Total'].round(2)
         Best10['TeamName'] = '<b>'+ Best10['Team'] + '</b>' + '<br>' + "W" +Best10['Week'].astype(str) + " " + Best10['Year'].astype(str)
         
         figBest = px.bar(Best10, x='Total',y='TeamName', color = 'Team', orientation='h', template='gridiron_ink', title = '<b>Hall of Fame</b><br><sup>Team</sup>', text = 'Total', color_discrete_map=self.teamcolors)
@@ -4285,16 +4495,10 @@ class AllTime(TeamColorsMixin):
                 
             )
         figBest.update_yaxes(showticklabels=False, title=None, categoryorder="total ascending")
-        for label, team in zip(Best10['TeamName'], Best10['Team']):
-            figBest.add_annotation(
-                x=0, y=label, xref='paper', yref='y',
-                text=label, showarrow=False,
-                xanchor='right', align='right', xshift=-8,
-                font=dict(color=self.teamcolors.get(team, '#BDE2FF'), size=16, family='Courier New'),
-            )
+        _color_ticklabels(figBest, Best10['TeamName'], Best10['Team'], self.teamcolors)
         figBest.update_layout(font=dict(size=20))
         figBest.update_layout(margin=MARGIN_HBAR_MED)
-        figBest.update_traces(textposition='inside', textfont_size=80)
+        figBest.update_traces(textposition='inside', textfont_size=48, texttemplate='%{x:.2f}')
 
         
         apply_logo_to_fig(figBest,xval=.40)
@@ -4304,7 +4508,7 @@ class AllTime(TeamColorsMixin):
             
         Best10Players = self.Breakout.sort_values('points', ascending=False)[0:10]
         Best10Players['TeamName'] = '<b>' + Best10Players['team'] + '</b><br><sup>' + "W" +Best10Players['week_x'].astype(str) + " " + Best10Players['year'].astype(str) + '</sup>'
-        Best10Players['Player-Points'] = '<b>' + Best10Players.player + '</b><br>' + Best10Players.points.astype(str)
+        Best10Players['Player-Points'] = '<b>' + Best10Players.player + '</b><br>' + Best10Players.points.map('{:.2f}'.format)
         
         figBestPlayers = px.bar(Best10Players, x='points',y='TeamName', color = 'team', orientation='h',
                         template='gridiron_ink', title = '<b>Hall of Fame</b><br><sup>Players</sup>', text = 'Player-Points',
@@ -4318,13 +4522,7 @@ class AllTime(TeamColorsMixin):
                 
             )
         figBestPlayers.update_yaxes(showticklabels=False, title=None, categoryorder="total ascending")
-        for label, team in zip(Best10Players['TeamName'], Best10Players['team']):
-            figBestPlayers.add_annotation(
-                x=0, y=label, xref='paper', yref='y',
-                text=label, showarrow=False,
-                xanchor='right', align='right', xshift=-8,
-                font=dict(color=self.teamcolors.get(team, '#BDE2FF'), size=16, family='Courier New'),
-            )
+        _color_ticklabels(figBestPlayers, Best10Players['TeamName'], Best10Players['team'], self.teamcolors)
 
         figBestPlayers.update_layout(margin=MARGIN_HBAR_MED)
         figBestPlayers.update_traces(textposition='inside', textfont_size=55)
@@ -4562,9 +4760,11 @@ class SideBet(TeamColorsMixin):
                     'Season', 'Week Index', 'Year', 'LeagueTotal', 'PercentTotal', 'Team'}
         position_list = [c for c in points.columns if c not in _non_pos]
 
-        default_color = '#F94144'
+        # Emphasis: the leader in their own color, everyone else muted. (Was
+        # teal vs red — both now read as two managers' identity colors.)
+        default_color = '#5A6F80'
 
-        colors = {top: "#17BECF"}
+        colors = {top: self.teamcolors.get(top, TEXT_COLOR)}
 
         team_list = df.sort_values('Total', ascending = True).index.tolist()
 
@@ -4820,7 +5020,7 @@ class SideBet(TeamColorsMixin):
         
 
 
-        fig1 = px.bar(df, y='player',x='points',template = 'gridiron_ink', color = 'team', text='team-points', #text_auto=True, 
+        fig1 = px.bar(df, y='player',x='points',template = 'gridiron_ink', color_discrete_map=self.teamcolors, color = 'team', text='team-points', #text_auto=True, 
                         title = f'<b>Week {Week} Side Bet</b><br><sup>Blackjack</sup>', orientation='h'
                     )
         
@@ -4947,7 +5147,7 @@ class SideBet(TeamColorsMixin):
             BustBoom = pd.concat([BustBoom,teamrows])
 
 
-        figWeek6 = px.bar(BustBoom, y='team',x='points',template = 'gridiron_ink',color = "team", title = f'Week {WeekObj.week} Side Bet', orientation='h',barmode='overlay', text = 'player')
+        figWeek6 = px.bar(BustBoom, y='team',x='points',template = 'gridiron_ink', color_discrete_map=self.teamcolors,color = "team", title = f'Week {WeekObj.week} Side Bet', orientation='h',barmode='overlay', text = 'player')
         figWeek6.update_traces( textfont_size=20  # Font color
             )
         
@@ -5103,131 +5303,40 @@ class SideBet(TeamColorsMixin):
         return figWeek9
     
     def Week10(self, WeekObj):
-        
+        """NFL Franchise Week — each manager's best single-franchise stack.
 
-        Week10SideBet2 = WeekObj.Breakout.groupby(['team','recent_team'])[['player','points']].sum(numeric_only=True).reset_index()
+        One bar per manager (their highest-scoring NFL franchise, active or
+        bench), colored by person, sorted so the winner sits on top. Grouped on
+        `recent_teams`, the same column side_bet_resolver.r_nfl_franchise uses,
+        so the top bar is always the resolved winner. Replaces 13 small
+        multiples that could not fit a card.
+        """
+        df = WeekObj.Breakout.dropna(subset=['recent_teams'])
+        stacks = (df.groupby(['team', 'recent_teams'])
+                    .agg(points=('points', 'sum'),
+                         players=('player', lambda p: ', '.join(map(str, p))))
+                    .reset_index())
+        stacks['points'] = stacks['points'].round(2)
+        best = (stacks.sort_values('points', ascending=False)
+                      .drop_duplicates('team')
+                      .sort_values('points'))          # ascending: winner drawn last = top
+        labels = best['team'] + ' · ' + best['recent_teams']
+        top = best['points'].max()
+        fig = go.Figure(go.Bar(
+            x=best['points'], y=labels, orientation='h',
+            marker_color=[self.teamcolors.get(t, TEXT_COLOR) for t in best['team']],
+            text=[f'{v:.1f}' + ('  WINNER' if v == top else '') for v in best['points']],
+            textposition='outside', cliponaxis=False,
+            customdata=best['players'],
+            hovertemplate='<b>%{y}</b><br>%{x:.2f} pts<br>%{customdata}<extra></extra>',
+            showlegend=False,
+        ))
+        fig.update_layout(template='gridiron_ink', height=520,
+                          title=f'<b>Week {WeekObj.week} Side Bet</b><br><sup>Best single-franchise stack</sup>')
+        fig.update_xaxes(title=None, range=[0, top * 1.25])
+        fig.update_yaxes(title=None)
+        return fig
 
-        Week10SideBet2Data = Week10SideBet2.sort_values('points', ascending=False).head(10)
-        Week10SideBet2Data['Name'] = Week10SideBet2Data['team'] + ' - ' + Week10SideBet2Data['recent_team']
-
-        
-        # groupby('team'), not groupby(['team']): a list of keys makes the group
-        # labels tuples under pandas 3.0, so the get_group(person) below raised
-        # KeyError for every manager. Every other get_group site already uses
-        # the scalar form.
-        Week10SideBet = WeekObj.Breakout.groupby('team')[['player','points','recent_team']]
-        Week10SideBet2 = WeekObj.Breakout.groupby(['team','recent_team'])[['player','points']].sum(numeric_only=True).reset_index()
-        Week10SideBet2Data = Week10SideBet2.sort_values('points', ascending=False).head(10)
-        Week10SideBet2Data['Name'] = Week10SideBet2Data['team'] + ' - ' + Week10SideBet2Data['recent_team']
-
-        #grouped = breakoutDF_group.groupby('matchup')
-                # Create a subplot with 1 row and 2 columns (for the bar chart and the pie chart)
-        figCombo2 = make_subplots(
-                    rows=7, cols=2, 
-                    shared_xaxes=False,
-                    horizontal_spacing=0.04, 
-                    vertical_spacing=0.05,
-                    shared_yaxes=True,
-                    column_widths=[0.5, 0.5],  # Adjust the width of each subplot
-                    specs=[[{"type": "bar"}, {"type": "bar"}],
-                        [{"type": "bar"}, {"type": "bar"}],
-                        [{"type": "bar"}, {"type": "bar"}],
-                        [{"type": "bar"}, {"type": "bar"}],
-                        [{"type": "bar"}, {"type": "bar"}],
-                        [{"type": "bar"}, {"type": "bar"}],
-                        [{"colspan":2,"type":"bar"},None]]
-                    #subplot_titles=['Matchup Schedule','Win History']# Specify the chart types
-                )
-        for i in range(1,13):
-                person = roster_ids[self.League.year][i]
-                CurrentGraph = Week10SideBet.get_group(person)
-                rowlist = [1,1,2,2,3,3,4,4,5,5,6,6]
-                collist = [1,2,1,2,1,2,1,2,1,2,1,2]
-                rowdict = dict(enumerate(rowlist,1))
-                coldict = dict(enumerate(collist,1))
-                
-                # Add the bar chart to the first column
-                figCombo2.add_trace(
-                    go.Bar(
-                        y=CurrentGraph['points'], 
-                        x=CurrentGraph['recent_team'], 
-                        
-                        #marker=dict(
-                        #    color = [teamcolors[team] for team in CurrentGraph['team']], 
-                        #    cornerradius = 10
-                        #),
-                        
-                        text=CurrentGraph['points'],
-                        textangle = 0,
-                        textposition='auto',
-                        showlegend=False,
-                    ),
-                    row=rowdict[i], col=coldict[i]
-                )
-
-                
-                    # Create a custom title with colored team names
-                #title_html = f'<span style="color:{teamcolors[teams[0]]}">{teams[0]}</span> vs <span style="color:{teamcolors[teams[1]]}">{teams[1]}</span>'
-
-                # Add the custom title as an annotation at the top of each subplot
-                figCombo2.add_annotation(
-                    text=roster_ids[self.League.year][i],
-                    xref=f'x domain', yref=f'y domain',
-                    x=.5, y=1.2,  # Position it above the subplot (y > 1)
-                    xanchor='center',
-                    font=dict(size=20, weight ='bold'),
-                    showarrow=False,
-                    row=rowdict[i], col=coldict[i] # Apply to the i-th row and first column (bar chart)
-                )
-                # Update the layout with dark theme and grouped bar mode
-                figCombo2.update_layout(barmode="group", template="gridiron_ink",barcornerradius=7)
-                figCombo2.update_xaxes(
-                    categoryorder="array",
-                    side = 'bottom',
-                    #categoryarray=time_order,
-                    showticklabels = True, 
-                    row=rowdict[i], col=coldict[i]  # Apply to the bar chart in the i-th row and first column
-                )
-                figCombo2.update_layout(yaxis1=dict(range=[0, 55]),yaxis2=dict(range=[0, 55]),yaxis3=dict(range=[0, 55]),yaxis4=dict(range=[0, 55]),
-                                        yaxis5=dict(range=[0, 55]),yaxis6=dict(range=[0, 55]),yaxis7=dict(range=[0, 55]),yaxis8=dict(range=[0, 55]),
-                                        yaxis9=dict(range=[0, 55]),yaxis10=dict(range=[0, 55]),yaxis11=dict(range=[0, 55]),yaxis12=dict(range=[0, 55])
-                                        )
-                figCombo2.update_layout(xaxis1=dict(tickangle=90),xaxis2=dict(tickangle=90),xaxis3=dict(tickangle=90),xaxis4=dict(tickangle=90),
-                                        xaxis5=dict(tickangle=90),xaxis6=dict(tickangle=90),xaxis7=dict(tickangle=90),xaxis8=dict(tickangle=90),
-                                        xaxis9=dict(tickangle=90),xaxis10=dict(tickangle=90),xaxis11=dict(tickangle=90),xaxis12=dict(tickangle=90)
-                                        )
-        figCombo2.add_trace(
-                    go.Bar(
-                        y=Week10SideBet2Data['points'], 
-                        x=Week10SideBet2Data['Name'], 
-                        marker_color = ('teal','tomato','tomato','tomato','tomato','tomato','tomato','tomato','tomato','tomato'),
-                        
-                        #marker=dict(
-                        #    color = [teamcolors[team] for team in CurrentGraph['team']], 
-                        #    cornerradius = 10
-                        #),
-                        
-                        text=Week10SideBet2Data['recent_team'],
-                        textangle = 0,
-                        textposition='auto',
-                        showlegend=False,
-                        
-                    ),
-                    row=7, col=1
-                )
-        figCombo2.update_xaxes(
-                    side = 'bottom',
-                    tickfont = dict(size=15),
-                    tickangle = -90
-                    )
-        
-        figCombo2.update_layout(width=900, height=1200,title_text=f"<b>Week {WeekObj.week} Side Bet</b><br><sup>Franchise Week</sup>")
-        apply_logo_to_fig(figCombo2,yval = -0.09)
-        # self.UpdateColors2(WeekObj,figCombo2)
-        figCombo2.update_layout(margin=dict(t=160, b=180, l=40, r=40), title ={'y':.93})
-
-        return figCombo2
-    
     def Week12(self,WeekObj):
         df = WeekObj.Breakout
         Week12Graph = df[df['starter']==1]
@@ -5403,8 +5512,9 @@ class SideBet(TeamColorsMixin):
         position_list = [c for c in points.columns if c not in _non_pos]
 
         team_list = df.sort_values("Total", ascending=True).index.tolist()
-        colors = {team_list[-1]: "#FFC300"}
-        color_discrete_map = {c: colors.get(c, "#F94144") for c in team_list}
+        # Emphasis: the leader in their own color, everyone else muted.
+        colors = {team_list[-1]: self.teamcolors.get(team_list[-1], TEXT_COLOR)}
+        color_discrete_map = {c: colors.get(c, '#5A6F80') for c in team_list}
 
         fig14 = px.bar(
             points,
@@ -5449,45 +5559,26 @@ class SideBet(TeamColorsMixin):
         dfWeek13 = WeekObj.WeeklyNoMatches.reset_index()
         dfWeek13 =dfWeek13[dfWeek13['Won'] == 1]
         dfWeek13['Abs Margin'] = dfWeek13.Margin.abs().round(0)
-        dfWeek13['TeamName'] = dfWeek13.Margin.round(1).astype(str) + ' points over ' + dfWeek13.Opp_team
+        dfWeek13['TeamName'] = '+' + dfWeek13.Margin.round(1).astype(str) + ' over ' + dfWeek13.Opp_team
 
-        figWeek13 = px.bar(dfWeek13.sort_values('Abs Margin', ascending=False), x='Margin',y='Team',template = 'gridiron_ink',
-                           title=f'<b>Week {WeekObj.week}</b><br><sup>Smallest Margin</sup>', color = 'Matchup', orientation='h', text='TeamName' )
-        #figWeek13.update_layout(barmode='stack', yaxis={'categoryorder':'mean ascending'})
-        figWeek13.update_layout(width=None, height=800)
+        # Colored by the winner (was color='Matchup' — a numeric id, which drew a
+        # continuous viridis ramp unrelated to anyone's color). Largest margin
+        # first, so the closest win — the side bet winner — is the top bar.
+        figWeek13 = px.bar(dfWeek13.sort_values('Margin', ascending=False), x='Margin',y='Team',template = 'gridiron_ink',
+                           title=f'<b>Week {WeekObj.week}</b><br><sup>Smallest Margin</sup>', color = 'Team',
+                           color_discrete_map=self.teamcolors, orientation='h', text='TeamName' )
+        figWeek13.update_layout(width=None, height=800, showlegend=False)
 
-        figWeek13.update_traces(textfont_size=25, textangle=0, cliponaxis=True, textposition = 'auto', textfont=dict(weight='bold',  # Font family
-                    size=25   # Font color
-                ))
-        figWeek13.update_layout(
-                xaxis_title="Margin",  # Set x-axis title
-                yaxis_title="Winners",   # Set y-axis title
-                xaxis=dict(
-                    title_font=dict(
-                        size=30,          # Set font size for x-axis title
-                        weight = 'bold'
-                    )
-                ),
-                yaxis=dict(
-                    title_font=dict(
-                        size=30,          # Set font size for y-axis title
-                        weight = 'bold'
-                    )
-                )
-            )
+        figWeek13.update_traces(textangle=0, cliponaxis=False, textposition='outside',
+                                textfont=dict(weight='bold', size=16))
+        figWeek13.update_layout(xaxis_title=None, yaxis_title=None)
         figWeek13.update_layout(yaxis=dict(showticklabels=True))
         #Update the layout to hide the legend:
         figWeek13.update(layout_coloraxis_showscale=False)
-        figWeek13.update_yaxes(
-                tickfont=dict(
-                    size=25, weight = 'bold'         # Font size
-                ))
-        figWeek13.update_xaxes(
-                tickfont=dict(
-                    size=22,         # Font size
-                ),
-                title = None,dtick = 25
-            )
+        figWeek13.update_yaxes(tickfont=dict(size=16, weight='bold'))
+        # Headroom for the "+7.1 over …" labels drawn past each bar end.
+        figWeek13.update_xaxes(tickfont=dict(size=16), title=None, dtick=25,
+                               range=[0, dfWeek13['Margin'].max() * 1.7])
         apply_logo_to_fig(figWeek13,xval=.43)
         self.UpdateColors2(WeekObj,figWeek13)
         figWeek13.update_layout( title ={'y':.93})

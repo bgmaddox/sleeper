@@ -1370,8 +1370,15 @@ renderChordDiagram: function(data, tabValue) {
             g.selectAll('.ribbon-path').attr('opacity', 0.5);
         });
 
-    // Labels
-    group.append('text')
+    // Labels — radial, so a label only fits if its arc is at least as long as
+    // the text is tall. Thinner arcs drop the label (hover still names them);
+    // drawing them anyway stacked short-tenure owners and small teams on top of
+    // each other.
+    var fitsLabel = function(d) {
+        var px = d.index < nfl ? 9 : 11;
+        return (d.endAngle - d.startAngle + 0.04) * (outerR + 8) >= px + 1;
+    };
+    group.filter(fitsLabel).append('text')
         .each(function(d) { d.angle = (d.startAngle + d.endAngle) / 2; })
         .attr('dy', '0.35em')
         .attr('transform', function(d) {

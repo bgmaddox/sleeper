@@ -379,3 +379,36 @@ def coalesce(tl: pd.DataFrame) -> pd.DataFrame:
     out = g.agg(matchup=('matchup', 'first'), delta=('delta', 'sum'), cum=('cum', 'last'),
                 desc=('desc', '<br>'.join), kind=('kind', 'first')).reset_index()
     return out.sort_values(['team', 'ts']).reset_index(drop=True)
+
+
+LEAD_COLUMNS = ['matchup', 'team_a', 'team_b', 'ts', 'lead', 'event']
+
+
+def matchup_leads(tl: pd.DataFrame) -> pd.DataFrame:
+    """Running lead inside each matchup: team A's total minus team B's.
+
+    A and B are the two teams in name order. Each team's running total holds
+    until its next scoring play, so the lead steps only when someone scores,
+    and the last value is the final Sleeper margin (every timeline ends on the
+    Sleeper total). `event` names what moved the lead at that moment.
+    """
+    frames = []
+    for m, g in tl.groupby('matchup'):
+        teams = sorted(g['team'].unique())
+        if len(teams) != 2:
+            continue
+        a, b = teams
+        wide = (g.pivot_table(index='ts', columns='team', values='cum', aggfunc='last')
+                 .sort_index().ffill().fillna(0.0))
+        scored = g[~g['kind'].isin(['anchor', 'end'])]
+        label = (scored['team'] + ': ' + scored['desc'].astype(str)
+                 + ' (' + scored['delta'].map('{:+.2f}'.format) + ')')
+        event = label.groupby(scored['ts']).agg('<br>'.join)
+        frames.append(pd.DataFrame({
+            'matchup': m, 'team_a': a, 'team_b': b, 'ts': wide.index,
+            'lead': (wide[a] - wide[b]).round(2).values,
+            'event': event.reindex(wide.index).fillna('').values,
+        }))
+    if not frames:
+        return pd.DataFrame(columns=LEAD_COLUMNS)
+    return pd.concat(frames, ignore_index=True)[LEAD_COLUMNS]
