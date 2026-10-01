@@ -3317,7 +3317,7 @@ def _update_timeline_chart(mode, year, week):
             # Matchup leads: one panel per matchup, so the figure sets its own height.
             try:
                 fig = week_obj.MatchupLeadPBP()
-                _strip(fig, fig.layout.height).update_layout(margin=dict(t=40, b=40, l=40, r=30))
+                _strip(fig, fig.layout.height).update_layout(margin=dict(t=70, b=40, l=40, r=30))   # two-line panel titles
                 return _graph(fig)
             except pbp_timeline.PBPUnavailable:
                 mode = 'pbp'          # same fallback as By play, below

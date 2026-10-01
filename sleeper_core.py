@@ -1212,7 +1212,7 @@ class Week(TeamColorsMixin):
 
         The line is the lead (first team in name order minus the second); the
         area is shaded in the leader's color, so a lead change shows as the
-        fill switching sides of zero. Single column, so it reads on a phone.
+        fill switching sides of zero. Two panels per row, like the By-play view.
         """
         import pbp_timeline as pt
 
@@ -1220,12 +1220,16 @@ class Week(TeamColorsMixin):
         leads = pt.matchup_leads(tl)
         matchups = sorted(leads['matchup'].unique())
         pairs = {m: leads.loc[leads['matchup'] == m, ['team_a', 'team_b']].iloc[0] for m in matchups}
-        titles = [f"<span style='color:{self.teamcolors[p.team_a]}'>{p.team_a}</span> vs "
+        # Two lines: at two panels per row, "BMoreBaller88 vs jlglover" on one
+        # line ran into the neighbouring title on a phone.
+        titles = [f"<span style='color:{self.teamcolors[p.team_a]}'>{p.team_a}</span><br>vs "
                   f"<span style='color:{self.teamcolors[p.team_b]}'>{p.team_b}</span>"
                   for p in pairs.values()]
-        fig = make_subplots(rows=len(matchups), cols=1, subplot_titles=titles,
-                            shared_xaxes=True, vertical_spacing=0.045)
-        for i, m in enumerate(matchups, start=1):
+        rows = -(-len(matchups) // 2)
+        fig = make_subplots(rows=rows, cols=2, subplot_titles=titles,
+                            horizontal_spacing=0.08, vertical_spacing=0.10)
+        for i, m in enumerate(matchups):
+            r, c = i // 2 + 1, i % 2 + 1
             g = leads[leads['matchup'] == m]
             a, b = pairs[m].team_a, pairs[m].team_b
             for team, part in ((a, g['lead'].clip(lower=0)), (b, g['lead'].clip(upper=0))):
@@ -1233,27 +1237,30 @@ class Week(TeamColorsMixin):
                     x=g['ts'], y=part, mode='lines', line=dict(width=0, shape='hv'),
                     fill='tozeroy', fillcolor=self.teamcolors[team], opacity=0.35,
                     hoverinfo='skip', showlegend=False,
-                ), row=i, col=1)
+                ), row=r, col=c)
             leader = np.where(g['lead'] > 0, a, np.where(g['lead'] < 0, b, 'Tied'))
             fig.add_trace(go.Scatter(
                 x=g['ts'], y=g['lead'], mode='lines', line=dict(color=TEXT_COLOR, width=1.5, shape='hv'),
                 customdata=np.stack([leader, g['lead'].abs().map('{:.2f}'.format), g['event']], axis=-1),
                 hovertemplate='<b>%{customdata[0]}</b> by %{customdata[1]}<br>%{customdata[2]}<extra></extra>',
                 showlegend=False,
-            ), row=i, col=1)
+            ), row=r, col=c)
             lim = max(10.0, float(g['lead'].abs().max()) * 1.15)
             fig.update_yaxes(range=[-lim, lim], zeroline=True, zerolinewidth=1,
-                             tickfont=dict(size=11), row=i, col=1)
+                             tickfont=dict(size=11), row=r, col=c)
 
         slots = (self.league.ScheduleGroup.get_group(self.week)
                  .drop_duplicates('Tick')[['gametime_gameday', 'Tick']])
         play_ts = pt.play_times(pbp, schedule)
         fig.update_xaxes(rangebreaks=pt.axis_breaks(pd.concat([play_ts, tl['ts']])),
                          tickvals=slots['gametime_gameday'], ticktext=slots['Tick'],
-                         tickfont=dict(size=12), side='bottom', showgrid=False)
+                         tickfont=dict(size=12), side='bottom', matches='x', showgrid=False)
+        # One shared clock: label it once, under the last panel in each column.
+        for i in range(len(matchups)):
+            fig.update_xaxes(showticklabels=(i + 2 >= len(matchups)), row=i // 2 + 1, col=i % 2 + 1)
         for ann in fig.layout.annotations:
             ann.font.size = 16
-        fig.update_layout(template='gridiron_ink', height=190 * len(matchups) + 80, showlegend=False,
+        fig.update_layout(template='gridiron_ink', height=280 * rows + 80, showlegend=False,
                           title=f'<b>Matchup Leads · By Play</b><br><sup>Week {self.week}</sup>')
         return fig
 

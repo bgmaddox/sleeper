@@ -41,7 +41,9 @@
             upd[k + '.automargin'] = true;
             upd[k + '.tickfont.size'] = cap(ax.tickfont && ax.tickfont.size, 11);
             if (ax.title && ax.title.font) upd[k + '.title.font.size'] = cap(ax.title.font.size, 12);
-            if (ax.type === 'linear' || ax.type === 'date') {
+            // Thin out automatic ticks only. An axis with its own tickvals
+            // (the timeline's kickoff slots) keeps them.
+            if ((ax.type === 'linear' || ax.type === 'date') && ax.tickmode !== 'array') {
                 upd[k + '.nticks'] = 5;
                 upd[k + '.dtick'] = null;     // a desktop dtick would override nticks
                 upd[k + '.tickmode'] = 'auto';

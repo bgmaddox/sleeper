@@ -262,7 +262,7 @@ Key config dicts (loaded at import from `config/*.json` — edit the JSON, not t
 
 ### Dashboard tabs
 
-1. **This Week** — weekly matchups, points timeline (per game / animated / by play / who led — `Week.MatchupLeadPBP`), power rankings, luck chart (YTD / This Week toggle), Side Bet of the Week card, Playoff Calculator card
+1. **This Week** — weekly matchups, points timeline (per game / animated / by play / who led — `Week.MatchupLeadPBP`, two panels per row), power rankings, luck chart (YTD / This Week toggle), Side Bet of the Week card, Playoff Calculator card
 2. **Season** — win progression (wins / points toggle), points for/against (avg line toggle), schedule swap matrix (`Season.ScheduleSwap`), where the points came from (`Season.RosterSource`: drafted / waiver / free agent / trade), scoring frequency (all/wins/losses toggle), bench strength (season / by-week toggle)
 3. **Players** — player points, violin distributions (4-way toggle: starters / all rostered / by-position starters / by-position all), score trends, top players (QB/RB/WR/TE toggle)
 4. **Playoffs** — winners + losers bracket cards, analytics charts (Champion's Road, Playoff Heat Check, Bench Points Left), all-time playoff history charts (Playoff Pedigree, Win Rate, Seeding vs. Finish, Records, Path to Glory)
