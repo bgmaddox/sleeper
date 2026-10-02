@@ -121,8 +121,10 @@ class TestEliminationTimeline:
 
     def test_fatal_label_has_score(self, pool):
         fig = pool.elimination_timeline_fig()
-        labels = [t for b in fig.data if b.y[0] == 'carl' for t in (b.text or []) if t]
-        assert labels == ['TB — Lost 10-20']
+        bars = [b for b in fig.data if b.y[0] == 'carl' and any(b.text or [])]
+        # Short on the bar (the red marker says it lost); the hover spells it out.
+        assert [t for b in bars for t in b.text if t] == ['TB 10-20']
+        assert 'eliminated' in bars[0].hovertemplate
 
 
 class TestWeeklyCarnage:

@@ -2134,7 +2134,7 @@ class Season(TeamColorsMixin):
         fig2 = px.line(df,x='Week',y='Total Wins', color = 'Team',template='gridiron_ink',line_shape = 'spline', facet_col='Team',facet_col_wrap=3, title = '<b>Weekly Wins</b><br><sup>Breakout</sup>', color_discrete_map=self.teamcolors)
         
         
-        fig2.update_yaxes(zerolinewidth = 1, ticklabelposition = 'inside',ticklabelstandoff=130, tickfont = dict(size = 12), dtick = 2,showticklabels=True,showgrid=True)
+        fig2.update_yaxes(zerolinewidth = 1, ticklabelposition = 'inside', tickfont = dict(size = 12), dtick = 2,showticklabels=True,showgrid=True)
         fig2.update_xaxes(zerolinewidth = 1,side = 'bottom', ticklabelposition = 'inside bottom', tickfont = dict(size =12), dtick = 1, showticklabels=True,showgrid=False)
         
 
@@ -4417,6 +4417,7 @@ class AllTime(TeamColorsMixin):
             opacity=.7,
             text = TopTenLosers['OppName'],
             textfont=dict(size=14),
+            textposition='inside', insidetextanchor='start',   # outside ran off a phone card
             marker_color=[self.teamcolors.get(t, '#BDE2FF') for t in TopTenLosers['Opp_team']],
             ))
         figLosers.update_layout(template="gridiron_ink", barmode='group')
@@ -5139,35 +5140,39 @@ class SideBet(TeamColorsMixin):
         return figWeek5
 
     def Week6(self, WeekObj):
-        df6 = WeekObj.Breakout
-        df6 = df6[df6.starter == 1]
-        df6group = df6.groupby('team')
-        BustBoom = pd.DataFrame()
+        """The Boom & Bust — each manager's spread between best and worst starter.
 
-        for team in df6.team.unique():
-            teamdf = df6group.get_group(team)
-            maxrow = teamdf[teamdf.points == teamdf.points.max()]
-            minrow = teamdf[teamdf.points == teamdf.points.min()]
-            teamrows = pd.concat([maxrow,minrow])
-            teamrows['difference'] = teamrows.points.sum().round(1)
-
-            BustBoom = pd.concat([BustBoom,teamrows])
-
-
-        figWeek6 = px.bar(BustBoom, y='team',x='points',template = 'gridiron_ink', color_discrete_map=self.teamcolors,color = "team", title = f'Week {WeekObj.week} Side Bet', orientation='h',barmode='overlay', text = 'player')
-        figWeek6.update_traces( textfont_size=20  # Font color
-            )
-        
-        figWeek6.update_layout(
-                xaxis_title="",  # Set x-axis title
-                yaxis_title="")
-        
-        # self.UpdateColors2(WeekObj,figWeek6)
-
+        One bar per manager running from the worst starter's score to the best's,
+        so its length is the spread the resolver judges (r_boom_bust). The boom
+        player is named at the bar end, both players in the hover, winner on top.
+        (Was two overlaid bars per team whose name labels drew on top of each
+        other, and a tie for best or worst added a third.)
+        """
+        st = WeekObj.Breakout[WeekObj.Breakout.starter == 1]
+        boom = st.loc[st.groupby('team')['points'].idxmax(), ['team', 'player', 'points']].set_index('team')
+        bust = st.loc[st.groupby('team')['points'].idxmin(), ['team', 'player', 'points']].set_index('team')
+        df = boom.join(bust, lsuffix='_boom', rsuffix='_bust')
+        df['spread'] = (df['points_boom'] - df['points_bust']).round(2)
+        df = df.sort_values('spread')                         # biggest spread drawn last = top
+        figWeek6 = go.Figure(go.Bar(
+            y=df.index, x=df['spread'], base=df['points_bust'], orientation='h',
+            marker_color=[self.teamcolors.get(t, TEXT_COLOR) for t in df.index],
+            text=df['player_boom'], textposition='outside', cliponaxis=False,
+            textfont=dict(size=13),
+            customdata=np.stack([df['player_boom'], df['points_boom'].map('{:.1f}'.format),
+                                 df['player_bust'], df['points_bust'].map('{:.1f}'.format),
+                                 df['spread'].map('{:.1f}'.format)], axis=-1),
+            hovertemplate=('<b>%{y}</b> — spread %{customdata[4]}<br>'
+                           'Boom: %{customdata[0]} (%{customdata[1]})<br>'
+                           'Bust: %{customdata[2]} (%{customdata[3]})<extra></extra>'),
+            showlegend=False,
+        ))
+        figWeek6.update_layout(template='gridiron_ink', title=f'Week {WeekObj.week} Side Bet',
+                               xaxis_title='', yaxis_title='')
+        figWeek6.update_xaxes(range=[min(0, df['points_bust'].min()), df['points_boom'].max() * 1.8])   # room for the boom player's name
         apply_logo_to_fig(figWeek6)
-
         return figWeek6
-    
+
 
     def Week7(self, WeekObj):
         Week7Data = WeekObj.Breakout
@@ -5261,7 +5266,8 @@ class SideBet(TeamColorsMixin):
                     annotation.text = f"<span style='color:{self.teamcolors[title_text]}'>{title_text}</span><br>{df8group[title_text]}"
                     annotation.font.size = 23  # Optional: Adjust font size for clarity
         
-        figWeek8.add_hline(y=15,line_color = 'red' ,annotation_text='15 pts.')
+        figWeek8.add_hline(y=15, line_color='red')
+        figWeek8.add_hline(y=15, line_color='red', annotation_text='15 pts.', row=1, col=1)   # label once
 
         return figWeek8
 
@@ -5566,7 +5572,7 @@ class SideBet(TeamColorsMixin):
         dfWeek13 = WeekObj.WeeklyNoMatches.reset_index()
         dfWeek13 =dfWeek13[dfWeek13['Won'] == 1]
         dfWeek13['Abs Margin'] = dfWeek13.Margin.abs().round(0)
-        dfWeek13['TeamName'] = '+' + dfWeek13.Margin.round(1).astype(str) + ' over ' + dfWeek13.Opp_team
+        dfWeek13['TeamName'] = '+' + dfWeek13.Margin.round(1).astype(str) + '<br>over ' + dfWeek13.Opp_team
 
         # Colored by the winner (was color='Matchup' — a numeric id, which drew a
         # continuous viridis ramp unrelated to anyone's color). Largest margin
@@ -5585,7 +5591,7 @@ class SideBet(TeamColorsMixin):
         figWeek13.update_yaxes(tickfont=dict(size=16, weight='bold'))
         # Headroom for the "+7.1 over …" labels drawn past each bar end.
         figWeek13.update_xaxes(tickfont=dict(size=16), title=None, dtick=25,
-                               range=[0, dfWeek13['Margin'].max() * 1.7])
+                               range=[0, dfWeek13['Margin'].max() * 1.8])
         apply_logo_to_fig(figWeek13,xval=.43)
         self.UpdateColors2(WeekObj,figWeek13)
         figWeek13.update_layout( title ={'y':.93})
@@ -5839,8 +5845,7 @@ class Survivor:
                 if outcome == 'fatal':
                     team = pick['team_pick']
                     res = results.get((team, last))
-                    label = (f'{team} — Lost {res[1]:.0f}-{res[2]:.0f}' if res
-                             else f'{team} — Lost')
+                    label = (f'{team} {res[1]:.0f}-{res[2]:.0f}' if res else team)
                 weeks_txt = f'Week {first}' if first == last else f'Weeks {first}–{last}'
                 fig.add_trace(go.Bar(
                     x=[last - first + 1],
@@ -5860,7 +5865,7 @@ class Survivor:
         fig.update_layout(
             template='gridiron_ink',
             title=dict(text='<b>Elimination Timeline</b>', x=0.5),
-            # Headroom on the right for the "TB — Lost 10-20" labels.
+            # Headroom on the right for the "TB 10-20" end labels.
             xaxis=dict(title='Week', tickmode='linear', dtick=1,
                        range=[0.5, max_week + 0.5 + max(2, max_week * 0.3)]),
             yaxis=dict(title=None, categoryorder='array',

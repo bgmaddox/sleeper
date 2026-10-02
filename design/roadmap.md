@@ -1,7 +1,7 @@
 # Legacy League Webapp — Development Roadmap
 
 **Created:** 2026-05-21  
-**Last updated:** 2026-08-16  
+**Last updated:** 2026-10-01  
 **Status:** Active — Phases 1–4, 6–9 complete; historical side bets (2019–2024) complete.
 Phase 11 (2026 season rollover) planned, not started. Task 3E is no longer blocked —
 the 2026 league exists and its `previous_league_id` chain was verified.  
@@ -1485,3 +1485,37 @@ Worth recording, because the original plan was wrong in instructive ways:
   from a prior load. The test-suite hang was blamed on a networked test when it was
   cache corruption. In both cases the correct move was the one taken second: reproduce
   the failure deliberately and confirm it disappears when the suspected cause is removed.
+
+---
+
+## Chart Audit — Colors, Phone Layout, New Charts ✅ COMPLETE (commits `c2a5342`, `6bfea46`)
+
+**Done 2026-10-01, deployed.** Verified by a Playwright sweep of all nine tabs at 1400px
+and 390px (clipping, overlapping labels, legend collisions, trace color vs the person
+map) plus 506 passing tests.
+
+- One color per manager (`config/team_colors.json`) — see `DECISIONS.md`.
+- Fixes: Highest-Scoring Losses float label, Hall of Fame/Shame rounding, Smallest
+  Margins once per game, NFL Franchise Week (one bar per manager, matches the resolver),
+  Coffee's For Closers colored by winner, Luck Chart key/axis, legends off the top axis,
+  chord labels, "Points With & Against NFL Teams" retitled.
+- Phone: automargin + `assets/mobilefit.js` + `.st-scroll` tables (rules in `CLAUDE.md`
+  → Phone Layout). Phone-width issues went from ~30 charts to ~6.
+- New: Schedule Swap, Where the Points Came From (Season); Close Games (All-Time);
+  "Who led" on the Points Timeline (two panels per row).
+
+**Deferred — pick up when the trigger hits:**
+- ~~Remaining phone nits~~ — done 2026-10-01: the sweep is clean at 390px and 1400px on
+  every tab. Boom & Bust was rebuilt as a best-to-worst spread bar (its overlaid name
+  labels collided on desktop too). Known compromise: Schedule Swap labels every other
+  column on a phone (columns follow the row order; hover names both teams).
+- *Toggled views were not audited* (bench by-week, violin variants, bump, top-players
+  modes, PF&A avg line). Trigger: next chart work on those tabs — rerun the sweep with
+  each toggle clicked.
+- *Gold series colors* in Playoff Heat Check ("Playoff Avg") and Playoff Pedigree
+  ("Championships") read close to bgmaddox's gold. Trigger: if anyone mistakes them for a
+  manager; swap to a non-identity accent.
+- *`r_most_trades` and the roster-source chart read permanently cached transactions.*
+  The roster-source chart refreshes the newest week; the resolver does not. Trigger: if
+  a Most Trades winner ever looks short a trade.
+

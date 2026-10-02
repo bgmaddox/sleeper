@@ -67,7 +67,10 @@ Figures are built for a ~1300px desktop card. Two layers make them work on a pho
 - **`webapp/assets/mobilefit.js`** runs after every Plotly render on cards under 600px:
   it drops fixed left/right margins to a minimum (automargin regrows them), caps tick,
   title, legend, annotation and bar-text sizes, and lets outside bar labels move inside.
-  No Dash wiring, like `chartdownload.js`.
+  No Dash wiring, like `chartdownload.js`. It must leave axes with `tickmode='array'`
+  alone — overriding them replaced the timelines' kickoff-slot ticks with plain dates.
+  It also stands top-axis category names upright, drops cell text from heatmaps wider
+  than 6 columns, and shrinks panel titles on grids of 6+ panels.
 - Legends: the template puts them below the plot in paper coordinates (the x-axis owns
   the top). `_strip()` and the side bet cards anchor them to the figure bottom with
   `yref='container'` — set all three of `yref`/`y`/`yanchor` together, or a chart's own
@@ -174,6 +177,8 @@ Always kill before restarting. Confirm with `curl -s -o /dev/null -w "%{http_cod
 ## Deployment (Raspberry Pi)
 
 Live at **`https://legacy.bgmaddox.com/`** — served at the root of that host since 2026-09-16. The two older prefixed URLs (`rachett.tail504ae5.ts.net/legacy` via Tailscale Funnel, `rachett.local/legacy` on the LAN) now **301 to the canonical root**, preserving any `?tab=&year=&week=` deep link; neither can be made prefix-free, because Funnel publishes by literal path and shares that hostname with other apps. Pi runs `sleeper.service`: gunicorn (1 worker, 4 threads) on `127.0.0.1:8503`, app dir `/home/bgmaddox/apps/Sleeper` with its own `.venv/` (deps pinned to match local). Secrets live in the Pi's `.env` — **do not blindly rsync the local `.env` over it**; it also holds a different `LEAGUE_PASSWORD` than the local one. `URL_BASE_PATHNAME` is **commented out** there, so `app.py:182` falls back to its `/` default and the app serves at root. Setting it again re-prefixes every URL. Deploy: commit/push, then `ssh rachett 'bash ~/deploy.sh sleeper'`. `.cache/` and `Data/` are rsynced, not git-tracked — re-rsync after rebuilding caches locally.
+
+After a deploy that changes a callback's inputs or states, a browser tab opened before it keeps POSTing the old signature and the journal fills with `IndexError` 500s on `/_dash-update-component`. Harmless to everyone else — reload that tab.
 
 Run the server in the background so the session stays interactive. After code changes, kill and restart — there is no hot reload.
 

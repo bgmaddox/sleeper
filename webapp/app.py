@@ -2831,8 +2831,14 @@ def _tab_sidebets(year):
                 # Several side bet charts park their legend at the top, on the
                 # x-axis; send every legend to the bottom of the figure instead.
                 legend_shown = fig.layout.showlegend is True
+                # Small-multiple charts title each panel just above its plot; the
+                # top row's titles need room or they're cut off.
+                # (y is a category name on annotations pinned to a bar, so check the type)
+                panel_titles = any(isinstance(a.y, (int, float)) and a.y >= 1
+                                   for a in fig.layout.annotations)
                 fig.update_layout(title=None, width=None, height=520,
-                                  margin=dict(t=20, b=90 if legend_shown else 40, l=40, r=40),
+                                  margin=dict(t=70 if panel_titles else 20,
+                                              b=90 if legend_shown else 40, l=40, r=40),
                                   legend=dict(yref='container', y=0, yanchor='bottom',
                                               x=0.5, xanchor='center', orientation='h'))
                 chart_el = _graph(_automargin(fig))
@@ -3162,7 +3168,8 @@ def _h2h(team_a, team_b):
     fig_games.update_layout(
         template='gridiron_ink', barmode='group', showlegend=True, height=500,
         title=None, width=None, margin=dict(t=20, b=80, l=60, r=20),
-        legend=dict(orientation='h', x=0.5, xanchor='center', y=1.05, yanchor='bottom'),
+        # Bottom of the figure: the x-axis labels own the top edge.
+        legend=dict(orientation='h', x=0.5, xanchor='center', yref='container', y=0, yanchor='bottom'),
     )
 
     # Chart 2: score distribution comparison (box)

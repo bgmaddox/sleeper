@@ -41,6 +41,10 @@
             upd[k + '.automargin'] = true;
             upd[k + '.tickfont.size'] = cap(ax.tickfont && ax.tickfont.size, 11);
             if (ax.title && ax.title.font) upd[k + '.title.font.size'] = cap(ax.title.font.size, 12);
+            // Names along a narrow top x axis: straight up, never tilted — a
+            // tilted label there ran off the left edge of the card. (Bottom axes
+            // keep Plotly's choice: vertical names there ran into the legend.)
+            if (k[0] === 'x' && ax.type === 'category' && ax.side === 'top') upd[k + '.tickangle'] = -90;
             // Thin out automatic ticks only. An axis with its own tickvals
             // (the timeline's kickoff slots) keeps them.
             if ((ax.type === 'linear' || ax.type === 'date') && ax.tickmode !== 'array') {
@@ -50,23 +54,29 @@
             }
         });
         if (L.legend) upd['legend.font.size'] = cap(L.legend.font && L.legend.font.size, 10);
+        // A grid of small panels titles each one; at 12px, neighbouring titles
+        // ran together, so grids get 10px.
+        var annCap = (L.annotations || []).length >= 6 ? 10 : 12;
         (L.annotations || []).forEach(function (a, i) {
-            if (a.font) upd['annotations[' + i + '].font.size'] = cap(a.font.size, 12);
+            if (a.font) upd['annotations[' + i + '].font.size'] = cap(a.font.size, annCap);
         });
 
         // Bar text: cap the size, and let Plotly put it inside the bar when it
         // fits ('auto') instead of always past the end, where a narrow card
         // has no room for it.
-        var sizeIdx = [], autoIdx = [];
+        var sizeIdx = [], autoIdx = [], cellIdx = [];
         (gd._fullData || []).forEach(function (t, i) {
             var idx = t.index != null ? t.index : i;
             if (t.textfont && typeof t.textfont.size === 'number' && t.textfont.size > 12) sizeIdx.push(idx);
             if (t.type === 'bar' && t.textposition === 'outside') autoIdx.push(idx);
+            // Heatmap cells under ~25px can't hold "7-7"; color and hover carry it.
+            if (t.type === 'heatmap' && t.x && t.x.length > 6 && t.texttemplate) cellIdx.push(idx);
         });
 
         window.Plotly.relayout(gd, upd);
         if (sizeIdx.length) window.Plotly.restyle(gd, { 'textfont.size': 12 }, sizeIdx);
         if (autoIdx.length) window.Plotly.restyle(gd, { textposition: 'auto' }, autoIdx);
+        if (cellIdx.length) window.Plotly.restyle(gd, { texttemplate: '' }, cellIdx);
     }
 
     function hook(gd) {

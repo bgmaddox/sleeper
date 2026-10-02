@@ -20,12 +20,12 @@ it is archived and stale.
 **League config lives in `config/*.json`, not in code.**
 Settled Session 7 (`92f22e3`), same commit that hardened network I/O.
 
-**The app is served under a subpath; `/` redirects to `URL_BASE`.**
-Settled in `ac5ed10`. Do not assume the app is at domain root when writing links or
-testing routes.
+**The app is served at the root of <https://legacy.bgmaddox.com/>** (since 2026-09-16;
+originally a `/legacy` subpath, `ac5ed10`). The old prefixed URLs 301 to the root.
+`URL_BASE_PATHNAME` stays commented out on the Pi — setting it re-prefixes every URL.
 
-**Deployment is Pi + Tailscale Funnel**, documented in `CLAUDE.md` (`300c876`).
-Public URL is <https://rachett.tail504ae5.ts.net/legacy/>.
+**Deployment is the Pi** (`sleeper.service`), behind a Cloudflare Tunnel. Runbook in
+`CLAUDE.md` → Deployment and the `pi-server` skill.
 
 **Data loading is disk-cached in `.cache/`.**
 First load hits the Sleeper API + nfl_data_py; afterwards it's pickles. Use
@@ -85,6 +85,22 @@ refetches on every app start (~5s) — that is the point, it is how the app noti
 
 ---
 
+**One color per manager, site-wide, from `config/team_colors.json`.** Settled 2026-10-01
+(`c2a5342`). Rejected: slot colors (a newcomer inherited the slot's color, so the same
+person was red on This Week and white on All-Time) and all-time join-order colors (gave
+three current managers pink). Current managers kept their This Week hue family, nudged
+until the dataviz validator passed; former managers were placed farthest-first by
+tenure. Revisit when a new manager joins: pick their color with the validator against
+that season's twelve — `tests/test_teamcolors.py` enforces the floors.
+
+**Phones get a responsive layer, not a separate phone version.** Settled 2026-10-01
+(`c2a5342`, `6bfea46`): automargin in the template, `assets/mobilefit.js` for narrow
+cards, tables in `.st-scroll`. Rejected for now: a server-side compact mode (viewport
+width in a store, `compact=True` per chart method) and a separate phone page — both
+cost a second layout to maintain. Revisit after the league has used it on phones for a
+few weeks: if specific charts still read badly, give *those* a compact mode, not a
+second site.
+
 ## Do not repeat
 
 *(Add entries here when an approach is tried and rejected — that's the whole point of
@@ -142,3 +158,14 @@ this file. An empty section is fine; a wrong one is not.)*
   `sleeper.service` also orders after `time-sync.target` and `nss-lookup.target`.
   Symptom to recognise: `uptime -s` reporting a boot time *later* than a service start
   in the journal. Found 2026-08-28.
+
+- **Do not anchor the template's legend with `yref='container'`.** Charts that set their
+  own legend `y`/`yanchor` inherit the `yref`, and their legends silently moved off the
+  bottom of the figure (The Race, Pick 'Em). The template uses paper coordinates;
+  `yref='container'` is only safe where all three are set together (`_strip`, side bet
+  cards). Found 2026-10-01.
+
+- **Do not let colors live only in pickles.** Week objects cached their `teamcolors`, so
+  the per-game Points Timeline kept the old palette after the change while every other
+  chart updated. `load_data_for_year` now re-applies colors to the Season and every Week.
+  Found 2026-10-01.

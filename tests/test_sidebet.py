@@ -146,6 +146,21 @@ class TestWeekChartMethods:
         assert top in r.r_nfl_franchise(ctx)
         assert list(bar.marker.color) == [sidebet_2025.teamcolors[m] for m in managers]
 
+    def test_week6_bars_are_the_spread_led_by_the_winner(self, sidebet_2025, week8_2025):
+        """Boom & Bust: one bar per manager spanning worst to best starter, so the
+        bar length is exactly what the resolver judges; the winner is on top."""
+        import side_bet_resolver as r
+        fig = sidebet_2025.Week6(week8_2025)
+        bar = fig.data[0]
+        st = week8_2025.Breakout[week8_2025.Breakout['starter'] == 1].groupby('team')['points']
+        spread = (st.max() - st.min()).round(2)
+        assert sorted(bar.y) == sorted(spread.index)
+        for team, length, base in zip(bar.y, bar.x, bar.base):
+            assert abs(length - spread[team]) < 0.01
+            assert abs(base - st.min()[team]) < 0.01
+        ctx = r.Ctx(year=2025, week=week8_2025.week, breakout=week8_2025.Breakout, matches=None)
+        assert bar.y[-1] in r.r_boom_bust(ctx)            # last drawn = top bar
+
     def test_week11_returns_figure(self, sidebet_2025, week8_2025):
         fig = sidebet_2025.Week11(week8_2025)
         assert _is_valid_fig(fig), "Week11 returned empty or invalid figure"
