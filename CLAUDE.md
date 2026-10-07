@@ -202,6 +202,12 @@ If the kernel is missing entirely (fresh clone, or `.venv` rebuilt):
     --display-name "Sleeper Project (3.12.7)"
 ```
 
+Its **data playground** section builds `matches` (one row per team-week) and `players`
+(one row per player-week; `players_full` keeps every nflverse column) across all seasons
+from the cached pickles. Ad-hoc analysis is fine there; anything the app needs moves into
+`sleeper_core.py`. `.vscode/settings.json` pins this project's `.venv` so VS Code doesn't
+pick the workspace-root 3.14 venv when the `CODING/` folder is open.
+
 Charts match the app with no extra setup: `sleeper_core` registers the `gridiron_ink`
 template *and* sets it as the Plotly default at import (`sleeper_core.py:242-245`).
 
