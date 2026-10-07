@@ -1488,11 +1488,11 @@ Worth recording, because the original plan was wrong in instructive ways:
 
 ---
 
-## Chart Audit — Colors, Phone Layout, New Charts ✅ COMPLETE (commits `c2a5342`, `6bfea46`)
+## Chart Audit — Colors, Phone Layout, New Charts ✅ COMPLETE (commits `c2a5342`, `6bfea46`, `faeb9ca`)
 
 **Done 2026-10-01, deployed.** Verified by a Playwright sweep of all nine tabs at 1400px
 and 390px (clipping, overlapping labels, legend collisions, trace color vs the person
-map) plus 506 passing tests.
+map) plus 512 passing tests (slow ones included).
 
 - One color per manager (`config/team_colors.json`) — see `DECISIONS.md`.
 - Fixes: Highest-Scoring Losses float label, Hall of Fame/Shame rounding, Smallest

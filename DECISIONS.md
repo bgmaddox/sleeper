@@ -94,7 +94,7 @@ tenure. Revisit when a new manager joins: pick their color with the validator ag
 that season's twelve — `tests/test_teamcolors.py` enforces the floors.
 
 **Phones get a responsive layer, not a separate phone version.** Settled 2026-10-01
-(`c2a5342`, `6bfea46`): automargin in the template, `assets/mobilefit.js` for narrow
+(`c2a5342`, `6bfea46`, `faeb9ca`): automargin in the template, `assets/mobilefit.js` for narrow
 cards, tables in `.st-scroll`. Rejected for now: a server-side compact mode (viewport
 width in a store, `compact=True` per chart method) and a separate phone page — both
 cost a second layout to maintain. Revisit after the league has used it on phones for a
