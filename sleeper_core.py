@@ -354,6 +354,18 @@ def _color_ticklabels(fig, labels, teams, teamcolors, size=16):
     return fig
 
 
+YEAR_MARK = '\u2605 '   # ★, prefixed to entries from the season selected in the app
+# In a tick label the star is drawn larger and in the title gold (--accent), so it
+# reads as a marker rather than taking on the manager's color.
+_YEAR_MARK_LABEL = "<span style='color:#FFC300;font-size:1.4em'>\u2605</span> "
+
+
+def _mark_year(labels, years, year):
+    """Star each label whose entry is from `year` (None marks nothing)."""
+    return [_YEAR_MARK_LABEL + l if year is not None and int(y) == int(year) else l
+            for l, y in zip(labels, years)]
+
+
 positions = {0: 'QB', 1: 'RB1', 2: 'RB2', 3: 'WR1', 4: 'WR2', 5: 'TE', 6: 'WRT', 7: 'K', 8: 'DEF'}
 position_list = list(positions.values())
 
@@ -4390,11 +4402,12 @@ class AllTime(TeamColorsMixin):
         return fig2
     
     
-    def HighestScoringLosers(self, team_colors = None):
+    def HighestScoringLosers(self, team_colors = None, highlight_year=None):
         
         Losers = self.Matches[(self.Matches['Won'] == 0) & self.Matches['Opp'].notna() & (self.Matches['Opp'] > 0) & self.Matches['Opp_team'].notna()]
         TopTenLosers = Losers.sort_values('Total', ascending=False).head(10)
         TopTenLosers['TeamName'] = "<b>" + TopTenLosers['Team'] + '</b><br>' + "W" +TopTenLosers['Week'].astype(str) + " " + TopTenLosers['Year'].astype(str)
+        TopTenLosers['TeamName'] = _mark_year(TopTenLosers['TeamName'], TopTenLosers['Year'], highlight_year)
         TopTenLosers['Opp'] = round(TopTenLosers['Opp'],2)
         TopTenLosers['OppName'] = TopTenLosers['Opp_team'] + ' - ' + TopTenLosers['Opp'].astype(str)
         TopTenLosers = TopTenLosers.sort_values('Total')
@@ -4434,7 +4447,7 @@ class AllTime(TeamColorsMixin):
 
         return figLosers
         
-    def SmallestMargins(self):
+    def SmallestMargins(self, highlight_year=None):
         """The ten closest games ever — one bar per game, from the winner's row.
 
         Matches holds every game twice (winner +m, loser -m); plotting both
@@ -4449,6 +4462,7 @@ class AllTime(TeamColorsMixin):
         top = games.nsmallest(10, 'Margin').sort_values('Margin', ascending=False)   # closest drawn last = top
         top = top.assign(Label=top['Team'] + '<br>over ' + top['Opp_team'] + ' · W'
                          + top['Week'].astype(str) + ' ' + top['Year'].astype(str))
+        top['Label'] = _mark_year(top['Label'], top['Year'], highlight_year)
         fig = go.Figure(go.Bar(
             x=top['Margin'].round(2), y=top['Label'], orientation='h',
             marker_color=[self.teamcolors.get(t, TEXT_COLOR) for t in top['Team']],
@@ -4461,10 +4475,11 @@ class AllTime(TeamColorsMixin):
         fig.update_yaxes(title=None, tickfont=dict(size=13))
         return fig
 
-    def HallofShame_Team(self):
+    def HallofShame_Team(self, highlight_year=None):
         Worst10 = self.Matches.sort_values('Total')[0:10]
         Worst10['Total'] = Worst10['Total'].round(2)   # round, never truncate: 59.96 is not 59
         Worst10['TeamName'] = '<b>' + Worst10['Team'] + '</b><br>W' + Worst10['Week'].astype(str) + " " + Worst10['Year'].astype(str)
+        Worst10['TeamName'] = _mark_year(Worst10['TeamName'], Worst10['Year'], highlight_year)
         Worst10 = Worst10.sort_values('Total')
         
         
@@ -4488,10 +4503,11 @@ class AllTime(TeamColorsMixin):
 
         return figWorst
     
-    def HallofFame_Team(self):
+    def HallofFame_Team(self, highlight_year=None):
         Best10 = self.Matches.sort_values('Total', ascending=False)[0:10]
         Best10['Total'] = Best10['Total'].round(2)
         Best10['TeamName'] = '<b>'+ Best10['Team'] + '</b>' + '<br>' + "W" +Best10['Week'].astype(str) + " " + Best10['Year'].astype(str)
+        Best10['TeamName'] = _mark_year(Best10['TeamName'], Best10['Year'], highlight_year)
         
         figBest = px.bar(Best10, x='Total',y='TeamName', color = 'Team', orientation='h', template='gridiron_ink', title = '<b>Hall of Fame</b><br><sup>Team</sup>', text = 'Total', color_discrete_map=self.teamcolors)
         figBest.update_layout(height = 1200, width= 800, showlegend=False)
@@ -4512,10 +4528,11 @@ class AllTime(TeamColorsMixin):
         apply_logo_to_fig(figBest,xval=.40)
         return figBest
         
-    def HallofFame_Player(self):
+    def HallofFame_Player(self, highlight_year=None):
             
         Best10Players = self.Breakout.sort_values('points', ascending=False)[0:10]
         Best10Players['TeamName'] = '<b>' + Best10Players['team'] + '</b><br><sup>' + "W" +Best10Players['week_x'].astype(str) + " " + Best10Players['year'].astype(str) + '</sup>'
+        Best10Players['TeamName'] = _mark_year(Best10Players['TeamName'], Best10Players['year'], highlight_year)
         Best10Players['Player-Points'] = '<b>' + Best10Players.player + '</b><br>' + Best10Players.points.map('{:.2f}'.format)
         
         figBestPlayers = px.bar(Best10Players, x='points',y='TeamName', color = 'team', orientation='h',

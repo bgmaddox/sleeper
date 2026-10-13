@@ -2497,9 +2497,16 @@ def _tab_alltime(teams, year=None):
         ('CloseGameChart',      'Close Games',                        False, 'All-time record in games decided by under 5 points, regular season and playoffs'),
         ('ForAgainstwithTeams', 'Points With & Against NFL Teams',    False, "Most fantasy points a manager has scored from one NFL team's players, and against one NFL opponent"),
     ]
+    # Game lists star every entry from the season picked in the header.
+    _year_marked = {'HallofFame_Team', 'HallofFame_Player', 'HallofShame_Team',
+                    'HighestScoringLosers', 'SmallestMargins'}
     for fn, title, half, sub in _alltime_meta:
         try:
-            fig = getattr(at, fn)()
+            if fn in _year_marked and year:
+                fig = getattr(at, fn)(highlight_year=year)
+                sub = f'{sub} · {core.YEAR_MARK}= {year}'
+            else:
+                fig = getattr(at, fn)()
             # Close Games sizes itself to the number of managers.
             stripped = _strip(fig, fig.layout.height if fn == 'CloseGameChart' else 700)
             if fn == 'ForAgainstwithTeams':

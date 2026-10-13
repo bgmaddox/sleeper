@@ -43,3 +43,31 @@ def test_smallest_margins_lists_each_game_once(alltime):
     m = alltime.Matches
     expected = sorted(m.loc[m['Margin'] >= 0, 'Margin'].nsmallest(10).round(2))
     assert sorted(round(v, 2) for v in xs) == expected
+
+
+# ── Selected-season marker ────────────────────────────────────────────────────
+# The All-Time tab passes the season picked in the header; every entry from that
+# season gets a star in front of its label.
+
+LISTS = ['HallofFame_Team', 'HallofFame_Player', 'HallofShame_Team',
+         'HighestScoringLosers', 'SmallestMargins']
+
+
+def _labels(fig):
+    return {y for tr in fig.data for y in tr.y}
+
+
+@pytest.mark.parametrize('method', LISTS)
+def test_no_star_without_a_selected_year(alltime, method):
+    assert not any('\u2605' in l for l in _labels(getattr(alltime, method)()))
+
+
+@pytest.mark.parametrize('method', LISTS)
+def test_star_marks_exactly_the_selected_seasons_entries(alltime, method):
+    plain = _labels(getattr(alltime, method)())
+    year = int(sorted(plain)[0].replace('</sup>', '').rstrip()[-4:])
+    marked = _labels(getattr(alltime, method)(highlight_year=year))
+    assert len(marked) == len(plain), 'starring must not merge or drop entries'
+    for label in marked:
+        from_year = label.replace('</sup>', '').rstrip().endswith(str(year))
+        assert label.startswith(core._YEAR_MARK_LABEL) == from_year, label
