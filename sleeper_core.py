@@ -5250,20 +5250,20 @@ class SideBet(TeamColorsMixin):
     def Week8(self,WeekObj):
 
         df8 = WeekObj.Breakout
-        df8 = df8[df8.starter == 1]
-        # Create a new column 'over_15' which is 1 if true, 0 if false
+        df8 = df8[df8.starter == 1].copy()
         df8['over_15'] = (df8['points'] >= 15).astype(int)
-        # Now, sum this column for ALL teams
         df8group = dict(df8.groupby('team')['over_15'].sum())
 
-        figWeek8 = px.bar(df8,x='player',y='points',facet_col='team',facet_col_wrap=3, color = 'position', title = f'<b>Side Bet Week {WeekObj.week}</b><br><sup>Players Over 15 pts</sup>',
-                    facet_row_spacing=.1)
+        # 4 columns, not 3: twelve teams in 3 rows instead of 4, so each panel
+        # is tall enough to read and the gap between rows fits a one-line title.
+        figWeek8 = px.bar(df8,x='player',y='points',facet_col='team',facet_col_wrap=4, color = 'position', title = f'<b>Side Bet Week {WeekObj.week}</b><br><sup>Players Over 15 pts</sup>',
+                    facet_row_spacing=.14, facet_col_spacing=.03)
         figWeek8.update_xaxes(matches=None,showticklabels = False, title = '')
         figWeek8.update_yaxes(title = '')
         figWeek8.update_layout(showlegend = True)
 
         figWeek8.for_each_annotation(lambda a: a.update(text=a.text.split("=")[-1]))
-       
+
         figWeek8.update_layout(margin=dict(t=180, b=100, l=40, r=40))
         figWeek8.update_layout(
                     legend=dict(
@@ -5276,15 +5276,21 @@ class SideBet(TeamColorsMixin):
                 )
                 
         apply_logo_to_fig(figWeek8)
+        # One line per panel title, bold: the regular-weight Courier New name
+        # over a second line holding the count was too thin to read and
+        # taller than the gap between rows.
         for annotation in figWeek8.layout.annotations:
-                    title_text = annotation.text  # e.g., "Team A vs Team B"
-                    #teams = title_text.split(" vs ")  # Split into individual team names
-                    # Create a styled title with team names in respective colors
-                    annotation.text = f"<span style='color:{self.teamcolors[title_text]}'>{title_text}</span><br>{df8group[title_text]}"
-                    annotation.font.size = 23  # Optional: Adjust font size for clarity
+                    team = annotation.text
+                    n = df8group[team]
+                    annotation.text = (f"<b><span style='color:{self.teamcolors[team]}'>{team}</span>"
+                                       f"  ·  {n} over 15</b>")
+                    annotation.font.size = 15
         
         figWeek8.add_hline(y=15, line_color='red')
-        figWeek8.add_hline(y=15, line_color='red', annotation_text='15 pts.', row=1, col=1)   # label once
+        # Label once, on the top-left panel (facet rows count up from the bottom)
+        top_row = -(-df8['team'].nunique() // 4)
+        figWeek8.add_hline(y=15, line_color='red', annotation_text='15 pts.',
+                           annotation_position='top left', row=top_row, col=1)
 
         return figWeek8
 

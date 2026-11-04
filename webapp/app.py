@@ -1801,6 +1801,10 @@ _SIDEBET_WEEK_METHODS = {
     11: 'Week11', 12: 'Week12', 13: 'Week13', 14: 'Week14',
 }
 
+# Card heights for side bet charts that need more than the default: Week 8 is a
+# 3-row grid of twelve team panels, cramped at the default height.
+_SIDEBET_HEIGHTS = {'Week8': 680}
+
 
 def _sidebet_card(year, week, week_obj):
     """Side Bet of the Week card for the bottom of the This Week tab."""
@@ -1819,7 +1823,8 @@ def _sidebet_card(year, week, week_obj):
                 fig = getattr(sb, method_name)(week_obj, top=None)
             else:
                 fig = getattr(sb, method_name)(week_obj)
-            fig.update_layout(title=None, width=None, height=560,
+            fig.update_layout(title=None, width=None,
+                              height=_SIDEBET_HEIGHTS.get(method_name, 560),
                               margin=dict(t=20, b=80, l=220, r=40))
             chart_el = _graph(fig)
         except Exception as e:
@@ -2843,7 +2848,8 @@ def _tab_sidebets(year):
                 # (y is a category name on annotations pinned to a bar, so check the type)
                 panel_titles = any(isinstance(a.y, (int, float)) and a.y >= 1
                                    for a in fig.layout.annotations)
-                fig.update_layout(title=None, width=None, height=520,
+                fig.update_layout(title=None, width=None,
+                                  height=_SIDEBET_HEIGHTS.get(method_name, 520),
                                   margin=dict(t=70 if panel_titles else 20,
                                               b=90 if legend_shown else 40, l=40, r=40),
                                   legend=dict(yref='container', y=0, yanchor='bottom',
