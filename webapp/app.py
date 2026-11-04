@@ -35,7 +35,7 @@ numbers on purpose; they drift). Sections appear in this order:
   D3 store population                        — _populate_d3_stores() (snake draft, schedule, matchups)
   Clientside callbacks (D3 rendering)        — wires D3 renderers to their stores
   D3 store population — Bubble Map           — _populate_bubble_data()
-  D3 store population — Draft Board          — _populate_draft_data()
+  D3 store population — Draft Board          — _draft_board_payload(), _populate_draft_data()
   D3 store population — State Choropleth     — _populate_choropleth_data()
   D3 store population — Chord Diagram        — _populate_chord_data()
   Run                                        — if __name__ == '__main__'
@@ -3940,6 +3940,49 @@ def _populate_bubble_data(tab, year, week, _boot_done, _trigger):
 
 # ── D3 store population — Draft Board ────────────────────────────────────────
 
+def _draft_board_payload(draft, player_totals, colors, year):
+    """Store payload for the Draft Board Replay: one entry per pick, plus the
+    team that owns each board column (from its round-1 pick)."""
+    picks = []
+    slot_team = {}   # draft_slot -> the team picking from that column
+    for _, row in draft.iterrows():
+        player_name = str(row.get('player_name', row.get('player', '')))
+        # roster_id column is already mapped to display_name by Draft()
+        team_name   = str(row.get('roster_id', row.get('display_name', row.get('team', ''))))
+        total_pts   = player_totals.get(player_name, 0.0)
+
+        # Value tier by season points
+        if   total_pts >= 200: tier = 'elite'
+        elif total_pts >= 120: tier = 'solid'
+        elif total_pts >= 60:  tier = 'average'
+        else:                  tier = 'bust'
+
+        # Position from metadata if available
+        pos = str(row.get('metadata.position', row.get('position', '')))
+
+        # draft_slot is the board column Sleeper put this pick in. It
+        # already accounts for snake order and the 3rd-round reversal
+        # (used every season since 2020), so the board never derives it.
+        slot = int(row.get('draft_slot', 1))
+        if int(row.get('round', 1)) == 1:
+            slot_team[slot] = team_name
+        picks.append({
+            'round':     int(row.get('round', 1)),
+            'pick':      int(row.get('pick_no', 1)),
+            'slot':      slot,
+            'team':      team_name,
+            'player':    player_name,
+            'position':  pos,
+            'total_pts': round(float(total_pts), 1),
+            'tier':      tier,
+            'color':     colors.get(team_name, '#BDE2FF'),
+        })
+
+    slots = [{'slot': k, 'team': v, 'color': colors.get(v, '#BDE2FF')}
+             for k, v in sorted(slot_team.items())]
+    return {'year': year, 'picks': picks, 'slots': slots}
+
+
 @app.callback(
     Output('store-draft-data', 'data'),
     Input('tabs',             'value'),
@@ -3966,36 +4009,8 @@ def _populate_draft_data(tab, year, _boot_done, _trigger):
             bs = season_data.BreakoutSeason
             player_totals = bs.groupby('player')['points'].sum().to_dict()
 
-        colors = core.get_slot_teamcolors(year)
-
-        picks = []
-        for _, row in draft.iterrows():
-            player_name = str(row.get('player_name', row.get('player', '')))
-            # roster_id column is already mapped to display_name by Draft()
-            team_name   = str(row.get('roster_id', row.get('display_name', row.get('team', ''))))
-            total_pts   = player_totals.get(player_name, 0.0)
-
-            # Value tier by season points
-            if   total_pts >= 200: tier = 'elite'
-            elif total_pts >= 120: tier = 'solid'
-            elif total_pts >= 60:  tier = 'average'
-            else:                  tier = 'bust'
-
-            # Position from metadata if available
-            pos = str(row.get('metadata.position', row.get('position', '')))
-
-            picks.append({
-                'round':     int(row.get('round', 1)),
-                'pick':      int(row.get('pick_no', row.get('draft_slot', 1))),
-                'team':      team_name,
-                'player':    player_name,
-                'position':  pos,
-                'total_pts': round(float(total_pts), 1),
-                'tier':      tier,
-                'color':     colors.get(team_name, '#BDE2FF'),
-            })
-
-        return {'year': year, 'picks': picks}
+        return _draft_board_payload(draft, player_totals,
+                                    core.get_slot_teamcolors(year), year)
     except Exception as e:
         print(f'[draft] error: {e}')
         return no_update

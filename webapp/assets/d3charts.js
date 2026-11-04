@@ -612,22 +612,38 @@ renderDraftBoard: function(data, tabValue) {
     var T = _theme();
     var picks = data.picks;
     var rounds = d3.max(picks, function(d) { return d.round; });
-    // Figure out picks per round
-    var picksPerRound = Math.ceil(picks.length / rounds);
+    var picksPerRound = d3.max(picks, function(d) { return d.slot; }) || Math.ceil(picks.length / rounds);
 
-    var margin = {top: 40, right: 20, bottom: 20, left: 20};
+    var margin = {top: 48, right: 20, bottom: 40, left: 20};
     var dims = _setupChart(container, {margin: margin, fallbackW: 760, fallbackH: 500});
     var svg = dims.svg, g = dims.g, width = dims.width, height = dims.height;
 
     var cellW = Math.floor(width  / picksPerRound);
     var cellH = Math.floor(height / rounds);
 
-    // Column headers (pick slots)
+    // Column headers: the team that picks from each column, in its manager
+    // color, over the slot number. Names are clipped to the column width.
+    var slotTeam = {};
+    (data.slots || []).forEach(function(s) { slotTeam[s.slot] = s; });
+    var headSize = Math.max(7, Math.min(11, cellW / 8));
+    var maxChars = Math.max(3, Math.floor((cellW - 4) / (headSize * 0.62)));
     for (var slot = 1; slot <= picksPerRound; slot++) {
+        var hx = (slot - 1) * cellW + (cellW - 2) / 2;
+        var st = slotTeam[slot];
+        if (st) {
+            var nm = st.team.length > maxChars ? st.team.slice(0, maxChars - 1) + '\u2026' : st.team;
+            g.append('text')
+                .attr('x', hx).attr('y', -22)
+                .attr('text-anchor', 'middle')
+                .style('fill', st.color).style('font-family', T.font)
+                .style('font-size', headSize + 'px').style('font-weight', 'bold')
+                .text(nm)
+                .append('title').text(st.team);
+        }
         g.append('text')
-            .attr('x', (slot - 1) * cellW + cellW / 2).attr('y', -12)
+            .attr('x', hx).attr('y', -8)
             .attr('text-anchor', 'middle')
-            .style('fill', T.muted).style('font-family', T.font).style('font-size', '10px')
+            .style('fill', T.muted).style('font-family', T.font).style('font-size', '9px')
             .text(slot);
     }
 
@@ -644,12 +660,12 @@ renderDraftBoard: function(data, tabValue) {
 
     var tooltip = _makeTooltip(container);
 
-    // Animate picks in snake order
+    // Reveal picks in draft order. The column comes from Sleeper's draft_slot,
+    // which already reflects the snake and the 3rd-round reversal.
+    picks = picks.slice().sort(function(a, b) { return a.pick - b.pick; });
     picks.forEach(function(pick, i) {
         var rnd  = pick.round;
-        var slot = ((pick.pick - 1) % picksPerRound) + 1;
-        // Snake order: odd rounds go left-to-right, even go right-to-left
-        var col  = (rnd % 2 === 1) ? (slot - 1) : (picksPerRound - slot);
+        var col  = pick.slot - 1;
         var cx   = col  * cellW;
         var cy   = (rnd - 1) * cellH;
 
@@ -688,7 +704,7 @@ renderDraftBoard: function(data, tabValue) {
             tooltip.html(
                 '<b>' + pick.player + '</b> (' + pick.position + ')<br>' +
                 'Team: ' + pick.team + '<br>' +
-                'Pick: Rd ' + pick.round + '<br>' +
+                'Pick: ' + pick.round + '.' + (((pick.pick - 1) % picksPerRound) + 1) + ' (#' + pick.pick + ')<br>' +
                 'Season pts: <b>' + pick.total_pts + '</b><br>' +
                 'Tier: <span style="color:' + tierColors[pick.tier] + '">' + pick.tier.toUpperCase() + '</span>'
             ).style('opacity', 1)
@@ -723,10 +739,16 @@ renderDraftBoard: function(data, tabValue) {
         {label: 'Average (60–119)', color: T.text},
         {label: 'Bust (<60)',  color: T.danger},
     ];
-    var legend = svg.append('g').attr('transform', 'translate(' + (margin.left + width - 200) + ', 8)');
+    // Below the board, centred: the top band now holds the team names. One row
+    // of four, or two rows of two on a narrow card.
+    var itemW = 140, perRow = width >= 4 * itemW ? 4 : 2;
+    var legendX = margin.left + (width - perRow * itemW) / 2;
+    var legend = svg.append('g').attr('transform',
+        'translate(' + legendX + ',' + (margin.top + height + 10) + ')');
     legendData.forEach(function(d, i) {
-        legend.append('rect').attr('x', 0).attr('y', i * 14).attr('width', 10).attr('height', 10).attr('fill', d.color).attr('rx', 2);
-        legend.append('text').attr('x', 14).attr('y', i * 14 + 5).attr('dy', '0.35em')
+        var lx = (i % perRow) * itemW, ly = Math.floor(i / perRow) * 14;
+        legend.append('rect').attr('x', lx).attr('y', ly).attr('width', 10).attr('height', 10).attr('fill', d.color).attr('rx', 2);
+        legend.append('text').attr('x', lx + 14).attr('y', ly + 5).attr('dy', '0.35em')
             .style('fill', T.text).style('font-family', T.font).style('font-size', '10px')
             .text(d.label);
     });
