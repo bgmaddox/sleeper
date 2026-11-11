@@ -290,7 +290,8 @@ RULES = {
 MANUAL_ONLY = {
     "soothsayer":                    "managers submit guesses off-platform",
     "stay on target":                "needs weekly projections, which are not stored",
-    "the old man & young buck":      "needs player age; only rookie_year is available",
+    "the old man & young buck":      "age is derivable (sleeper_core.old_man_young_buck) "
+                                     "but only one season of history to backtest",
     "breaking of the tie":           "managers pick the players",
     "breaking of the tie (if needed)": "managers pick the players",
     "tiebreaker":                    "positions are drawn at random",

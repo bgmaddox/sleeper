@@ -360,6 +360,30 @@ YEAR_MARK = '\u2605 '   # ★, prefixed to entries from the season selected in t
 _YEAR_MARK_LABEL = "<span style='color:#FFC300;font-size:1.4em'>\u2605</span> "
 
 
+def old_man_young_buck(breakout, year):
+    """Starters eligible for "The Old Man & Young Buck", each tagged with a Type.
+
+    Old Man: 30 or older on the day of his game, from ``birth_date`` and
+    ``gameday`` (Breakout has no ``age`` column; reading one made every Old
+    Man silently disappear). Young Buck: a rookie this season. Returns None
+    when the columns needed are missing.
+    """
+    if breakout is None or not {'birth_date', 'rookie_year'} <= set(breakout.columns):
+        return None
+    s = breakout[breakout.starter == 1].copy()
+    born = pd.to_datetime(s['birth_date'], errors='coerce')
+    played = pd.to_datetime(s['gameday'], errors='coerce') if 'gameday' in s.columns \
+        else pd.Series(pd.NaT, index=s.index)
+    played = played.fillna(pd.Timestamp(f'{year}-11-01'))
+    # Whole years, so a player turns 30 on his birthday rather than at 29.97
+    age = (played.dt.year - born.dt.year
+           - ((played.dt.month * 100 + played.dt.day) < (born.dt.month * 100 + born.dt.day)))
+    rookie = s['rookie_year'] == year
+    s = s[rookie | (age >= 30)].copy()
+    s['Type'] = np.where(rookie[s.index], 'Young Buck', 'Old Man')
+    return s
+
+
 def _mark_year(labels, years, year):
     """Star each label whose entry is from `year` (None marks nothing)."""
     return [_YEAR_MARK_LABEL + l if year is not None and int(y) == int(year) else l
@@ -5295,21 +5319,13 @@ class SideBet(TeamColorsMixin):
         return figWeek8
 
     def Week9(self,WeekObj):
-        Week9Setup = WeekObj.Breakout
-        Week9Setup = Week9Setup[Week9Setup.starter == 1]
-        has_age = 'age' in Week9Setup.columns
-        has_rookie = 'rookie_year' in Week9Setup.columns
-        if not has_age and not has_rookie:
+        Week9Setup = old_man_young_buck(WeekObj.Breakout, self.League.year)
+        if Week9Setup is None:
             import plotly.graph_objects as _go
             fig = _go.Figure()
-            fig.add_annotation(text="Week 9 data unavailable (age/rookie_year columns missing)",
+            fig.add_annotation(text="Week 9 data unavailable (birth_date/rookie_year columns missing)",
                                xref="paper", yref="paper", x=0.5, y=0.5, showarrow=False)
             return fig
-        age_mask = Week9Setup['age'] > 29.0 if has_age else pd.Series(False, index=Week9Setup.index)
-        rookie_mask = Week9Setup['rookie_year'] == 2025.0 if has_rookie else pd.Series(False, index=Week9Setup.index)
-        Week9Setup = Week9Setup[rookie_mask | age_mask]
-            
-        Week9Setup['Type'] = np.where(Week9Setup['rookie_year'] == 2025.0, 'Young Buck', 'Old Man')
 
         idx = Week9Setup.groupby(['team','Type'])['points'].idxmax()
 
