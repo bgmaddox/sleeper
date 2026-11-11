@@ -5331,10 +5331,22 @@ class SideBet(TeamColorsMixin):
 
         Week9 = Week9Setup.loc[idx]
 
-        Week9['Player_Text'] = '<b>' + Week9['player'] + '</b><br><sup>' + Week9['Type'] + '</sup>'
+        # One short line ("M. Stafford") inside the bar. The old two-line label
+        # (name over type) never fit a bar this thin, so the template's
+        # uniformtext 'hide' dropped every one. Color already says which type;
+        # a name that doesn't fit is hidden, and hover has the full name.
+        def _short(name):
+            parts = str(name).split()
+            return f'{parts[0][0]}. {" ".join(parts[1:])}' if len(parts) > 1 else str(name)
+        Week9['Player_Text'] = Week9['player'].map(_short)
 
-        figWeek9 = px.bar(Week9, x = 'points', y = 'team', orientation='h', color = 'Type', text = 'Player_Text', template='gridiron_ink', title = f'<b>Week {WeekObj.week} Side Bet</b><br><sup>The Old Man & Young Buck</sup>')
-        figWeek9.update_layout(yaxis={'categoryorder':'total ascending'})
+        figWeek9 = px.bar(Week9, x = 'points', y = 'team', orientation='h', color = 'Type', text = 'Player_Text',
+                          hover_data={'player': True, 'Player_Text': False},
+                          template='gridiron_ink', title = f'<b>Week {WeekObj.week} Side Bet</b><br><sup>The Old Man & Young Buck</sup>')
+        figWeek9.update_traces(textposition='inside', insidetextanchor='middle',
+                               textangle=0, textfont=dict(size=13, color='#0B1E2D', weight='bold'))
+        figWeek9.update_layout(yaxis={'categoryorder':'total ascending'},
+                               showlegend=True, legend_title_text='')
 
         figWeek9.update_layout(
                 xaxis_title="",  # Set x-axis title
