@@ -101,8 +101,10 @@ Three invariants hold it together:
 
 Six challenges are declared in `MANUAL_ONLY` and will never resolve automatically —
 Soothsayer and Stay On Target need projections or off-platform guesses, the two
-tiebreakers depend on managers picking players, and The Old Man & Young Buck needs
-player age (only `rookie_year` is available). These require a hand-entered winner.
+tiebreakers depend on managers picking players, and The Old Man & Young Buck has
+only one season of history (2025) to backtest a rule against. These require a
+hand-entered winner. Its chart computes age from `birth_date` at each player's
+`gameday` (`sleeper_core.old_man_young_buck`); Breakout has no `age` column.
 
 **Rules are validated against history, not intuition.** `tests/test_side_bet_resolver.py`
 backtests every rule against the winners the league recorded by hand across 2019–2025
