@@ -259,6 +259,23 @@ def r_most_trades(ctx):
     return _extreme(counts) if any(counts.values()) else []
 
 
+def r_old_man_young_buck(ctx):
+    """Best starter aged 30+ plus best rookie starter, summed per team.
+
+    Shares sleeper_core.old_man_young_buck with the week 9 chart, so the
+    winner and the chart can't disagree about who counts.
+    """
+    import sleeper_core as sc
+    s = sc.old_man_young_buck(ctx.breakout, ctx.year)
+    if s is None:
+        return []
+    best = s.groupby(["team", "Type"])["points"].max().groupby("team").sum()
+    scores = best.round(2).to_dict()
+    for team in _starters(ctx)["team"].unique():   # a team with neither scores 0
+        scores.setdefault(team, 0.0)
+    return _extreme(scores)
+
+
 RULES = {
     "i'm flying, jack":       r_high_score,
     "hot start":              r_high_score,
@@ -273,6 +290,7 @@ RULES = {
     "dead weight":            r_dead_weight,
     "keeping it tight":       r_best_te,
     "endzones that way >":    r_worst_def,
+    "the old man & young buck": r_old_man_young_buck,
     "thirty flirty & thriving": r_closest_to_30,
     "flexual healing":        r_flex,
     "campus rush week":       r_rush_yards,
@@ -290,8 +308,6 @@ RULES = {
 MANUAL_ONLY = {
     "soothsayer":                    "managers submit guesses off-platform",
     "stay on target":                "needs weekly projections, which are not stored",
-    "the old man & young buck":      "age is derivable (sleeper_core.old_man_young_buck) "
-                                     "but only one season of history to backtest",
     "breaking of the tie":           "managers pick the players",
     "breaking of the tie (if needed)": "managers pick the players",
     "tiebreaker":                    "positions are drawn at random",

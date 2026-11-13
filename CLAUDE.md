@@ -99,12 +99,15 @@ Three invariants hold it together:
   through `norm_name()` because spelling drifts between seasons ("I'm flying, Jack!"
   vs "I'm Flying, Jack!").
 
-Six challenges are declared in `MANUAL_ONLY` and will never resolve automatically —
-Soothsayer and Stay On Target need projections or off-platform guesses, the two
-tiebreakers depend on managers picking players, and The Old Man & Young Buck has
-only one season of history (2025) to backtest a rule against. These require a
-hand-entered winner. Its chart computes age from `birth_date` at each player's
-`gameday` (`sleeper_core.old_man_young_buck`); Breakout has no `age` column.
+Five challenges are declared in `MANUAL_ONLY` and will never resolve automatically —
+Soothsayer and Stay On Target need projections or off-platform guesses, and the
+tiebreakers depend on managers picking players or a random draw. These require a
+hand-entered winner.
+
+The Old Man & Young Buck resolves from `sleeper_core.old_man_young_buck`, the same
+function its week 9 chart uses: age is computed from `birth_date` at each player's
+`gameday` (Breakout has no `age` column), rookies are `rookie_year == season`. Its
+backtest is one week (2025, matches the recorded winner).
 
 **Rules are validated against history, not intuition.** `tests/test_side_bet_resolver.py`
 backtests every rule against the winners the league recorded by hand across 2019–2025
