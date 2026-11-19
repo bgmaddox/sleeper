@@ -1,7 +1,7 @@
 /* chartdownload.js — "Download PNG" button on every chart card.
  *
- * Injects a button into each .chart-card that holds a Plotly graph or a D3
- * SVG, and renders a share-ready PNG: the chart composited onto the card
+ * Injects a button into each .chart-card that holds a Plotly graph, a D3
+ * SVG, or a text block marked .chart-export-text, and renders a share-ready PNG: the chart composited onto the card
  * background (both Plotly and D3 render transparent, which shares badly),
  * with the card title and the current season/week drawn in as a header.
  *
@@ -71,7 +71,14 @@
         return best;
     }
 
-    function exportable(card) { return plotlyIn(card) || svgIn(card); }
+    // HTML cards opt in by marking the block to export with .chart-export-text
+    // (Key Games, Power Rankings, Side Bet Championship). See textImage().
+    function textIn(card) {
+        var t = card.querySelector('.chart-export-text');
+        return (t && t.offsetWidth > 0) ? t : null;
+    }
+
+    function exportable(card) { return plotlyIn(card) || svgIn(card) || textIn(card); }
 
     /* ── Source image: Plotly ───────────────────────────────────────────── */
 
@@ -116,6 +123,79 @@
         return loadImage(url).then(function (img) {
             return { img: img, w: w, h: h };
         });
+    }
+
+    /* ── Source image: HTML block ───────────────────────────────────────── */
+
+    /* Redraws a block of HTML onto a canvas from the browser's own layout:
+       background fills (bars, pills; rounded corners kept), bottom borders
+       (row dividers), then every word at the spot it was laid out, in its
+       computed color and font. No library, and unlike the SVG foreignObject
+       trick it doesn't taint the canvas in Safari. Gradients, shadows and
+       images are not drawn. A table inside a sideways-scrolling wrapper is
+       drawn in full, because layout positions exist for clipped cells too. */
+    var CLEAR = /^(transparent|rgba\(0, 0, 0, 0\))$/;
+
+    function textImage(el) {
+        var box = el.getBoundingClientRect();
+        var w = Math.ceil(box.width), h = Math.ceil(box.height);
+        var canvas = document.createElement('canvas');
+        canvas.width = w * SCALE;
+        canvas.height = h * SCALE;
+        var c = canvas.getContext('2d');
+        c.scale(SCALE, SCALE);
+        var nodes = [el].concat([].slice.call(el.querySelectorAll('*')));
+
+        nodes.forEach(function (node) {                    // fills
+            var cs = getComputedStyle(node);
+            if (CLEAR.test(cs.backgroundColor) || cs.visibility === 'hidden') return;
+            var r = node.getBoundingClientRect();
+            if (!r.width || !r.height) return;
+            var x = r.left - box.left, y = r.top - box.top;
+            var rad = Math.min(parseFloat(cs.borderTopLeftRadius) || 0, r.height / 2, r.width / 2);
+            c.fillStyle = cs.backgroundColor;
+            c.beginPath();
+            if (rad && c.roundRect) c.roundRect(x, y, r.width, r.height, rad);
+            else c.rect(x, y, r.width, r.height);
+            c.fill();
+        });
+
+        nodes.forEach(function (node) {                    // row dividers
+            var cs = getComputedStyle(node);
+            var bw = parseFloat(cs.borderBottomWidth);
+            if (!bw || cs.borderBottomStyle === 'none' || CLEAR.test(cs.borderBottomColor)) return;
+            // A zero-width box with borders is a CSS triangle (sort arrows), not a rule
+            if (node.clientWidth === 0) return;
+            var r = node.getBoundingClientRect();
+            if (!r.width) return;
+            c.strokeStyle = cs.borderBottomColor;
+            c.lineWidth = bw;
+            var y = r.bottom - box.top - bw / 2;
+            c.beginPath();
+            c.moveTo(r.left - box.left, y);
+            c.lineTo(r.right - box.left, y);
+            c.stroke();
+        });
+
+        c.textBaseline = 'middle';                         // text
+        var walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+        var range = document.createRange();
+        var node, m, re = /\S+/g;
+        while ((node = walker.nextNode())) {
+            var cs = getComputedStyle(node.parentNode);
+            if (cs.visibility === 'hidden') continue;
+            c.fillStyle = cs.color;
+            c.font = cs.fontStyle + ' ' + cs.fontWeight + ' ' + cs.fontSize + ' ' + cs.fontFamily;
+            re.lastIndex = 0;
+            while ((m = re.exec(node.textContent))) {
+                range.setStart(node, m.index);
+                range.setEnd(node, m.index + m[0].length);
+                var r = range.getClientRects()[0];
+                if (!r || !r.width) continue;
+                c.fillText(m[0], r.left - box.left, r.top - box.top + r.height / 2);
+            }
+        }
+        return Promise.resolve({ img: canvas, w: w, h: h });
     }
 
     function loadImage(src) {
@@ -193,11 +273,12 @@
         var title   = titleEl ? titleEl.textContent.trim() : '';
         var gd      = plotlyIn(card);
         var svg     = gd ? null : svgIn(card);
+        var txt     = (gd || svg) ? null : textIn(card);
 
-        if (!gd && !svg) { flash(btn, 'No chart'); return; }
+        if (!gd && !svg && !txt) { flash(btn, 'No chart'); return; }
 
         btn.classList.add('is-busy');
-        var job = gd ? plotlyImage(gd) : svgImage(svg);
+        var job = gd ? plotlyImage(gd) : svg ? svgImage(svg) : textImage(txt);
 
         job.then(function (src) {
             var canvas = compose(src, title, context());

@@ -832,7 +832,10 @@ def _power_rankings_native(sf, week_obj):
         html.Div('Power Rankings', className='chart-title'),
         html.Div('Composite rank built from record, points for, and strength of schedule through this week', className='chart-subtitle'),
         # Scrolls sideways on a phone instead of the card clipping the right columns.
-        html.Div(html.Table([thead, html.Tbody(data_rows)], id='pr-table', className='pr-table'),
+        # .chart-export-text opts the table into the PNG download (all columns,
+        # even those scrolled out of view on a phone)
+        html.Div(html.Table([thead, html.Tbody(data_rows)], id='pr-table',
+                            className='pr-table chart-export-text'),
                  className='st-scroll'),
     ], className='chart-card chart-col-full')
 
@@ -1910,7 +1913,8 @@ def _playoff_key_games_card(snapshots, league):
     return html.Div([
         html.Div('Key Games This Week', className='chart-title'),
         html.Div('Which matchups matter most for each team\'s playoff odds', className='chart-subtitle'),
-        html.Div(rows, style={'padding': '8px 0'}),
+        # .chart-export-text opts this HTML block into the PNG download
+        html.Div(rows, className='chart-export-text', style={'padding': '8px 0'}),
     ], className='chart-card chart-col-third')
 
 
@@ -2809,7 +2813,7 @@ def _tab_sidebets(year):
     sections.append(html.Div([
         html.Div('Side Bet Championship', className='chart-title'),
         html.Div(f'{config_year} season · $20 per weekly win', className='chart-subtitle'),
-        html.Div(rows, className='sb-leaderboard'),
+        html.Div(rows, className='sb-leaderboard chart-export-text'),  # PNG download
     ], className='chart-card chart-col-full'))
 
     # ── Section 2: Week navigator ─────────────────────────────────────────────

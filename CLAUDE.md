@@ -33,6 +33,12 @@ season/week drawn in as a header, because the `gridiron_ink` template renders
 transparent (`paper_bgcolor='rgba(0,0,0,0)'`) and `_strip()` clears the figure title —
 a raw Plotly export would share as untitled text on nothing.
 
+HTML cards (Key Games, Power Rankings, Side Bet Championship) opt in by putting
+`chart-export-text` on the block to export. `textImage()` redraws it from the live
+layout — background fills, bottom borders, then each word in its computed color and
+font — with no library, so it works in Safari. It does not draw gradients, shadows or
+images, and it skips zero-width bordered elements (CSS triangles such as sort arrows).
+
 Consequences for new chart work:
 - Keep charts inside a `.chart-card` with a `.chart-title` and they are covered for free.
 - D3 renderers must keep styling **inline** (via `_theme()` / `_styleAxis`, as they do).
