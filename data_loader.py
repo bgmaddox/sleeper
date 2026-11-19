@@ -579,29 +579,39 @@ def _canonicalize_pool(pool):
     return pool
 
 
-def load_survivor_for_year(year: int):
-    """Build and return a Survivor object for the given year, disk-cached."""
+def _load_pool(key: str, year: int, build):
+    """A pool object (Survivor / PickEm) for one season, disk-cached.
+
+    The current season's copy expires after _POOL_TTL so standings stay live.
+    When the refresh fails (Sleeper slow or down: a 30 s read timeout took the
+    Pick 'Em tab down on 2026-11-18), serve the expired copy instead of an
+    error. Only a season with no cached copy at all raises.
+    """
     import sleeper_core as core
-    key = f"survivor_{year}"
     ttl = _POOL_TTL if year == core.CURRENT_SEASON else None
     cached = _load_cache(key, max_age=ttl)
     if cached is not None:
         return _canonicalize_pool(cached)
-    s = core.Survivor(year)
-    _save_cache(key, s)
-    return s
+    try:
+        obj = build(year)
+    except requests.RequestException as e:
+        stale = _load_cache(key)               # any age
+        if stale is None:
+            raise
+        print(f"[pool] {key}: refresh failed ({e}); serving the last cached copy")
+        return _canonicalize_pool(stale)
+    _save_cache(key, obj)
+    return obj
+
+def load_survivor_for_year(year: int):
+    """Build and return a Survivor object for the given year, disk-cached."""
+    import sleeper_core as core
+    return _load_pool(f"survivor_{year}", year, core.Survivor)
 
 def load_pickem_for_year(year: int):
     """Build and return a PickEm object for the given year, disk-cached."""
     import sleeper_core as core
-    key = f"pickem_{year}"
-    ttl = _POOL_TTL if year == core.CURRENT_SEASON else None
-    cached = _load_cache(key, max_age=ttl)
-    if cached is not None:
-        return _canonicalize_pool(cached)
-    p = core.PickEm(year)
-    _save_cache(key, p)
-    return p
+    return _load_pool(f"pickem_{year}", year, core.PickEm)
 
 
 # ── High-level data loading ───────────────────────────────────────────────────
