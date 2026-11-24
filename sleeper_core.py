@@ -749,7 +749,10 @@ class Week(TeamColorsMixin):
         # the weekly stats); fall back to the roster team when he has no stats row
         # (inactive, or the current week before nflverse publishes it).
         team_col = 'team' if 'team' in WeeklyNFLData.columns else 'recent_team'
+        # dropna: .map() looks a NaN gsis_id up as a key, and the stats carry
+        # blank-id rows — every DEF was being placed on that row's team.
         this_week = (WeeklyNFLData[WeeklyNFLData['week'] == self.week]
+                     .dropna(subset=['player_id'])
                      .drop_duplicates('player_id'))
         played_for = dfBreakout['gsis_id'].map(dict(zip(this_week['player_id'], this_week[team_col])))
         dfBreakout['recent_teams'] = played_for.fillna(dfBreakout['recent_teams'])
@@ -1069,9 +1072,18 @@ class Week(TeamColorsMixin):
             uniformtext_mode='hide'
             )
 
-        fig1.update_traces(
-            hovertemplate="<b>%{y}</b><br>%{fullData.name}: <b>%{x:.2f} pts</b><extra></extra>"
-        )
+        # Hover names the player behind each segment (the bar already shows the
+        # points). px melts the wide frame slot by slot, so one trace holds all
+        # bars in position-major order; build [slot, player] in that same order.
+        names = self.WeeklyMatches[position_list].map(
+            lambda x: next(iter(x)) if isinstance(x, dict) and x else '—')
+        hover = [[pos, names[pos].iloc[i]] for pos in position_list for i in range(len(names))]
+        if len(fig1.data) == 1 and len(fig1.data[0].x) == len(hover):
+            fig1.data[0].customdata = hover
+            fig1.update_traces(hovertemplate="<b>%{customdata[1]}</b><br>%{y} · %{customdata[0]}"
+                                             "<br><b>%{x:.2f} pts</b><extra></extra>")
+        else:
+            fig1.update_traces(hovertemplate="<b>%{y}</b><br><b>%{x:.2f} pts</b><extra></extra>")
         fig1.update_layout(transition=dict(duration=500, easing='cubic-in-out'))
         fig1.update_layout(margin=dict(t=120, b=90, l=170, r=40))
 

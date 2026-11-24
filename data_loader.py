@@ -112,7 +112,9 @@ def _name_fingerprint(year: int) -> str:
 #   2: Breakout places traded players in the game they played that week.
 #   3: Season (Regular/Playoff) follows the league's playoff_week_start, so
 #      2019-2020 week 14 is a playoff week rather than a regular-season one.
-SEASON_SCHEMA = 3
+#   4: DEFs and players with no GSIS id keep their own NFL team (a NaN id
+#      was matching blank-id stats rows and moving them onto that team).
+SEASON_SCHEMA = 4
 
 
 def season_cache_key(year: int, max_week: int = 18) -> str:

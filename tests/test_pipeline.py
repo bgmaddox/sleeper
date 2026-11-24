@@ -874,3 +874,23 @@ def test_traded_players_sit_in_the_game_they_played(season_2025):
             if team is not None and team not in str(r.game_id).split('_')[2:]:
                 wrong.append((w, r.player, team, r.game_id))
     assert not wrong, wrong[:5]
+
+
+def test_players_without_an_nfl_id_keep_their_own_team(season_2025):
+    """A DEF (or a player Sleeper can't map to a GSIS id) keeps its own team.
+
+    gsis_id is NaN for these rows, and `.map(dict)` looked NaN up as a key: the
+    weekly stats carry rows with a blank player_id, so every id-less row was
+    placed on that row's team (all 2026 week 10 defenses were 'NYG'). That
+    corrupted NFL Franchise Week, the points-by-NFL-team charts and DEF games.
+    """
+    _, _, weeks = season_2025
+    wrong = []
+    for w, week in weeks.items():
+        d = week.Breakout[week.Breakout['position'] == 'DEF']
+        exp = d['player_id'].replace({'LAR': 'LA'})
+        wrong += [(w, p, t) for p, t, e in zip(d['player_id'], d['recent_teams'], exp) if t != e]
+        no_id = week.Breakout[week.Breakout['gsis_id'].isna() & (week.Breakout['position'] != 'DEF')]
+        stray = no_id[no_id['recent_teams'] != no_id['team_roster']]
+        wrong += [(w, p, t) for p, t in zip(stray['player'], stray['recent_teams'])]
+    assert not wrong, wrong[:5]

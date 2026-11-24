@@ -36,6 +36,17 @@ class TestWeekCharts:
         all_y = [str(v) for trace in fig.data for v in (trace.y if trace.y is not None else [])]
         assert len(all_y) >= 12, f"Expected at least 12 team entries across all traces, got {len(all_y)}"
 
+    def test_weekly_graph_hover_names_the_player(self, week_obj):
+        """Each segment's hover names the player whose points it is."""
+        fig = week_obj.WeeklyGraph()
+        tr = fig.data[0]
+        assert 'customdata[1]' in tr.hovertemplate
+        wm = week_obj.WeeklyMatches
+        for (pos, player), team, pts in zip(tr.customdata, tr.y, tr.x):
+            cell = wm.xs(team, level='Team')[pos].iloc[0]
+            assert player in cell, (team, pos, player, cell)
+            assert round(float(cell[player]), 2) == round(float(pts), 2)
+
 
 # ── Season-level charts ───────────────────────────────────────────────────────
 
