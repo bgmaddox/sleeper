@@ -4060,6 +4060,55 @@ class AllTime(TeamColorsMixin):
         # Net close wins first: sorting by Pct put a 1-0 manager above a 6-1 one.
         return rec.assign(_net=rec['W'] - rec['L']).sort_values(['_net', 'W'], ascending=False).drop(columns='_net')
 
+    def ScoringFrequencyBySeason(self, highlight_year=None):
+        """Each season's distribution of team scores, as overlaid filled curves.
+
+        A smoothed version of the Season tab's Scoring Frequency histogram
+        (Gaussian KDE, Silverman bandwidth). Regular-season weeks that are
+        final only, so each season is the same kind of game. The y axis is the
+        share of that season's games per point, which makes a 14-week season
+        and a partial one comparable. Opens on the selected season and the
+        one before it; click a legend entry to toggle a season, double-click
+        to show only that one.
+        """
+        reg = self._final_regular_season()
+        reg = reg[reg['Total'] > 0]          # unplayed / bye rows score 0
+        lo, hi = reg['Total'].min(), reg['Total'].max()
+        pad = (hi - lo) * 0.08
+        xs = np.linspace(lo - pad, hi + pad, 400)
+
+        fig = go.Figure()
+        years = sorted(reg['Year'].unique())
+        # Eight overlapping translucent fills blend into one colour, so open on
+        # the header season and the one before it; the rest wait in the legend.
+        focus = int(highlight_year) if highlight_year is not None else int(years[-1])
+        shown = {focus, focus - 1}
+        for i, year in enumerate(years):
+            scores = reg.loc[reg['Year'] == year, 'Total'].to_numpy(float)
+            if len(scores) < 2:
+                continue
+            bw = 1.06 * scores.std(ddof=1) * len(scores) ** -0.2
+            dens = np.exp(-0.5 * ((xs[:, None] - scores[None, :]) / bw) ** 2).sum(axis=1)
+            dens = dens / (len(scores) * bw * np.sqrt(2 * np.pi)) * 100   # % of games per point
+            color = coastal_colorway[i % len(coastal_colorway)]
+            r, g, b = (int(color[k:k + 2], 16) for k in (1, 3, 5))
+            hot = highlight_year is not None and int(year) == int(highlight_year)
+            fig.add_trace(go.Scatter(
+                x=xs, y=dens, mode='lines', fill='tozeroy',
+                visible=True if int(year) in shown else 'legendonly',
+                name=f'{year}  (avg {scores.mean():.1f})', legendgroup=str(year),
+                line=dict(color=color, width=4 if hot else 2),
+                fillcolor=f'rgba({r},{g},{b},{0.35 if hot else 0.15})',
+                hovertemplate=f'<b>{year}</b><br>%{{x:.0f}} pts: %{{y:.2f}}% of games per point'
+                              f'<br>{len(scores)} scores, median {np.median(scores):.1f}<extra></extra>',
+            ))
+        fig.update_layout(template='gridiron_ink', showlegend=True, height=620,
+                          hovermode='closest', legend=LEGEND_STD,
+                          title='<b>Scoring Frequency by Season</b>')
+        fig.update_xaxes(title='Team score', dtick=10, tickfont=dict(size=14))
+        fig.update_yaxes(title='% of games per point', rangemode='tozero', tickfont=dict(size=14))
+        return fig
+
     def CloseGameChart(self, threshold=5):
         """Close-game wins (right) and losses (left) per manager, best record on top."""
         rec = self.CloseGameRecord(threshold).iloc[::-1]       # best drawn last = top

@@ -2504,6 +2504,7 @@ def _tab_alltime(teams, year=None):
         ('HighestScoringLosers','Highest-Scoring Losses',             False, 'High scores that still resulted in a loss — the cruelest outcomes'),
         ('SmallestMargins',     'Smallest Margins of Victory',        False, 'Games decided by the narrowest possible margin'),
         ('CloseGameChart',      'Close Games',                        False, 'All-time record in games decided by under 5 points, regular season and playoffs'),
+        ('ScoringFrequencyBySeason', 'Scoring Frequency by Season',   False, 'Each season\'s spread of regular-season team scores as a smoothed curve, starting with the selected season and the one before. Click a year in the legend to add or remove it, double-click to show only that year'),
         ('ForAgainstwithTeams', 'Points With & Against NFL Teams',    False, "Most fantasy points a manager has scored from one NFL team's players, and against one NFL opponent"),
     ]
     # Game lists star every entry from the season picked in the header.
@@ -2514,10 +2515,12 @@ def _tab_alltime(teams, year=None):
             if fn in _year_marked and year:
                 fig = getattr(at, fn)(highlight_year=year)
                 sub = f'{sub} · {core.YEAR_MARK}= {year}'
+            elif fn == 'ScoringFrequencyBySeason':
+                fig = at.ScoringFrequencyBySeason(highlight_year=year)   # bold line = header season
             else:
                 fig = getattr(at, fn)()
             # Close Games sizes itself to the number of managers.
-            stripped = _strip(fig, fig.layout.height if fn == 'CloseGameChart' else 700)
+            stripped = _strip(fig, fig.layout.height if fn in ('CloseGameChart', 'ScoringFrequencyBySeason') else 700)
             if fn == 'ForAgainstwithTeams':
                 stripped.update_layout(margin_t=60)   # the two subplot titles sit above each plot
             cards.append(_card(stripped, title, half=half, subtitle=sub))

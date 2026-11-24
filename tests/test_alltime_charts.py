@@ -71,3 +71,35 @@ def test_star_marks_exactly_the_selected_seasons_entries(alltime, method):
     for label in marked:
         from_year = label.replace('</sup>', '').rstrip().endswith(str(year))
         assert label.startswith(core._YEAR_MARK_LABEL) == from_year, label
+
+
+# ── Scoring Frequency by Season ───────────────────────────────────────────────
+# One filled density curve per season, overlaid; the legend toggles seasons.
+
+def test_scoring_curves_one_filled_trace_per_season(alltime):
+    import numpy as np
+    fig = alltime.ScoringFrequencyBySeason()
+    reg = alltime._final_regular_season()
+    years = sorted(reg['Year'].unique())
+    assert [int(tr.legendgroup) for tr in fig.data] == [int(y) for y in years]
+    fills = {tr.fillcolor for tr in fig.data}
+    assert len(fills) == len(fig.data), 'every season gets its own fill color'
+    for tr in fig.data:
+        assert tr.fill == 'tozeroy'
+        # A density over points integrates to ~100% of that season's games.
+        area = np.trapezoid(np.array(tr.y), np.array(tr.x))
+        assert 98 <= area <= 101, f'{tr.name}: area {area:.1f}%'
+
+
+def test_scoring_curves_highlight_selected_season(alltime):
+    year = int(alltime._final_regular_season()['Year'].max())
+    fig = alltime.ScoringFrequencyBySeason(highlight_year=year)
+    widths = {int(tr.legendgroup): tr.line.width for tr in fig.data}
+    assert widths[year] > max(w for y, w in widths.items() if y != year)
+
+
+def test_scoring_curves_open_on_selected_and_prior_season(alltime):
+    fig = alltime.ScoringFrequencyBySeason(highlight_year=2024)
+    on = sorted(int(tr.legendgroup) for tr in fig.data if tr.visible is True)
+    assert on == [2023, 2024]
+    assert all(tr.visible == 'legendonly' for tr in fig.data if int(tr.legendgroup) not in on)
